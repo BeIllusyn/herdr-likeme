@@ -1,7 +1,7 @@
 # Likeme
 
 A Herdr layout built on top of the shipped `main` layout: every space and agent row
-is an icon with two lines of text beside it, the active item is a raised balloon tinted
+is an icon with two lines of text beside it, the active item is a flat, square tint in
 with its space's colour (the active tab too), and the working spinner is a gold braille
 character instead of a rotating ring.
 
@@ -9,29 +9,29 @@ Built from Herdr `main` @ 0.1.12 (`cloned_from` in `layouts/likeme.json`).
 
 ![Likeme](preview.png)
 
-_Workspace text in the screenshot is blurred; the two-line rows, the balloon selection
-and tab close buttons, and the braille spinner are the real UI._
+_Workspace text in the screenshot is blurred; the two-line rows, the flat square
+selection and tab close buttons, and the braille spinner are the real UI._
 
 ## What changes
 
 | Area | Change |
 |---|---|
 | **Sidebar** | Spaces and agents share one scrolling column; the Agents section follows the spaces content instead of starting at the sidebar's midpoint, and the whole column scrolls together. |
-| **Spaces** | A 20 px tinted monogram with a dark letter; the project name (13 px) over the current git branch (11 px, muted, plus ahead/behind). Resting rows lie flat under a whisper of the space's colour; the active space is a raised balloon — an opaque tinted pill with a hairline and shadow — and rows keep a 4 px gap; worktrees hang from a 1 px tree line under their checkout; with fewer than three spaces a dashed "New space" row fills the gap. |
-| **Agents** | The same two-line row (space name over the agent's own title) with a whisper of its space's colour; the focused agent is the same raised balloon instead of an accent bar. The column watches its data on a 250 ms timer and redraws when it changes, so focus and status turns show without hovering; an idle agent shows no status mark. The elapsed time and pin share a fixed slot, so hovering never shifts the text. A single group hides its redundant header, and the sort button uses an up/down icon. |
-| **Tabs** | The active tab is the same raised balloon as a selected sidebar row, tinted with the space's colour; the others lie flat and keep a close button (dimmer when inactive). A default-numbered tab shows what it runs — the folder name, or the program when two tabs share it — and `+` sits right after the last tab. A zoomed tab gets a small zoom glyph instead of a trailing `Z`. The working spinner is a gold braille character (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, 80 ms per frame). |
+| **Spaces** | A 20 px tinted monogram with a dark letter; the project name (13 px) over the current git branch (11 px, muted, plus ahead/behind). Rows are square, full-bleed and flush against each other with no gap; resting rows lie flat under a whisper of the space's colour, while the active space is a flat opaque tint with no border or shadow; worktrees hang from a 1 px tree line under their checkout; with fewer than three spaces a dashed "New space" row fills the gap. |
+| **Agents** | The same square, full-bleed two-line row (space name over the agent's own title) with a whisper of its space's colour and no gap between rows; the focused agent is the same flat opaque tint, again without a border, instead of an accent bar. The column watches its data on a 250 ms timer and redraws when it changes, so focus and status turns show without hovering; an idle agent shows no status mark. The elapsed time and pin share a fixed slot, so hovering never shifts the text. A single group hides its redundant header, and the sort button uses an up/down icon. |
+| **Tabs** | Tabs are square, fill the bar's full height and sit flush against each other with no gap; the active tab is the same flat opaque tint as a selected sidebar row, tinted with the space's colour and drawn without a border or shadow, while the others lie flat and keep a close button (dimmer when inactive). The `Files`/`Changes` toggles at the right are the same square, full-height blocks, tinted like the active tab when their panel is open. A default-numbered tab shows what it runs — the folder name, or the program when two tabs share it — and `+` sits right after the last tab. A zoomed tab gets a small zoom glyph instead of a trailing `Z`. The working spinner is a gold braille character (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, 80 ms per frame). |
 | **Panes** | Square corners and no gap, padding or terminal padding — the pane fills the work area edge to edge — a slightly lifted card surface (`#1a1d22`), and a cloned header on that same surface. The split/zoom/close buttons are always visible; the status mark appears for working, blocked and done (nothing while idle). The header's working spinner is the same gold braille character as the tabs and agents. |
+| **Files / Changes** | Cloned from Herdr's `files` and `changes` mods with square corners: the panel body, the file and changed-file rows, the changed-file count badge and the commit field and button lose their rounding. |
 | **Status bar** | "1 agent" instead of "1 agents", a dot colored by the most urgent agent, and the palette shortcut drawn as a keycap. |
 
-Everything else — brand bar, Files/Changes panel, menus — is Herdr's `main` layout
-unchanged.
+Everything else — brand bar, menus — is Herdr's `main` layout unchanged.
 
 ## Requirements
 
 - Herdr 0.1.12 or newer.
 - Herdr's shipped mods and assets that this layout references:
-  `workspace-chrome`, `pane` (the tab bar borrows its close/zoom icons), `files`,
-  `changes`, `menu`, `new-menu`, and the usual dialog/overlay mods.
+  `workspace-chrome`, `pane` (the tab bar borrows its close/zoom icons),
+  `menu`, `new-menu`, and the usual dialog/overlay mods.
 
 ## Install
 
@@ -50,7 +50,7 @@ cd herdr-likeme
 ./install.sh
 ```
 
-`install.sh` copies `layouts/likeme.json` and the four mods into
+`install.sh` copies `layouts/likeme.json` and the six mods into
 `${HERDR_APP_HOME:-~/.config/herdr-app}`, runs `herdr-app check` on every mod, and
 switches to the layout. Herdr reloads the files within a second.
 

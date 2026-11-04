@@ -203,9 +203,8 @@ export default class Agents extends View {
     const on = k.address === shown;
     return h_flex()
       .id(`sub-${k.address}`)
-      .pl(39)
+      .pl(47)
       .pr(8)
-      .rounded(8)
       .h(26)
       .flex_none()
       .gap(0)
@@ -293,7 +292,8 @@ export default class Agents extends View {
     // title below it, and its space's colour as a faint wash behind both.
     const tabs = spaces().flatMap(s => s.tabs);
     // Every agent row is washed with its space's colour, faint when idle; the
-    // focused one is a balloon: an opaque tinted pill with a hairline and shadow.
+    // focused one is a flat opaque tint, square and full-bleed, flush with its
+    // neighbours.
     const colors = shared("space.colors") ?? {};
     const fillOf = (a) => markColor(colors[a.space], t);
     const label = (a) => {
@@ -307,7 +307,6 @@ export default class Agents extends View {
       const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
       const fill = fillOf(a);
       const balloon = fill ? mix(t.raised, fill, 0.32) : t.raised;
-      const edge = fill ? mix(fill, "#ffffff", 0.22) : t.input;
       // Top: the project (its space). Bottom: the agent's own title.
       const top = a.space_name || label(a);
       const raw = label(a);
@@ -347,17 +346,12 @@ export default class Agents extends View {
         .child(svg(`mods/workspace-chrome/${isPinned ? "pin-off" : "pin"}.svg`).size(13));
       return h_flex()
         .id(`ag-${a.address}`)
-        .px(8)
+        .px(16)
         .h(44)
         .flex_none()
-        .rounded(12)
         .items_center()
         .gap(9)
-        // The 1 px box is always reserved: a transparent border on an unfocused row
-        // keeps its text still when the border appears on focus.
-        .border(1)
-        .border_color(a.focused ? edge : "#00000000")
-        .when(a.focused, (el) => el.bg(balloon).shadow_md())
+        .when(a.focused, (el) => el.bg(balloon))
         .when(!a.focused, (el) => el
           .when(Boolean(fill), (r) => r.bg(fill + "0d"))
           .hover((s) => s.bg(t.hover)))
@@ -417,7 +411,7 @@ export default class Agents extends View {
       const top = g.members.reduce((m, a) => ((RANK[a.status] ?? 0) > (RANK[m] ?? 0) ? a.status : m), null);
       return h_flex()
         .id(g.id)
-        .px(8)
+        .px(16)
         .pt(4)
         .h(28)
         .flex_none()
@@ -483,7 +477,7 @@ export default class Agents extends View {
             ),
         ),
       )
-      .child(v_flex().id("ag-list").px(collapsed ? 0 : 8).gap(4)
+      .child(v_flex().id("ag-list").px(0).gap(0)
         .when(!embedded, el => el.flex_1().min_h(0).overflow_y_scrollbar().mode("always"))
         .when(empty && !embedded, el => el.items_center().justify_center())
         .children(empty ? [emptyState] : rows))

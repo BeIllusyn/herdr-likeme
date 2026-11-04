@@ -293,7 +293,7 @@ export default class Spaces extends View {
       return layout === "loading" || (!layout && this.machines.some(k => k.name === m && k.state === "connected"))
         || spaces().some(s => (s.machine ?? null) === m && !this.shown.has(s.id));
     };
-    const loadingRow = m => div().id(`machine-loading-${m ?? "local"}`).h(28).flex_none().px(8).text_size(12).text_color(t.dim).child(collapsed ? "…" : "Loading…");
+    const loadingRow = m => div().id(`machine-loading-${m ?? "local"}`).h(28).flex_none().px(16).text_size(12).text_color(t.dim).child(collapsed ? "…" : "Loading…");
     if (!remote.length) return loading(null) && !rows.length ? [loadingRow(null)] : rows.map(draw);
     const machineNames = [null, ...remote];
     return machineNames.flatMap((m) => {
@@ -303,7 +303,7 @@ export default class Spaces extends View {
       const connected = !m || machine?.state === "connected";
       const rebuilt = this.rebuilt(machine) || !!repair;
       const folded = this.folded.has(m);
-      const head = h_flex().id(`machine-${m ?? "local"}`).h(26).flex_none().px(collapsed ? 2 : 8).gap(7).items_center().text_size(11).text_color(t.dim)
+      const head = h_flex().id(`machine-${m ?? "local"}`).h(26).flex_none().px(collapsed ? 10 : 16).gap(7).items_center().text_size(11).text_color(t.dim)
         .cursor_pointer().hover(s => s.bg(t.hover))
         .on_click((_e, cx) => {
           folded ? this.folded.delete(m) : this.folded.add(m);
@@ -324,7 +324,7 @@ export default class Spaces extends View {
             .on_click((_e, cx) => { cx.stop_propagation(); run("space.new", { machine: m ?? "" }); }).child("+")))
           .child(div().size(6).rounded(3).flex_none().bg(connected ? t.ansi2 : t.dim))
           .child(svg(`mods/workspace-chrome/chevron-${folded ? "right" : "down"}.svg`).size(11).flex_none()));
-      const empty = h_flex().id(`machine-new-${m ?? "local"}`).h(28).flex_none().px(8).gap(7).items_center().rounded(7)
+      const empty = h_flex().id(`machine-new-${m ?? "local"}`).h(28).flex_none().px(16).gap(7).items_center()
         .text_size(12).text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground))
         .on_click(() => run("space.new", { machine: m ?? "" }))
         .child(svg("mods/workspace-chrome/plus.svg").size(12)).when(!collapsed, el => el.child("New space there"));
@@ -339,23 +339,17 @@ export default class Spaces extends View {
     const color = colors[w.id] ?? "ansi6";
     const fill = markColor(color, t) ?? t.muted;
     // Unselected rows lie flat with a whisper of their colour; the active one is a
-    // balloon: an opaque tinted pill, a hairline and a soft shadow, lifted off the
-    // rest by the gap between rows.
+    // flat opaque tint, square and full-bleed, sitting flush against its neighbours.
     const wash = (alpha) => fill + alpha;
     const balloon = mix(t.raised, fill, 0.32);
     return v_flex()
       .relative()
       .id(`space-${w.id}`)
-      .px(8)
+      .px(16)
       .h(rowHeight({ tree }))
       .flex_none()
       .justify_center()
-      .rounded(12)
-      // The 1 px box is always reserved: a transparent border on a resting row keeps
-      // its text and its width still when the border appears on selection.
-      .border(1)
-      .border_color(on ? mix(fill, "#ffffff", 0.22) : "#00000000")
-      .when(on, (el) => el.bg(balloon).shadow_md())
+      .when(on, (el) => el.bg(balloon))
       .when(!on, (el) => el.bg(wash("0d")).hover((s) => s.bg(t.hover)))
       .when(this.pressed === i && this.over !== i, (el) => el.opacity(0.5))
       .when(this.pressed !== null && this.over === i && this.pressed !== i, (el) => el.child(
@@ -437,7 +431,7 @@ export default class Spaces extends View {
 
   // With few spaces the block is mostly empty: keep a place to make the next one.
   ghost(t) {
-    return h_flex().id("space-new-hint").h(34).flex_none().px(8).gap(8).rounded(8)
+    return h_flex().id("space-new-hint").h(34).flex_none().px(16).gap(8)
       .border(1).border_dashed().border_color(t.border)
       .text_size(12).text_color(t.muted).items_center().cursor_pointer()
       .hover(s => s.bg(t.hover).text_color(t.foreground))
@@ -469,7 +463,7 @@ export default class Spaces extends View {
         .when(!collapsed, el => el.child("Spaces"))
         .child(div().id("space-new").size(26).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(t.hover).text_color(t.foreground))
           .on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(14))))
-      .child(v_flex().px(8).pb(embedded ? 8 : 14).gap(4)
+      .child(v_flex().px(0).pb(embedded ? 8 : 14).gap(0)
         .when(!embedded, el => el.flex_1().min_h(0).overflow_y_scrollbar().mode("always"))
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
         .children([...this.grouped(t, collapsed), ...(!collapsed && sp.length < 3 ? [this.ghost(t)] : [])]));
