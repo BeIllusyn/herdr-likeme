@@ -78,3 +78,7 @@ These three are small and meant to be read:
 
 `RECIPE.md` has the full build notes, including the exact layout tree, the two-line
 row structure, and what a fresh build would get wrong.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
