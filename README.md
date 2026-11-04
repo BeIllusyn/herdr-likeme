@@ -2,14 +2,15 @@
 
 A Herdr layout built on top of the shipped `main` layout: every space and agent row
 is an icon with two lines of text beside it, tabs always keep their border and close
-button, and the working spinner is larger and slower.
+button, and the working spinner is a gold braille character instead of a rotating
+ring.
 
 Built from Herdr `main` @ 0.1.12 (`cloned_from` in `layouts/likeme.json`).
 
 ![Likeme](preview.png)
 
 _Workspace text in the screenshot is blurred; the two-line rows, tab borders and close
-buttons, and the 16 px spinner are the real UI._
+buttons, and the braille spinner are the real UI._
 
 ## What changes
 
@@ -17,7 +18,7 @@ buttons, and the 16 px spinner are the real UI._
 |---|---|
 | **Spaces** | Icon on the left; on the right the project name on top, the current git branch (plus ahead/behind) underneath. |
 | **Agents** | Same two-line row: the space's name on top, the agent's own title underneath. |
-| **Tabs** | Every tab always shows a 1 px border and a close button, active or not. The working spinner is 16 px and turns once every 1400 ms. |
+| **Tabs** | Every tab always shows a 1 px border and a close button, active or not. The working spinner is a gold braille character (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, 80 ms per frame). |
 
 Everything else — brand bar, pane frames, Files/Changes panel, status bar, menus —
 is Herdr's `main` layout unchanged.

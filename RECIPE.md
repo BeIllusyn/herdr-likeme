@@ -2,7 +2,7 @@
 
 A Herdr layout built on `main`: each space and agent row is an icon on the left with
 two lines of text beside it, tabs always keep a border and a close button, and the
-working spinner is larger and slower than Herdr's default.
+working spinner is a gold braille text spinner instead of a rotating ring.
 
 ![Likeme](preview.png)
 
@@ -46,7 +46,7 @@ are 44 px:
 **Tabs.** 29 px pills, 7 px radius, `px 10`, `gap 7`. Every tab keeps a 1 px `border`
 and a 16 px close button, active or not; the active tab uses `raised` background, the
 others `chrome`. Program icon 14 px, name up to 170 px truncated (`name Z` when
-zoomed), working spinner 16 px, blocked/done dot 6 px.
+zoomed), working spinner (a gold braille character), blocked/done dot 6 px.
 
 **Panes.** Cards: 8 px gap, 10 px radius, 1 px `border`, `accent` border while focused,
 30 px header from the shipped `pane` mod (`reveal: always`). The Files/Changes panel
@@ -55,7 +55,8 @@ zoomed), working spinner 16 px, blocked/done dot 6 px.
 
 ## How it behaves
 
-- **Agent status.** Working: gold ring spinner, 16 px, one turn per 1400 ms. Blocked: a
+- **Agent status.** Working: a gold braille character cycling through
+  `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` every 80 ms. Blocked: a
   "Needs you" pill (a bare `!` inside a group whose header already says it). Idle: a
   small ring. Done: a filled dot. A space's and a tab's status is their most urgent
   agent's.
@@ -99,8 +100,8 @@ root row (canvas, titlebar none, traffic_lights [12,16], terminal_padding [14,12
 | Mod | Role |
 |---|---|
 | `my-spaces` | The spaces list. Clone of the shipped `spaces`: git lookup (`exec` git status/rev-parse), machine list (`hc machine ls`), `watchFolder` on local repos, drag-reorder. Changed: row height 44/42, two-line row (name over branch). |
-| `my-agents` | The agents list. Clone of the shipped `agents`. Changed: row height 44, two-line row (space name over agent title), pin/duration/fold kept on the row end, spinner 16 px / 1400 ms. |
-| `my-tabs` | The tab bar. Clone of the shipped `tabs`. Changed: `border_color` always `border`, close button always rendered (16 px, hover highlight), spinner 16 px / 1400 ms. |
+| `my-agents` | The agents list. Clone of the shipped `agents`. Changed: row height 44, two-line row (space name over agent title), pin/duration/fold kept on the row end, spinner `frames([...], 80)`. |
+| `my-tabs` | The tab bar. Clone of the shipped `tabs`. Changed: `border_color` always `border`, close button always rendered (16 px, hover highlight), spinner `frames([...], 80)`. |
 
 Herdr functions used: `spaces`, `agents`, `terminals`, `panes`, `focused`, `layout`,
 `theme`, `window`, `settings`, `shared` / `setShared`, `setAgentOrder`, `run`,
@@ -128,8 +129,9 @@ spinner, pin, pin-off, server, monitor, check, clock, layers), `mods/pane/close.
   `mods/pane/close.svg`). If Herdr renames them, update the paths.
 - Heights are fixed: 44 px agent/space rows, 42 px worktree rows, 26 px sub-agent rows,
   29 px tabs. A larger font will clip rather than grow.
-- `spin()` is native and capped at about 30 fps. 1400 ms per turn keeps the step under
-  8°; asking for a faster spin makes the stepping visible again.
+- The spinner is `frames([...], 80)`, not `spin()`: a native SVG rotation runs at
+  about 30 fps and reads as steppy at 12–16 px. `frames` swaps text natively on one
+  shared clock.
 - Below 160 px of sidebar width the lists become compact rails; that path was not
   restyled and still shows one line (index + status).
 - Mod names (`my-spaces`, `my-agents`, `my-tabs`) are deliberately generic. Rename them
@@ -149,6 +151,6 @@ spinner, pin, pin-off, server, monitor, check, clock, layers), `mods/pane/close.
 - Each space row shows two lines: project name over the current branch.
 - Each agent row shows two lines: space name over the agent's title.
 - Every tab, active or not, draws a border and an X close button.
-- A working agent shows the 16 px spinner in its agent row and in its tab.
+- A working agent shows the braille spinner in its agent row and in its tab.
 - Deleting `layouts/likeme.json` and the three `mods/my-*` folders returns the app to
   the shipped layouts.

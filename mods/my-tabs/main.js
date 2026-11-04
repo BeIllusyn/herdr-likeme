@@ -67,7 +67,7 @@ export default class Tabs extends View {
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }); })
         .when(Boolean(program?.icon), el => el.child(program.tint ? svg(program.icon).size(14).text_color(t.muted) : image(program.icon).size(14)))
         .child(div().max_w(170).truncate().child(c.zoomed ? `${name} Z` : name))
-        .when(c.status === "working", el => el.child(svg("mods/workspace-chrome/spinner.svg").size(16).flex_none().text_color(t.working).spin(1400)))
+        .when(c.status === "working", el => el.child(div().flex_none().text_size(13).text_color(t.working).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 80)))
         .when(c.status === "blocked" || c.status === "done", el => el.child(div().size(6).rounded(3).bg(t[c.status])))
         .child(div().id(`close-${c.id}`).size(16).flex().flex_none().items_center().justify_center().rounded(4).text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground)).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/pane/close.svg").size(12)));
     };
