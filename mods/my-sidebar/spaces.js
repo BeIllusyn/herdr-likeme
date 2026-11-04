@@ -81,7 +81,9 @@ export default class Spaces extends View {
     // Everything the list draws changes under this view without the host telling
     // it: a closed space disappears, one is renamed, the active one moves. Redraw
     // on that change alone, not every tick.
-    const sig = sp.map((s) => `${s.id}:${s.name}:${s.active ? 1 : 0}:${s.status}:${s.machine ?? ""}:${s.folder ?? ""}`).join("|");
+    // The rail switch reads the sidebar's width, so a resize is a change too.
+    const width = find(layout(), "sidebar")?.size?.px;
+    const sig = `${width}|` + sp.map((s) => `${s.id}:${s.name}:${s.active ? 1 : 0}:${s.status}:${s.machine ?? ""}:${s.folder ?? ""}`).join("|");
     if (sig !== this.seen) {
       this.seen = sig;
       cx.notify();

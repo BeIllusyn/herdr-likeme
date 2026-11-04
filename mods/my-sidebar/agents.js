@@ -88,9 +88,11 @@ export default class Agents extends View {
     this.seen = null;
     cx.timer.every(250, (cx) => {
       const minute = Math.floor(Date.now() / 60000);
+      // The rail switch reads the sidebar's width, so a resize is a change too.
+      const width = find(layout(), "sidebar")?.size?.px;
       const list = agents().map((a) => `${a.address}:${a.status}:${a.focused ? 1 : 0}:${a.pinned ? 1 : 0}:${a.space_name}:${a.tab_name}:${a.title}`);
       const kids = terminals().map((t) => `${t.address}:${t.state}:${t.status ?? ""}`);
-      const sig = `${minute}|${JSON.stringify(shared("space.colors") ?? {})}|${list.join(",")}|${kids.join(",")}`;
+      const sig = `${width}|${minute}|${JSON.stringify(shared("space.colors") ?? {})}|${list.join(",")}|${kids.join(",")}`;
       if (sig === this.seen) return;
       this.seen = sig;
       cx.notify();

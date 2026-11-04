@@ -16,7 +16,7 @@ The window is Herdr's `main` layout with four mods replaced. No system title bar
 (`"titlebar": "none"`); on macOS the traffic lights sit at `[12, 16]`. Background is
 the theme's `canvas`, with 1 px `border` dividers.
 
-**Sidebar (268 px, min 44, max 480, not resizable).** A 46 px brand block
+**Sidebar (268 px, min 222, max 480, not resizable).** A 46 px brand block
 (`workspace-chrome`), then one `sidebar-list` block (`my-sidebar`, `weight: 1`,
 `min: 90`), then a 69 px footer (`workspace-chrome` with `props.footer`). The block is
 one scrolling column: Spaces header → space rows → "New space" hint → Agents header →
@@ -127,7 +127,7 @@ followed by "commands".
 
 ```
 root row (canvas, titlebar none, traffic_lights [12,16], terminal_padding [0,0], 1px divider)
-├─ sidebar column (268px, min 44, max 480, background chrome, resizable false)
+├─ sidebar column (268px, min 222, max 480, background chrome, resizable false)
 │  ├─ brand block (46px, workspace-chrome, window_drag)
 │  ├─ sidebar-list block (weight 1, min 90, mod my-sidebar)
 │  │  └─ one scroll: Spaces section (spaces.js) + Agents section (agents.js)
@@ -205,7 +205,10 @@ carries its own `sort.svg`; `my-pane` carries its own `close/split/zoom` SVGs;
   about 30 fps and reads as steppy at 12–16 px. `frames` swaps text natively on one
   shared clock.
 - Below 160 px of sidebar width the sidebar becomes a compact rail; both sections
-  render one line (index + status) inside the same scroll.
+  render one line (index + status) inside the same scroll. The 222 px layout minimum
+  keeps a dragged edge from crossing that line, so the rail is reached only with the
+  brand bar's collapse button. Running the state's `layout.resize` command is not
+  clamped by `min`, so that button still works.
 - Mod names (`my-sidebar`, `my-tabs`, `my-pane`, `my-status`) are deliberately
   generic. Rename them on install if they clash, and update the `"mod"` fields in
   `likeme.json`.
