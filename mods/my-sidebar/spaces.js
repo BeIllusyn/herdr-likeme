@@ -6,6 +6,7 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, props } from "herdr";
+import { markColor, mix } from "./colors.js";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -31,10 +32,6 @@ const base = (path) => path.replace(/\/+$/, "").split("/").pop();
 // Changes made outside Herdr (an editor's save, a commit in another app): looked
 // for this often, in repos the list shows, while the window is in front.
 const FALLBACK = 60000;
-
-// What a stored color name looks like on an avatar (the same in every mod
-// that draws space avatars): one strong color per hue, light and dark alike.
-const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
 
 // A space speaks up only when something in it needs you.
 export function glyph(status) {
@@ -326,7 +323,12 @@ export default class Spaces extends View {
     const on = w.active;
     const colors = shared("space.colors") ?? {};
     const color = colors[w.id] ?? "ansi6";
-    const fill = color.startsWith("#") ? color : (MARK[color] ?? t[color]);
+    const fill = markColor(color, t) ?? t.muted;
+    // Unselected rows lie flat with a whisper of their colour; the active one is a
+    // balloon: an opaque tinted pill, a hairline and a soft shadow, lifted off the
+    // rest by the gap between rows.
+    const wash = (alpha) => fill + alpha;
+    const balloon = mix(t.raised, fill, 0.32);
     return v_flex()
       .relative()
       .id(`space-${w.id}`)
@@ -334,10 +336,13 @@ export default class Spaces extends View {
       .h(rowHeight({ tree }))
       .flex_none()
       .justify_center()
-      .rounded(8)
-      .when(on, (el) => el.bg(t.selected))
-      .when(on, (el) => el.child(div().absolute().left(0).top(7).bottom(7).w(2).rounded(1).bg(t.accent)))
-      .when(!on, (el) => el.hover((s) => s.bg(t.hover)))
+      .rounded(12)
+      // The 1 px box is always reserved: a transparent border on a resting row keeps
+      // its text and its width still when the border appears on selection.
+      .border(1)
+      .border_color(on ? mix(fill, "#ffffff", 0.22) : "#00000000")
+      .when(on, (el) => el.bg(balloon).shadow_md())
+      .when(!on, (el) => el.bg(wash("0d")).hover((s) => s.bg(t.hover)))
       .when(this.pressed === i && this.over !== i, (el) => el.opacity(0.5))
       .when(this.pressed !== null && this.over === i && this.pressed !== i, (el) => el.child(
         div().absolute().left(0).right(0).h(2).bg(t.accent)
@@ -418,7 +423,7 @@ export default class Spaces extends View {
 
   // With few spaces the block is mostly empty: keep a place to make the next one.
   ghost(t) {
-    return h_flex().id("space-new-hint").h(34).mt(4).flex_none().px(8).gap(8).rounded(8)
+    return h_flex().id("space-new-hint").h(34).flex_none().px(8).gap(8).rounded(8)
       .border(1).border_dashed().border_color(t.border)
       .text_size(12).text_color(t.muted).items_center().cursor_pointer()
       .hover(s => s.bg(t.hover).text_color(t.foreground))
@@ -450,7 +455,7 @@ export default class Spaces extends View {
         .when(!collapsed, el => el.child("Spaces"))
         .child(div().id("space-new").size(26).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(t.hover).text_color(t.foreground))
           .on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(14))))
-      .child(v_flex().px(8).pb(embedded ? 8 : 14)
+      .child(v_flex().px(8).pb(embedded ? 8 : 14).gap(4)
         .when(!embedded, el => el.flex_1().min_h(0).overflow_y_scrollbar().mode("always"))
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
         .children([...this.grouped(t, collapsed), ...(!collapsed && sp.length < 3 ? [this.ghost(t)] : [])]));

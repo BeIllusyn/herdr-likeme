@@ -11,6 +11,21 @@ function find(node, id) {
   return null;
 }
 
+// The same space colours the sidebar paints with (kept in step with
+// my-sidebar/colors.js): the active tab wears its space's colour, so the tab bar
+// changes hue with the space instead of staying a neutral strip.
+const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
+function markColor(color, t) {
+  const c = color?.startsWith("#") ? color : MARK[color] ?? t[color];
+  return /^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(c ?? "") ? c.slice(0, 7) : null;
+}
+function mix(a, b, k) {
+  if (!/^#[0-9a-f]{6}$/i.test(a ?? "") || !/^#[0-9a-f]{6}$/i.test(b ?? "")) return a || b;
+  const rgb = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+  const [x, y] = [rgb(a), rgb(b)];
+  return "#" + x.map((v, i) => Math.round(v * (1 - k) + y[i] * k).toString(16).padStart(2, "0")).join("");
+}
+
 export default class Tabs extends View {
   init() {
     this.pressed = null;
@@ -70,11 +85,23 @@ export default class Tabs extends View {
       if (entries.filter((x) => programName(x) === p).length === 1) return [e.c.id, p];
       return [e.c.id, `${p} ${e.i + 1}`];
     }));
+    // The active tab is the same balloon as a selected sidebar row: an opaque
+    // pill mixed from `raised` and the space's colour, a hairline and a shadow.
+    const fill = markColor((shared("space.colors") ?? {})[space?.id], t);
+    const balloon = fill ? mix(t.raised, fill, 0.30) : t.raised;
+    const edge = fill ? mix(fill, "#ffffff", 0.22) : t.input;
     const item = ({ c, i, program }) => {
       const name = labels.get(c.id);
-      return h_flex().id(`tab-${c.id}`).relative().h(29).px(12).gap(8).rounded(8).items_center().flex_none().text_size(13)
-        .border(1).border_color(c.active ? "#4a4e56" : "#2f333a").bg(c.active ? t.raised : t.chrome).text_color(c.active ? t.foreground : t.muted)
-        .hover(s => s.bg(t.hover))
+      return h_flex().id(`tab-${c.id}`).h(29).px(12).gap(8).rounded(10).items_center().flex_none().text_size(13)
+        // The 1 px box is always reserved: a transparent border on an inactive tab
+        // keeps its width still when the active tab grows its border.
+        .border(1)
+        .border_color(c.active ? edge : "#00000000")
+        .when(c.active, el => el.bg(balloon).shadow_md().text_color(t.foreground))
+        .when(!c.active, el => el
+          .when(Boolean(fill), r => r.bg(fill + "0d"))
+          .text_color(t.muted)
+          .hover(s => s.bg(t.hover)))
         .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.pressed = i; if (e.click_count === 2) run("tab.rename", { id: c.id }); })
         .on_mouse_up("left", () => {
           const from = this.pressed; this.pressed = null;
@@ -87,8 +114,7 @@ export default class Tabs extends View {
         .when(c.zoomed, el => el.child(svg("mods/pane/zoom.svg").size(11).flex_none().text_color(t.muted)))
         .when(c.status === "working", el => el.child(div().w(14).flex_none().text_center().text_size(13).text_color(t.working).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 80)))
         .when(c.status === "blocked" || c.status === "done", el => el.child(div().w(14).flex_none().flex().items_center().justify_center().child(div().size(6).rounded(3).bg(t[c.status]))))
-        .child(div().id(`close-${c.id}`).size(16).flex().flex_none().items_center().justify_center().rounded(4).text_color(t.muted).opacity(c.active ? 0.9 : 0.4).hover(s => s.bg(t.hover).text_color(t.foreground).opacity(1)).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/pane/close.svg").size(11)))
-        .when(c.active, el => el.child(div().absolute().left(8).right(8).top(0).h(1).rounded(1).bg("#ffffff14")));
+        .child(div().id(`close-${c.id}`).size(16).flex().flex_none().items_center().justify_center().rounded(4).text_color(t.muted).opacity(c.active ? 0.9 : 0.4).hover(s => s.bg(t.hover).text_color(t.foreground).opacity(1)).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/pane/close.svg").size(11)));
     };
     const root = layout(), sidebar = find(root, "sidebar"), w = window();
     // Old saved rails and a dragged-narrow sidebar can be smaller than the window buttons.

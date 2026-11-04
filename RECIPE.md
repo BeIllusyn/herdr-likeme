@@ -1,13 +1,14 @@
 # Likeme
 
 A Herdr layout built on `main`: each space and agent row is an icon on the left with
-two lines of text beside it, tabs always keep a border and a close button, and the
-working spinner is a gold braille text spinner instead of a rotating ring.
+two lines of text beside it, resting items lie flat under a whisper of their space's
+colour and the selected one is a raised balloon (the active tab too), and the working
+spinner is a gold braille text spinner instead of a rotating ring.
 
 ![Likeme](preview.png)
 
 _Workspace text in the screenshot is blurred; the layout shapes, the two-line rows,
-the tab borders/close buttons and the spinner are the real UI._
+the balloon selection, the tab close buttons and the spinner are the real UI._
 
 ## What you see
 
@@ -23,8 +24,12 @@ agent rows. The Agents header follows the spaces content (10 px top padding, no 
 border), so the two sections no longer split the sidebar in half.
 
 **Spaces.** A 31 px header ("Spaces", 11 px medium, `muted`, + button 26 px). Rows are
-44 px (42 px for worktree children), 8 px radius, `selected` background plus a 2 px
-`accent` bar when active, `hover` otherwise. Each row:
+44 px (42 px for worktree children), 12 px radius, with a 4 px gap between them. A
+resting row lies flat under a whisper of its space's colour (5 %); the active space is
+a balloon: an opaque pill mixed from `raised` and its colour (32 %), a 1 px hairline
+lightened from the colour and a soft shadow, so the selection reads without a left
+accent bar. Hover on a resting row is the neutral `hover`, never a stronger colour.
+Each row:
 
 - left: a 20 px rounded tile filled with the space's first letter in a dark ink
   (`#101114`) — the tile colors are mid-tone, so the dark letter reads on all six;
@@ -43,7 +48,8 @@ one-line rail inside the same scroll.
 
 **Agents.** A 41 px header ("Agents", 11 px medium `muted`, up/down sort icon). It
 follows the spaces content instead of a fixed half; group headers are 28 px and are
-hidden entirely when there is only one group. Agent rows are 44 px:
+hidden entirely when there is only one group. Agent rows are 44 px, 12 px radius, with
+a 4 px gap between them:
 
 - 16 px program icon (agent's own report, else the program), clickable to fold
   sub-agents;
@@ -53,17 +59,21 @@ hidden entirely when there is only one group. Agent rows are 44 px:
 - end of row: sub-agent fold chevron, a fixed 32 px slot for the pin (hover) or the
   elapsed time (11 px, `muted`), and the status glyph. The fixed slot means hovering
   never reflows the row. Sub-agent rows are 26 px with tree lines;
-- a focused agent gets a 2 px `accent` bar, not a filled row: the space above already
-  owns the filled selection.
+- every agent row carries a 5 % wash of its space's colour (the same colour its space
+  row uses), so a row keeps its space's identity even in Priority view; the focused
+  agent is the balloon — the same opaque tinted pill, hairline and shadow as the active
+  space. No left accent bar.
 
-**Tabs.** 29 px pills, 8 px radius, `px 12`, `gap 8`. Every tab keeps a 1 px `border`
-and a 16 px close button; the close fades to 0.4 on inactive tabs and returns on hover.
-The active tab uses `raised` background, a lighter border and a 1 px top highlight; the
-others use `chrome`. Program icon 16 px, name up to 170 px truncated; a zoomed tab shows
-a small `zoom.svg` instead of a trailing `Z`. A tab still named by its number shows what
-it runs: the folder name, or the program name when two tabs share a folder (then the
-number is appended if the programs also collide). The `+` sits right after the last tab,
-inside the scrolling strip.
+**Tabs.** 29 px pills, 10 px radius, `px 12`, `gap 8` (4 px between pills). Every tab
+keeps a 16 px close button; the close fades to 0.4 on inactive tabs and returns on
+hover. The active tab is the same balloon as a selected sidebar row: an opaque pill
+mixed from `raised` and the space's colour (30 %), a 1 px hairline lightened from the
+colour and a soft shadow. The others lie flat under a 5 % tint of the space's colour,
+with the neutral `hover` on the pointer. Program icon 16 px, name up to 170 px
+truncated; a zoomed tab shows a small `zoom.svg` instead of a trailing `Z`. A tab still
+named by its number shows what it runs: the folder name, or the program name when two
+tabs share a folder (then the number is appended if the programs also collide). The
+`+` sits right after the last tab, inside the scrolling strip.
 
 **Panes.** Cards: 10 px gap and padding, 12 px radius, 1 px `border`, `accent` border
 while focused, and a slightly lifted `#1a1d22` surface (the terminal itself keeps its
@@ -83,9 +93,9 @@ followed by "commands".
 
 - **Agent status.** Working: a gold braille character cycling through
   `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` every 80 ms. Blocked: a
-  "Needs you" pill (a bare `!` inside a group whose header already says it). Idle: a
-  small ring. Done: a filled dot. A space's and a tab's status is their most urgent
-  agent's.
+  "Needs you" pill (a bare `!` inside a group whose header already says it). Idle:
+  nothing — a ring beside every quiet row read as something to act on. Done: a filled
+  dot. A space's and a tab's status is their most urgent agent's.
 - **Spaces.** Click selects. Drag a row to reorder inside its machine; the accent line
   shows where it lands. Right-click opens Herdr's `menu` with the `space` context.
   Worktrees sort under their checkout and hang from a 1 px tree line; the last child
@@ -99,9 +109,11 @@ followed by "commands".
   opens the tab menu, the wheel switches tabs, every close button closes its own tab.
   A tab still named by its number is shown by what it runs, so "1" becomes the folder
   or program name; renaming a tab always wins. The `+` opens Herdr's `new-menu` popup.
-- **Pane header.** Click focuses the pane. Hover reveals split-right, split-down,
-  zoom/unzoom and close; each acts on its own pane (`props().pane`), not the focused
-  one. Working shows the same braille character as the tabs and agents.
+- **Pane header.** Click focuses the pane. The split-right, split-down, zoom/unzoom and
+  close buttons are always visible, and the status indicator keeps its place when there
+  is one (working spinner, "Needs you", done dot); an idle agent shows nothing. Each
+  button acts on its own pane (`props().pane`), not the focused one. Working shows the
+  same braille character as the tabs and agents.
 - **Status bar.** The dot is the most urgent agent state (blocked > done > working >
   idle > dim), the count is singular or plural, and the keycap chord opens the
   palette (`app.palette`).
@@ -134,9 +146,9 @@ root row (canvas, titlebar none, traffic_lights [12,16], terminal_padding [12,10
 
 | Mod | Role |
 |---|---|
-| `my-sidebar` | One mod, two retained child views (`spaces.js` and `agents.js`) composed in a single scrolling column (`main.js`). It keeps the spaces logic (git lookup via `exec`, `hc machine ls`, `watchFolder`, drag-reorder) and the agents logic (live agent data, pins, groups, sub-agent trees) unchanged. Changed: the two sections share one scroll (no 50/50 split), the Agents header follows the spaces content without a top border, the worktree rows draw a real 1 px tree line, and both retain the row/type/active-state changes from the earlier passes. The sort popup mounts a second copy of this mod (`props.sortMenu`) and returns only the agents view. |
-| `my-tabs` | The tab bar. Clone of the shipped `tabs`. Changed: 8 px radius, `px 12`/`gap 8`, 16 px icons, distinct labels for default-numbered tabs, `+` after the last tab, close button fades to 0.4 when inactive, active border/top highlight, zoom glyph, spinner `frames([...], 80)`. |
-| `my-pane` | The pane header. Clone of the shipped `pane`. Changed: header surface `#1a1d22`, 12.5 px title / 11.5 px `muted` folder, braille working spinner instead of the rotating SVG, `muted` hover buttons; keeps the 1 px bottom hairline and the split/zoom/close buttons. |
+| `my-sidebar` | One mod, two retained child views (`spaces.js` and `agents.js`) composed in a single scrolling column (`main.js`); `colors.js` holds the shared `MARK` table, `markColor()` and the `mix()` used for the balloon pills. It keeps the spaces logic (git lookup via `exec`, `hc machine ls`, `watchFolder`, drag-reorder) and the agents logic (live agent data, pins, groups, sub-agent trees) unchanged. Changed: the two sections share one scroll (no 50/50 split), the Agents header follows the spaces content without a top border, the worktree rows draw a real 1 px tree line, rows have spacing and balloon selection, and both retain the row/type/active-state changes from the earlier passes. The sort popup mounts a second copy of this mod (`props.sortMenu`) and returns only the agents view. |
+| `my-tabs` | The tab bar. Clone of the shipped `tabs`. Changed: 10 px radius, `px 12`/`gap 8`, 16 px icons, distinct labels for default-numbered tabs, `+` after the last tab, close button fades to 0.4 when inactive, balloon active tab in the space's colour, zoom glyph, spinner `frames([...], 80)`. |
+| `my-pane` | The pane header. Clone of the shipped `pane`. Changed: header surface `#1a1d22`, 12.5 px title / 11.5 px `muted` folder, braille working spinner instead of the rotating SVG, always-visible `muted` buttons; keeps the 1 px bottom hairline and the split/zoom/close buttons. |
 | `my-status` | The status bar. Clone of the shipped `workspace-status`. Changed: 11.5 px text, singular/plural agent count, 6 px dot colored by the most urgent agent, palette chord in an 18 px keycap. |
 
 Herdr functions used: `spaces`, `agents`, `terminals`, `panes`, `focused`, `layout`,
@@ -172,6 +184,12 @@ carries its own `sort.svg`; `my-pane` carries its own `close/split/zoom` SVGs;
   props). Without that flag each child paints `size_full` and the 50/50 split returns.
   The sort popup mounts a second copy of `my-sidebar` with `props.sortMenu` and renders
   only the agents entity.
+- A retained child does **not** get the host mod's live-data redraws. `Agents` watches
+  what the list shows on a 250 ms timer — status, focus, pin, names, space colours,
+  the current minute — and redraws only when that signature changes. Without it a
+  status turn or a focus change waited for the next hover (which redraws) or 30 s.
+  `Spaces` already polls at 250 ms for git. Keep both when porting a shipped clone
+  into the composition.
 - If you upgrade from a version before the merge, delete the old
   `~/.config/herdr-app/mods/my-spaces` and `my-agents` folders by hand; `install.sh`
   never removes mods it did not install this run.
@@ -180,6 +198,9 @@ carries its own `sort.svg`; `my-pane` carries its own `close/split/zoom` SVGs;
   `my-pane` uses its own `mods/my-pane/*.svg` copies instead.
 - Heights are fixed: 44 px agent/space rows, 42 px worktree rows, 26 px sub-agent rows,
   29 px tabs. A larger font will clip rather than grow.
+- The balloon's 1 px border is reserved on every row and tab, transparent while
+  unselected. Adding the border only on selection shifts the text inward and changes a
+  tab's width, which moves its neighbours.
 - The spinner is `frames([...], 80)`, not `spin()`: a native SVG rotation runs at
   about 30 fps and reads as steppy at 12–16 px. `frames` swaps text natively on one
   shared clock.
@@ -194,9 +215,9 @@ carries its own `sort.svg`; `my-pane` carries its own `close/split/zoom` SVGs;
 - Only this layout is customized. `terminals` and `win98` keep Herdr's look.
 - On macOS the tab bar reserves room for the traffic lights using the layout's
   `sidebar` size, `traffic_lights` and the current zoom.
-- The pane surface `#1a1d22` and the active/inactive tab border hexes are dark-theme
-  choices. On a light theme, switch them back to tokens (`background`, `border`) or
-  add a per-appearance theme.
+- The pane surface `#1a1d22` and the balloon blends are dark-theme choices; the
+  balloons mix against `raised` and the space colour, so a light theme needs its own
+  check.
 - `line_height` takes a bare number as a multiplier (`1.45`), not pixels. The two-line
   rows use `"16px"` / `"14px"`; `line_height(16)` would make each line 16× tall.
 - A hand-named tab keeps its name; only numeric/id-like default names are replaced by
@@ -209,17 +230,22 @@ carries its own `sort.svg`; `my-pane` carries its own `close/split/zoom` SVGs;
   pass.
 - `herdr-app do layout.switch '{"name":"likeme"}'` shows the layout and `herdr-app
   status` reports no errors.
-- Each space row shows a 20 px tinted monogram, a 13 px name and an 11 px muted branch.
-- The active space row has a 2 px accent bar; a list shorter than three spaces ends
-  with a dashed "New space" row.
-- Each agent row shows two lines; the focused row has a 2 px accent bar; a single group
-  has no header.
+- Each space row shows a 20 px tinted monogram, a 13 px name and an 11 px muted branch,
+  under a whisper of its space's colour.
+- The active space is a raised balloon (opaque tinted pill, hairline, shadow) clearly
+  apart from the flat rows and their neutral hover; rows have a 4 px gap; a list
+  shorter than three spaces ends with a dashed "New space" row.
+- Each agent row shows two lines on a whisper of its space's colour; the focused agent
+  is the same balloon, and the selection changes within 250 ms of the focus moving; a
+  single group has no header.
 - A default-numbered tab shows its folder or program, and `+` sits after the last tab.
-- Every tab, active or not, draws a border and an X close button (dimmed when inactive).
+- Every tab draws an X close button (dimmed when inactive); the active tab is the
+  coloured balloon, the others lie flat, and no top highlight line is drawn.
 - A working agent shows the braille spinner in its agent row, its tab, and the pane
-  header.
+  header; an idle agent shows no status mark anywhere.
 - The pane header uses the `#1a1d22` surface and a 12.5 px title / 11.5 px muted
-  folder; its hover buttons still split, zoom and close the pane they belong to.
+  folder; its always-visible buttons still split, zoom and close the pane they belong
+  to.
 - The status bar says "1 agent", colors its dot by the most urgent agent, and shows
   the palette chord in a keycap.
 - Spaces and agents live in one scroll: the Agents header follows the spaces content

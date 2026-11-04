@@ -4,6 +4,7 @@
 import { View, div, image, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay, props, window, layout } from "herdr";
+import { markColor, mix } from "./colors.js";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -80,7 +81,20 @@ export default class Agents extends View {
     this.pendingPins = JSON.parse(localStorage.getItem("pins") ?? "[]");
     if (!this.pendingPins.length) localStorage.removeItem("pins");
     this.migratingPins = new Set();
-    cx.timer.every(30000, (cx) => cx.notify());
+    // This retained child isn't redrawn by the host's live updates the way a mod
+    // root is. Watch what the list shows and redraw when it changes, not on every
+    // tick: one redraw paints the whole window. The minute is in the signature so
+    // the elapsed time still moves along.
+    this.seen = null;
+    cx.timer.every(250, (cx) => {
+      const minute = Math.floor(Date.now() / 60000);
+      const list = agents().map((a) => `${a.address}:${a.status}:${a.focused ? 1 : 0}:${a.pinned ? 1 : 0}:${a.space_name}:${a.tab_name}:${a.title}`);
+      const kids = terminals().map((t) => `${t.address}:${t.state}:${t.status ?? ""}`);
+      const sig = `${minute}|${JSON.stringify(shared("space.colors") ?? {})}|${list.join(",")}|${kids.join(",")}`;
+      if (sig === this.seen) return;
+      this.seen = sig;
+      cx.notify();
+    });
   }
 
   // Stamps agents whose state changed. Done and idle count as one: looking at a
@@ -212,8 +226,8 @@ export default class Agents extends View {
     if (a.status === "working") return div().flex_none().mx(1).text_size(13).text_color(t.working).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 80);
     if (a.status === "blocked" && compact) return div().size(14).flex_none().rounded(4).bg(t.blocked + "26").text_size(10.5).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!");
     if (a.status === "blocked") return div().flex_none().px(6).h(18).rounded(5).bg(t.blocked + "26").text_size(10.5).font_semibold().text_color(t.blocked).flex().items_center().child("Needs you");
-    // Idle: a ring; done: a dot.
-    if (a.status === "idle") return div().size(7).mx(3).flex_none().rounded(4).border(1.5).border_color(t.idle ?? t.dim);
+    // Idle says nothing: a ring beside a quiet row read as a state to act on.
+    if (a.status === "idle") return div().size(7).mx(3).flex_none();
     return div().size(7).mx(3).flex_none().rounded(4).bg(a.status === "done" ? color : t.dim + "00");
   }
 
@@ -274,8 +288,12 @@ export default class Agents extends View {
     };
 
     // A row reads like a space row: its space's name on top, the agent's own
-    // title below it.
+    // title below it, and its space's colour as a faint wash behind both.
     const tabs = spaces().flatMap(s => s.tabs);
+    // Every agent row is washed with its space's colour, faint when idle; the
+    // focused one is a balloon: an opaque tinted pill with a hairline and shadow.
+    const colors = shared("space.colors") ?? {};
+    const fillOf = (a) => markColor(colors[a.space], t);
     const label = (a) => {
       const tab = tabs.find(tab => tab.id === a.tab);
       return tab ? title(tab, lead(tab)) : a.title || a.program?.name || "";
@@ -285,6 +303,9 @@ export default class Agents extends View {
       const pic = icon(a.program, 16, t.foreground);
       // An agent on another machine (`vps/t7`) says which.
       const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
+      const fill = fillOf(a);
+      const balloon = fill ? mix(t.raised, fill, 0.32) : t.raised;
+      const edge = fill ? mix(fill, "#ffffff", 0.22) : t.input;
       // Top: the project (its space). Bottom: the agent's own title.
       const top = a.space_name || label(a);
       const raw = label(a);
@@ -324,16 +345,21 @@ export default class Agents extends View {
         .child(svg(`mods/workspace-chrome/${isPinned ? "pin-off" : "pin"}.svg`).size(13));
       return h_flex()
         .id(`ag-${a.address}`)
-        .relative()
         .px(8)
         .h(44)
         .flex_none()
-        .rounded(8)
+        .rounded(12)
         .items_center()
         .gap(9)
-        .when(a.focused, (el) => el.child(div().absolute().left(0).top(7).bottom(7).w(2).rounded(1).bg(t.accent)))
+        // The 1 px box is always reserved: a transparent border on an unfocused row
+        // keeps its text still when the border appears on focus.
+        .border(1)
+        .border_color(a.focused ? edge : "#00000000")
+        .when(a.focused, (el) => el.bg(balloon).shadow_md())
+        .when(!a.focused, (el) => el
+          .when(Boolean(fill), (r) => r.bg(fill + "0d"))
+          .hover((s) => s.bg(t.hover)))
         .cursor_pointer()
-        .hover((s) => s.bg(t.hover))
         .on_hover((on, cx) => {
           if (on) this.hovered = a.address;
           else if (this.hovered === a.address) this.hovered = null;
@@ -455,7 +481,7 @@ export default class Agents extends View {
             ),
         ),
       )
-      .child(v_flex().id("ag-list").px(collapsed ? 0 : 8)
+      .child(v_flex().id("ag-list").px(collapsed ? 0 : 8).gap(4)
         .when(!embedded, el => el.flex_1().min_h(0).overflow_y_scrollbar().mode("always"))
         .when(empty && !embedded, el => el.items_center().justify_center())
         .children(empty ? [emptyState] : rows))

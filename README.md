@@ -1,26 +1,26 @@
 # Likeme
 
 A Herdr layout built on top of the shipped `main` layout: every space and agent row
-is an icon with two lines of text beside it, tabs always keep their border and close
-button, and the working spinner is a gold braille character instead of a rotating
-ring.
+is an icon with two lines of text beside it, the active item is a raised balloon tinted
+with its space's colour (the active tab too), and the working spinner is a gold braille
+character instead of a rotating ring.
 
 Built from Herdr `main` @ 0.1.12 (`cloned_from` in `layouts/likeme.json`).
 
 ![Likeme](preview.png)
 
-_Workspace text in the screenshot is blurred; the two-line rows, tab borders and close
-buttons, and the braille spinner are the real UI._
+_Workspace text in the screenshot is blurred; the two-line rows, the balloon selection
+and tab close buttons, and the braille spinner are the real UI._
 
 ## What changes
 
 | Area | Change |
 |---|---|
 | **Sidebar** | Spaces and agents share one scrolling column; the Agents section follows the spaces content instead of starting at the sidebar's midpoint, and the whole column scrolls together. |
-| **Spaces** | A 20 px tinted monogram with a dark letter; the project name (13 px) over the current git branch (11 px, muted, plus ahead/behind). The active row keeps its fill and adds a 2 px accent bar; worktrees hang from a 1 px tree line under their checkout; with fewer than three spaces a dashed "New space" row fills the gap. |
-| **Agents** | The same two-line row (space name over the agent's own title). The focused agent is marked by a 2 px accent bar rather than a filled row; the elapsed time and pin share a fixed slot, so hovering never shifts the text. A single group hides its redundant header, and the sort button uses an up/down icon. |
-| **Tabs** | Every tab keeps a 1 px border and a close button (dimmer when inactive). A default-numbered tab shows what it runs — the folder name, or the program when two tabs share it — and `+` sits right after the last tab. A zoomed tab gets a small zoom glyph instead of a trailing `Z`. The working spinner is a gold braille character (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, 80 ms per frame). |
-| **Panes** | A 12 px radius, 10 px gap and padding, a slightly lifted card surface (`#1a1d22`), a cloned header on that same surface, and 12/10 px terminal padding. The header's working ring is now the same gold braille character as the tabs and agents. |
+| **Spaces** | A 20 px tinted monogram with a dark letter; the project name (13 px) over the current git branch (11 px, muted, plus ahead/behind). Resting rows lie flat under a whisper of the space's colour; the active space is a raised balloon — an opaque tinted pill with a hairline and shadow — and rows keep a 4 px gap; worktrees hang from a 1 px tree line under their checkout; with fewer than three spaces a dashed "New space" row fills the gap. |
+| **Agents** | The same two-line row (space name over the agent's own title) with a whisper of its space's colour; the focused agent is the same raised balloon instead of an accent bar. The column watches its data on a 250 ms timer and redraws when it changes, so focus and status turns show without hovering; an idle agent shows no status mark. The elapsed time and pin share a fixed slot, so hovering never shifts the text. A single group hides its redundant header, and the sort button uses an up/down icon. |
+| **Tabs** | The active tab is the same raised balloon as a selected sidebar row, tinted with the space's colour; the others lie flat and keep a close button (dimmer when inactive). A default-numbered tab shows what it runs — the folder name, or the program when two tabs share it — and `+` sits right after the last tab. A zoomed tab gets a small zoom glyph instead of a trailing `Z`. The working spinner is a gold braille character (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, 80 ms per frame). |
+| **Panes** | A 12 px radius, 10 px gap and padding, a slightly lifted card surface (`#1a1d22`), a cloned header on that same surface, and 12/10 px terminal padding. The split/zoom/close buttons are always visible; the status mark appears for working, blocked and done (nothing while idle). The header's working spinner is the same gold braille character as the tabs and agents. |
 | **Status bar** | "1 agent" instead of "1 agents", a dot colored by the most urgent agent, and the palette shortcut drawn as a keycap. |
 
 Everything else — brand bar, Files/Changes panel, menus — is Herdr's `main` layout
