@@ -57,6 +57,11 @@ export default class Spaces extends View {
     // worktree appears under its repo instead of jumping there.
     this.shown = new Set(spaces().map((s) => s.id));
     this.born = {};
+    // This retained child isn't redrawn by the host's live updates the way a mod
+    // root is, so the list's own shape is watched and a change redraws it (see
+    // `checkNew`): closing a space has to leave the list at once, not when some
+    // later git look happens to finish.
+    this.seen = null;
     this.pressed = null;
     this.over = null;
     this.machines = [];
@@ -73,10 +78,17 @@ export default class Spaces extends View {
   checkNew(cx) {
     const now = Date.now();
     const sp = spaces();
+    // Everything the list draws changes under this view without the host telling
+    // it: a closed space disappears, one is renamed, the active one moves. Redraw
+    // on that change alone, not every tick.
+    const sig = sp.map((s) => `${s.id}:${s.name}:${s.active ? 1 : 0}:${s.status}:${s.machine ?? ""}:${s.folder ?? ""}`).join("|");
+    if (sig !== this.seen) {
+      this.seen = sig;
+      cx.notify();
+    }
     for (const s of sp) if (!this.shown.has(s.id)) this.born[s.id] ??= now;
     const due = this.due(now, sp, panes());
     if (due.size) this.refreshGit(due, cx);
-    if (sp.some((s) => !this.shown.has(s.id))) cx.notify();
   }
 
   // Places whose git could have changed: new ones (a new space, a cd), where a
