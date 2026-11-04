@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install or update the "likeme" Herdr layout and its three mods.
+# Install or update the "likeme" Herdr layout and its mods.
 #
 # From a checkout (uses the files right here):
 #   ./install.sh
@@ -14,7 +14,7 @@ REPO="${REPO:-BeIllusyn/herdr-likeme}"
 REF="${REF:-main}"
 DST="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
 LAYOUT="likeme"
-MODS=(my-spaces my-agents my-tabs)
+MODS=(my-sidebar my-tabs my-pane my-status)
 
 if ! command -v herdr-app >/dev/null 2>&1; then
   echo "herdr-app is not in PATH" >&2

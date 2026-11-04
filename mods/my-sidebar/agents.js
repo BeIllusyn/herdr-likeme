@@ -47,8 +47,8 @@ const kidStatus = (k, listed) => {
   return s === "error" ? "blocked" : s === "done" ? "idle" : s;
 };
 const SORTS = [
-  { id: "priority", label: "Priority", icon: "clock" },
-  { id: "grouped", label: "Grouped by space", icon: "layers" },
+  { id: "priority", label: "Priority", icon: "mods/my-sidebar/sort.svg" },
+  { id: "grouped", label: "Grouped by space", icon: "mods/workspace-chrome/layers.svg" },
 ];
 const sortOf = () => SORTS.find((s) => s.id === shared("agents.sort")) ?? SORTS[0];
 const SECTION = { 4: "Needs you", 3: "Done", 2: "Working", 1: "Idle" };
@@ -69,8 +69,11 @@ function icon(p, size, color) {
 }
 
 export default class Agents extends View {
-  init(_props, cx) {
-    if (props()?.sortMenu) return;
+  init(props, cx) {
+    this.embedded = Boolean(props?.embedded);
+    this.sortMenuOpen = Boolean(props?.sortMenu);
+    this.overlay = props?.overlay;
+    if (this.sortMenuOpen) return;
     this.folded = new Set();
     // Each agent's last state and when it changed (ms), kept across restarts.
     this.changed = JSON.parse(localStorage.getItem("changed") ?? "{}");
@@ -154,9 +157,9 @@ export default class Agents extends View {
         .hover((el) => el.bg(t.hover))
         .on_click(() => {
           setShared("agents.sort", s.id);
-          closeOverlay(props().overlay);
+          closeOverlay(this.overlay);
         })
-        .child(svg(`mods/workspace-chrome/${s.icon}.svg`).size(14).flex_none().text_color(t.muted))
+        .child(svg(s.icon).size(14).flex_none().text_color(t.muted))
         .child(div().flex_1().child(s.label))
         .when(s.id === on, (el) => el.child(svg("mods/workspace-chrome/check.svg").size(14).flex_none().text_color(t.foreground)))));
   }
@@ -216,8 +219,9 @@ export default class Agents extends View {
 
   render(cx) {
     const t = theme();
-    if (props()?.sortMenu) return this.sortMenu(t);
+    if (this.sortMenuOpen) return this.sortMenu(t);
     const collapsed = narrow();
+    const embedded = this.embedded;
     const sort = sortOf();
     let list = agents();
     this.listed = new Map(list.map((a) => [a.address, a.status]));
@@ -320,13 +324,14 @@ export default class Agents extends View {
         .child(svg(`mods/workspace-chrome/${isPinned ? "pin-off" : "pin"}.svg`).size(13));
       return h_flex()
         .id(`ag-${a.address}`)
+        .relative()
         .px(8)
         .h(44)
         .flex_none()
         .rounded(8)
         .items_center()
         .gap(9)
-        .when(a.focused, (el) => el.bg(t.selected))
+        .when(a.focused, (el) => el.child(div().absolute().left(0).top(7).bottom(7).w(2).rounded(1).bg(t.accent)))
         .cursor_pointer()
         .hover((s) => s.bg(t.hover))
         .on_hover((on, cx) => {
@@ -345,23 +350,27 @@ export default class Agents extends View {
           v_flex()
             .flex_1()
             .min_w(0)
-            .gap(1)
-            .child(div().min_w(0).truncate().text_size(12.5).text_color(idle ? t.muted : t.foreground).child(top))
+            .gap(2)
+            .child(div().min_w(0).truncate().text_size(13).line_height("16px").text_color(idle ? t.muted : t.foreground).child(top))
             .when(Boolean(under) || Boolean(machine), el => el.child(
               h_flex()
                 .min_w(0)
                 .items_center()
-                .gap(5)
-                .text_size(10.5)
-                .text_color(t.dim)
+                .gap(6)
+                .text_size(11)
+                .line_height("14px")
+                .text_color(t.muted)
                 .when(Boolean(under), el => el.child(div().min_w(0).truncate().child(under)))
+                .when(Boolean(under) && Boolean(machine), el => el.child(div().flex_none().child("·")))
                 .when(Boolean(machine), el => el.child(div().flex_none().text_size(10).child(machine))),
             )),
         )
         .when(subs.length > 0, el => el.child(fold(a, subs)))
-        .when(this.hovered === a.address, el => el.child(pin))
-        .when(this.hovered !== a.address && Boolean(when), el => el.child(div().flex_none().text_size(11).text_color(t.dim).child(duration(now - when))))
-        .child(this.status(t, a, byPriority && !isPinned));
+        // A fixed slot for the pin and the elapsed time: hovering must not move the row.
+        .child(div().w(32).flex_none().h_full().flex().items_center().justify_end()
+          .when(this.hovered === a.address, el => el.child(pin))
+          .when(this.hovered !== a.address && Boolean(when), el => el.child(div().text_size(11).text_color(t.muted).child(duration(now - when)))))
+        .child(div().min_w(14).flex_none().h_full().flex().items_center().justify_end().child(this.status(t, a, byPriority && !isPinned)));
     };
 
     // Groups in list order: spaces (grouped) or priority sections. Agents of a
@@ -381,8 +390,8 @@ export default class Agents extends View {
       return h_flex()
         .id(g.id)
         .px(8)
-        .pt(8)
-        .h(30)
+        .pt(4)
+        .h(28)
         .flex_none()
         .gap(6)
         .items_center()
@@ -401,44 +410,55 @@ export default class Agents extends View {
           .when(!byPriority && top && top !== "idle", (el) => el.child(this.status(t, { status: top }, true)))
           .child(svg("mods/workspace-chrome/chevron-right.svg").size(11).flex_none().text_color(t.dim)));
     };
+    // One group needs no header: it would only repeat the list or its rows.
+    const showHeaders = groups.length > 1;
     const rows = collapsed
       ? list.flatMap(withKids)
-      : groups.flatMap((g) => [header(g), ...(this.folded.has(g.id) ? [] : g.members.flatMap(withKids))]);
+      : groups.flatMap((g) => showHeaders
+        ? [header(g), ...(this.folded.has(g.id) ? [] : g.members.flatMap(withKids))]
+        : g.members.flatMap(withKids));
+    const empty = list.length === 0 && !collapsed;
+    const emptyState = v_flex()
+      .w_full()
+      .items_center()
+      .gap(8)
+      .px(16)
+      .py(24)
+      .child(svg("mods/workspace-chrome/layers.svg").size(22).text_color(t.muted))
+      .child(div().text_size(12.5).text_color(t.muted).child("No agents yet"))
+      .child(div().w_full().text_center().text_size(11).line_height("15px").text_color(t.muted).child("Agents appear here when they report their status."));
 
     return v_flex()
-      .size_full()
-      .min_h(0)
-      .bg(t.chrome)
-      .border_t(1)
-      .border_color(t.border)
       .text_size(13)
+      .when(!embedded, el => el.size_full().min_h(0).bg(t.chrome).border_t(1).border_color(t.border))
+      .when(embedded, el => el.w_full().flex_none())
       .when(!collapsed, (el) =>
         el.child(
           h_flex()
             .px(16)
             .h(41)
-            .pt(14)
+            .pt(embedded ? 10 : 14)
             .pb(5)
             .flex_none()
             .items_center()
             .justify_between()
-            .child(div().text_size(11.5).font_medium().text_color(t.dim).child("Agents"))
+            .child(div().text_size(11).font_medium().text_color(t.muted).child("Agents"))
             .child(
               div()
                 .id("ag-sort")
                 .text_size(11)
-                .text_color(t.dim)
+                .text_color(t.muted)
                 .hover((s) => s.text_color(t.foreground))
-                .on_click(() => openOverlay({ mod: "my-agents", kind: "popup", width: 200, height: 140, props: { sortMenu: true } }))
+                .on_click(() => openOverlay({ mod: "my-sidebar", kind: "popup", width: 200, height: 140, props: { sortMenu: true } }))
                 .tooltip(`Sort agents: ${sort.label}`)
-                .child(svg(`mods/workspace-chrome/${sort.icon}.svg`).size(14)),
+                .child(svg(sort.icon).size(14)),
             ),
         ),
       )
-      .when(list.length === 0 && !collapsed, (el) =>
-        el.child(div().px(12).text_size(12).text_color(t.dim).child("No agent status yet. Agents show up here when they report their status. Older versions and agents inside tmux may not.")),
-      )
-      .child(v_flex().id("ag-list").flex_1().min_h(0).px(collapsed ? 0 : 8).overflow_y_scrollbar().mode("always").children(rows))
+      .child(v_flex().id("ag-list").px(collapsed ? 0 : 8)
+        .when(!embedded, el => el.flex_1().min_h(0).overflow_y_scrollbar().mode("always"))
+        .when(empty && !embedded, el => el.items_center().justify_center())
+        .children(empty ? [emptyState] : rows))
       .when(collapsed, (el) =>
         el.child(
           h_flex()

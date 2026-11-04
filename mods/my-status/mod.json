@@ -1,8 +1,7 @@
 {
   "place": "none",
-  "title": "Spaces",
   "cloned_from": {
-    "name": "spaces",
+    "name": "workspace-status",
     "version": "0.1.12"
   }
 }

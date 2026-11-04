@@ -5,7 +5,7 @@
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
+import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, props } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -46,7 +46,8 @@ export function tone(t, status) {
 }
 
 export default class Spaces extends View {
-  init(_props, cx) {
+  init(props, cx) {
+    this.embedded = Boolean(props?.embedded);
     this.git = {}; // where() -> { name, branch, ahead, behind, repo, linked }, null: not a repo
     this.checked = {}; // where() -> when it was last looked at
     this.unsure = new Set(); // where()s git couldn't answer for (a machine away)
@@ -335,6 +336,7 @@ export default class Spaces extends View {
       .justify_center()
       .rounded(8)
       .when(on, (el) => el.bg(t.selected))
+      .when(on, (el) => el.child(div().absolute().left(0).top(7).bottom(7).w(2).rounded(1).bg(t.accent)))
       .when(!on, (el) => el.hover((s) => s.bg(t.hover)))
       .when(this.pressed === i && this.over !== i, (el) => el.opacity(0.5))
       .when(this.pressed !== null && this.over === i && this.pressed !== i, (el) => el.child(
@@ -369,22 +371,29 @@ export default class Spaces extends View {
           .gap(9)
           .items_center()
           .size_full()
-          .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).text_color(t.dim)))
-          .when(!tree, el => el.child(h_flex().size(18).flex_none().rounded(5).bg(fill).items_center().justify_center().text_size(10.5).font_bold().text_color("#ffffff").child([...w.name][0]?.toUpperCase() ?? "?")))
+          .when(Boolean(tree), el => el.child(
+            // A real tree: the vertical line runs under the checkout's avatar,
+            // the last worktree turns into the row instead of continuing down.
+            div().ml(10).w(6).flex_none().border_l(1).border_color(t.input)
+              .when(tree === "└─", d => d.h(21).self_start().border_b(1).rounded_bl(6))
+              .when(tree !== "└─", d => d.self_stretch()),
+          ).child(svg("mods/workspace-chrome/branch.svg").size(13).text_color(t.muted)))
+          .when(!tree, el => el.child(h_flex().size(20).flex_none().rounded(6).bg(fill).items_center().justify_center().text_size(11).font_semibold().text_color("#101114").child([...w.name][0]?.toUpperCase() ?? "?")))
           // Left: the icon. Right: the project name over its branch.
           .child(
             v_flex()
               .flex_1()
               .min_w(0)
-              .gap(1)
-              .child(div().min_w(0).truncate().text_size(12.5).text_color(t.foreground).child(w.name))
+              .gap(2)
+              .child(div().min_w(0).truncate().text_size(13).line_height("16px").text_color(t.foreground).child(w.name))
               .when(Boolean(g), el => el.child(
                 h_flex()
                   .min_w(0)
                   .items_center()
                   .gap(4)
-                  .text_size(10.5)
-                  .text_color(t.dim)
+                  .text_size(11)
+                  .line_height("14px")
+                  .text_color(t.muted)
                   .child(div().min_w(0).truncate().child(g.branch ?? "detached"))
                   .when(g.ahead > 0, el => el.child(div().flex_none().text_color(t.ansi2).child(`↑${g.ahead}`)))
                   .when(g.behind > 0, el => el.child(div().flex_none().text_color(t.ansi1).child(`↓${g.behind}`))),
@@ -407,6 +416,17 @@ export default class Spaces extends View {
       .child(div().text_color(tone(t, w.status)).child(glyph(w.status)));
   }
 
+  // With few spaces the block is mostly empty: keep a place to make the next one.
+  ghost(t) {
+    return h_flex().id("space-new-hint").h(34).mt(4).flex_none().px(8).gap(8).rounded(8)
+      .border(1).border_dashed().border_color(t.border)
+      .text_size(12).text_color(t.muted).items_center().cursor_pointer()
+      .hover(s => s.bg(t.hover).text_color(t.foreground))
+      .on_click(() => run("space.new"))
+      .child(svg("mods/workspace-chrome/plus.svg").size(12))
+      .child("New space");
+  }
+
   render() {
     const t = theme();
     const collapsed = narrow();
@@ -422,13 +442,17 @@ export default class Spaces extends View {
       changed = true;
     }
     if (changed) setShared("space.colors", kept);
-    return v_flex().size_full().min_h(0).bg(t.chrome).text_size(13)
-      .child(h_flex().h(31).pl(16).pr(10).items_center().justify_between().text_size(11.5).text_color(t.dim)
+    const embedded = this.embedded;
+    return v_flex().text_size(13)
+      .when(!embedded, el => el.size_full().min_h(0).bg(t.chrome))
+      .when(embedded, el => el.w_full().flex_none())
+      .child(h_flex().h(31).pl(16).pr(10).items_center().justify_between().text_size(11).font_medium().text_color(t.muted)
         .when(!collapsed, el => el.child("Spaces"))
         .child(div().id("space-new").size(26).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(t.hover).text_color(t.foreground))
           .on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(14))))
-      .child(v_flex().flex_1().min_h(0).px(8).pb(14).overflow_y_scrollbar().mode("always")
+      .child(v_flex().px(8).pb(embedded ? 8 : 14)
+        .when(!embedded, el => el.flex_1().min_h(0).overflow_y_scrollbar().mode("always"))
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
-        .children(this.grouped(t, collapsed)));
+        .children([...this.grouped(t, collapsed), ...(!collapsed && sp.length < 3 ? [this.ghost(t)] : [])]));
   }
 }

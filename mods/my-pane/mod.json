@@ -1,8 +1,8 @@
 {
   "place": "none",
-  "title": "Agents",
+  "title": "Pane header",
   "cloned_from": {
-    "name": "agents",
+    "name": "pane",
     "version": "0.1.12"
   }
 }
