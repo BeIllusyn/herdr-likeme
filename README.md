@@ -32,6 +32,15 @@ is Herdr's `main` layout unchanged.
 
 ## Install
 
+One command, straight from `main` (it always downloads the latest, so it is also the
+update command):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/BeIllusyn/herdr-likeme/main/install.sh | bash
+```
+
+Or from a checkout (`git pull` first to update):
+
 ```sh
 git clone https://github.com/BeIllusyn/herdr-likeme.git
 cd herdr-likeme
@@ -41,6 +50,12 @@ cd herdr-likeme
 `install.sh` copies `layouts/likeme.json` and the three mods into
 `${HERDR_APP_HOME:-~/.config/herdr-app}`, runs `herdr-app check` on every mod, and
 switches to the layout. Herdr reloads the files within a second.
+
+It **overwrites** `layouts/likeme.json` and the `mods/my-*` folders on every run
+(`rsync --delete`), so edits made directly in `~/.config/herdr-app` are replaced —
+copy them back to the repo first. It never touches your other layouts, mods, spaces
+or terminals. The one-line form always fetches the current `REF` (default `main`);
+the checkout form uses the files in that checkout.
 
 Manual install:
 
@@ -59,7 +74,7 @@ herdr-app do layout.switch '{"name":"likeme"}'
 Never overwrite a layout or mod you already have: rename the new one and update the
 matching `"mod"` references in `likeme.json`.
 
-- Update: `git pull && ./install.sh`
+- Update: run the one-liner again, or `git pull && ./install.sh`
 - Uninstall: delete `layouts/likeme.json`, `layouts/likeme.png` (if present) and the
   `mods/my-spaces`, `mods/my-agents`, `mods/my-tabs` folders.
 
