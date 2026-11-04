@@ -22,8 +22,9 @@ and the braille spinner are the real UI._
 | **Tabs** | Tabs are square, fill the bar's full height and sit flush against each other with no gap; the active tab is the same flat opaque tint as a selected sidebar row, tinted with the space's colour and drawn without a border or shadow, while the others lie flat and keep a close button (dimmer when inactive). The `Files`/`Changes` toggles at the right are the same square, full-height blocks, tinted like the active tab when their panel is open. A default-numbered tab shows what it runs — the folder name, or the program when two tabs share it — and `+` sits right after the last tab. A zoomed tab gets a small zoom glyph instead of a trailing `Z`. The working spinner is a gold braille character (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, 80 ms per frame). |
 | **Panes** | Square corners and no gap, padding or terminal padding — the pane fills the work area edge to edge — a slightly lifted card surface (`#1a1d22`), and a cloned header on that same surface. Only the active pane's header paints a left-to-right aurora behind its text: a static wash that fades in from the dark left edge, plus four translucent colour ribbons sliding across at different speeds (native animations, no timer); inactive headers stay plain. The aurora is the focus mark — there is no accent frame or hairline, so no bright square corner is drawn into the window's rounded bottom-right. The split/zoom/close buttons are always visible; the status mark appears for working, blocked and done (nothing while idle). The header's working spinner is the same gold braille character as the tabs and agents. |
 | **Files / Changes** | Cloned from Herdr's `files` and `changes` mods with square corners: the panel body, the file and changed-file rows, the changed-file count badge and the commit field and button lose their rounding. |
+| **Brand bar** | Cloned from `workspace-chrome` with its sidebar toggle removed: the sidebar stays open, so the collapse/expand switch is gone. The logo and search button are unchanged. |
 
-Everything else — brand bar, menus — is Herdr's `main` layout unchanged.
+Everything else — menus — is Herdr's `main` layout unchanged.
 
 ## Requirements
 
@@ -49,7 +50,7 @@ cd herdr-likeme
 ./install.sh
 ```
 
-`install.sh` copies `layouts/likeme.json` and the five mods into
+`install.sh` copies `layouts/likeme.json` and the six mods into
 `${HERDR_APP_HOME:-~/.config/herdr-app}`, runs `herdr-app check` on every mod, and
 switches to the layout. Herdr reloads the files within a second.
 
