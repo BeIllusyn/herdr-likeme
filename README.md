@@ -9,8 +9,8 @@ Built from Herdr `main` @ 0.1.12 (`cloned_from` in `layouts/likeme.json`).
 
 ![Likeme](preview.png)
 
-_Workspace text in the screenshot is blurred; the two-line rows, the flat square
-selection and tab close buttons, and the braille spinner are the real UI._
+_A live capture: the two-line rows, the flat square selection, the tab close buttons
+and the braille spinner are the real UI._
 
 ## What changes
 
