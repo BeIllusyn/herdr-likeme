@@ -47,8 +47,10 @@ sidebar width the sidebar switches to its compact rail; both sections render the
 one-line rail inside the same scroll.
 
 **Agents.** A 41 px header ("Agents", 11 px medium `muted`, up/down sort icon). It
-follows the spaces content instead of a fixed half; group headers are 28 px and are
-hidden entirely when there is only one group. Agent rows are 44 px, 12 px radius, with
+follows the spaces content instead of a fixed half; group headers are 28 px. In the
+Priority view the section headers (Needs you / Done / Working / Idle) always show, so
+an all-idle list still says "Idle"; in the grouped view a lone space group hides its
+redundant header. Agent rows are 44 px, 12 px radius, with
 a 4 px gap between them:
 
 - 16 px program icon (agent's own report, else the program), clickable to fold
@@ -103,7 +105,8 @@ is Herdr's `files`/`changes` stack.
   content instead of a fixed half. Each section keeps its own folds and hover states.
 - **Agents.** Click focuses that agent's pane. Hover reveals the pin (pins survive on
   the terminal label). The chevron folds sub-agents. The header icon opens the sort
-  popup (Priority / Grouped by space). Group headers and machine headers fold.
+  popup (Priority / Grouped by space). Group headers and machine headers fold; Priority's
+  section headers stay visible even when only one section has agents.
 - **Tabs.** Click selects, drag reorders (`tab.move`), double-click renames, right-click
   opens the tab menu, the wheel switches tabs, every close button closes its own tab.
   A tab still named by its number is shown by what it runs, so "1" becomes the folder
@@ -245,13 +248,15 @@ carries its own `sort.svg`; `my-pane` carries its own `close/split/zoom` SVGs;
   apart from the flat rows and their neutral hover; rows have a 4 px gap; a list
   shorter than three spaces ends with a dashed "New space" row.
 - Each agent row shows two lines on a whisper of its space's colour; the focused agent
-  is the same balloon, and the selection changes within 250 ms of the focus moving; a
-  single group has no header.
+  is the same balloon, and the selection changes within 250 ms of the focus moving.
+  Priority keeps its section headers visible even when only one section has agents; a
+  lone space group in the grouped view has no header.
 - A default-numbered tab shows its folder or program, and `+` sits after the last tab.
 - Every tab draws an X close button (dimmed when inactive); the active tab is the
   coloured balloon, the others lie flat, and no top highlight line is drawn.
 - A working agent shows the braille spinner in its agent row, its tab, and the pane
-  header; an idle agent shows no status mark anywhere.
+  header; an idle agent keeps a faint ring in its agent row, so every row shows where
+  its agent stands.
 - The pane header uses the `#1a1d22` surface and a 12.5 px title / 11.5 px muted
   folder; only the focused pane's header shows the aurora, inactive ones stay plain,
   and no accent frame or hairline is drawn; its always-visible buttons still split,

@@ -228,8 +228,9 @@ export default class Agents extends View {
       .child(div().text_size(16).line_height("16px").text_color(t.working).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 80));
     if (a.status === "blocked" && compact) return div().size(14).flex_none().rounded(4).bg(t.blocked + "26").text_size(10.5).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!");
     if (a.status === "blocked") return div().flex_none().px(6).h(18).rounded(5).bg(t.blocked + "26").text_size(10.5).font_semibold().text_color(t.blocked).flex().items_center().child("Needs you");
-    // Idle says nothing: a ring beside a quiet row read as a state to act on.
-    if (a.status === "idle") return div().size(7).mx(3).flex_none();
+    // Idle keeps a faint ring: every row shows where its agent stands, and a
+    // quiet one reads as quiet rather than as a row with no state at all.
+    if (a.status === "idle") return div().size(7).mx(3).flex_none().rounded(4).border(1).border_color(t.dim + "80");
     return div().size(7).mx(3).flex_none().rounded(4).bg(a.status === "done" ? color : t.dim + "00");
   }
 
@@ -430,11 +431,13 @@ export default class Agents extends View {
         .when(byPriority || !open, (el) => el.child(div().text_color(t.dim).child(String(g.members.length))))
         .child(div().flex_1())
         .when(!open, (el) => el
-          .when(!byPriority && top && top !== "idle", (el) => el.child(this.status(t, { status: top }, true)))
+          .when(!byPriority && top, (el) => el.child(this.status(t, { status: top }, true)))
           .child(svg("mods/workspace-chrome/chevron-right.svg").size(11).flex_none().text_color(t.dim)));
     };
-    // One group needs no header: it would only repeat the list or its rows.
-    const showHeaders = groups.length > 1;
+    // Priority's sections are the list's own labels, so they always show — an
+    // all-idle list still says "Idle". A single space group in the grouped view
+    // would only repeat its rows, so it hides.
+    const showHeaders = byPriority || groups.length > 1;
     const rows = collapsed
       ? list.flatMap(withKids)
       : groups.flatMap((g) => showHeaders
