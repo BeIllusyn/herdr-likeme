@@ -429,7 +429,7 @@ export default class Spaces extends View {
       .child(div().text_color(tone(t, w.status)).child(glyph(w.status)));
   }
 
-  // With few spaces the block is mostly empty: keep a place to make the next one.
+  // Always keep a place to make the next space at the end of the list.
   ghost(t) {
     return h_flex().id("space-new-hint").h(34).flex_none().px(16).gap(8)
       .border(1).border_dashed().border_color(t.border)
@@ -466,6 +466,6 @@ export default class Spaces extends View {
       .child(v_flex().px(0).pb(embedded ? 8 : 14).gap(0)
         .when(!embedded, el => el.flex_1().min_h(0).overflow_y_scrollbar().mode("always"))
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
-        .children([...this.grouped(t, collapsed), ...(!collapsed && sp.length < 3 ? [this.ghost(t)] : [])]));
+        .children([...this.grouped(t, collapsed), ...(!collapsed ? [this.ghost(t)] : [])]));
   }
 }
