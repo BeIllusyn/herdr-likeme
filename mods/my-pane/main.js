@@ -110,7 +110,8 @@ export default class Pane extends View {
       // The window controls keep their places whether the pointer is here or not.
       // A quiet agent shows no status mark at all: a ring beside every idle pane
       // read as something to act on.
-      .when(st === "working", el => el.child(div().w(14).flex_none().text_center().text_size(13).text_color(t.working).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 80)))
+      .when(st === "working", el => el.child(div().w(18).h_full().flex_none().flex().items_center().justify_center()
+        .child(div().text_size(16).line_height("16px").text_color(t.working).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 80))))
       .when(st === "blocked", el => el.child(div().flex_none().px(6).h(18).flex().items_center().rounded(5).bg(t.blocked + "26").text_size(10.5).font_semibold().text_color(t.blocked).child("Needs you")))
       .when(st === "done", el => el.child(div().size(7).flex_none().rounded(4).bg(t.done)))
       .child(this.button(t, `ph-r-${pane}`, "split-right", "pane.split", { direction: "right", pane }))

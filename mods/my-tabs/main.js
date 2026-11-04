@@ -108,8 +108,10 @@ export default class Tabs extends View {
         .when(Boolean(program?.icon), el => el.child(program.tint ? svg(program.icon).size(16).text_color(t.muted) : image(program.icon).size(16)))
         .child(div().max_w(170).truncate().child(name))
         .when(c.zoomed, el => el.child(svg("mods/pane/zoom.svg").size(11).flex_none().text_color(t.muted)))
-        .when(c.status === "working", el => el.child(div().w(14).flex_none().text_center().text_size(13).text_color(t.working).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 80)))
-        .when(c.status === "blocked" || c.status === "done", el => el.child(div().w(14).flex_none().flex().items_center().justify_center().child(div().size(6).rounded(3).bg(t[c.status]))))
+        // The status slot is always there, so a state turn never changes the tab's width.
+        .child(div().w(18).h_full().flex_none().flex().items_center().justify_center()
+          .when(c.status === "working", el => el.child(div().text_size(16).line_height("16px").text_color(t.working).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 80)))
+          .when(c.status === "blocked" || c.status === "done", el => el.child(div().size(6).rounded(3).bg(t[c.status]))))
         .child(div().id(`close-${c.id}`).size(16).flex().flex_none().items_center().justify_center().rounded(4).text_color(t.muted).opacity(c.active ? 0.9 : 0.4).hover(s => s.bg(t.hover).text_color(t.foreground).opacity(1)).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/pane/close.svg").size(11)));
     };
     const root = layout(), sidebar = find(root, "sidebar"), w = window();

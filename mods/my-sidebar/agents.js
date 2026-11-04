@@ -224,7 +224,8 @@ export default class Agents extends View {
   // compact: a ! for blocked where a header already says "Needs you".
   status(t, a, compact = false) {
     const color = t[a.status] ?? t.dim;
-    if (a.status === "working") return div().flex_none().mx(1).text_size(13).text_color(t.working).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 80);
+    if (a.status === "working") return div().w(18).h_full().flex_none().flex().items_center().justify_center()
+      .child(div().text_size(16).line_height("16px").text_color(t.working).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 80));
     if (a.status === "blocked" && compact) return div().size(14).flex_none().rounded(4).bg(t.blocked + "26").text_size(10.5).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!");
     if (a.status === "blocked") return div().flex_none().px(6).h(18).rounded(5).bg(t.blocked + "26").text_size(10.5).font_semibold().text_color(t.blocked).flex().items_center().child("Needs you");
     // Idle says nothing: a ring beside a quiet row read as a state to act on.
@@ -322,7 +323,7 @@ export default class Agents extends View {
           .hover((s) => s.bg(t.hover))
           .on_click(() => run("pane.focus", { pane: a.pane }))
           .child(div().flex_1().min_w(0).whitespace_nowrap().text_right().text_color(t.muted).child(String(i + 1)))
-          .child(h_flex().w(14).flex_none().items_center().justify_center().child(this.status(t, a, true)));
+          .child(h_flex().w(18).flex_none().items_center().justify_center().child(this.status(t, a, true)));
       }
       const when = this.since(a);
       const idle = a.status === "idle" && !a.focused;
@@ -392,7 +393,7 @@ export default class Agents extends View {
         .child(div().w(32).flex_none().h_full().flex().items_center().justify_end()
           .when(this.hovered === a.address, el => el.child(pin))
           .when(this.hovered !== a.address && Boolean(when), el => el.child(div().text_size(11).text_color(t.muted).child(duration(now - when)))))
-        .child(div().min_w(14).flex_none().h_full().flex().items_center().justify_end().child(this.status(t, a, byPriority && !isPinned)));
+        .child(div().min_w(18).flex_none().h_full().flex().items_center().justify_end().child(this.status(t, a, byPriority && !isPinned)));
     };
 
     // Groups in list order: spaces (grouped) or priority sections. Agents of a
