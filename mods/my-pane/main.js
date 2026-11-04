@@ -3,10 +3,55 @@
 // Shows the program's icon (the app's program table), the agent's name or
 // the terminal's title, the folder, and the agent's status; buttons split, zoom and close
 // this pane. Props from the app: { pane, terminal }. Click: focus the pane.
+// The header background carries an iridescent, left-to-right aurora.
 
-import { View, div, svg, image } from "gpui-kit";
+import { View, div, svg, image, PathBuilder, Background } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { panes, props, run, theme, home } from "herdr";
+
+const RECT = () => PathBuilder.fill()
+  .move_to("0%", "0%").line_to("100%", "0%")
+  .line_to("100%", "100%").line_to("0%", "100%")
+  .close().build();
+
+// A left-to-right wash across the element it fills.
+const wash = (from, to) =>
+  window.paint_path(RECT(), Background.linear_gradient(90, from, to)).size_full();
+
+// One soft colour ribbon: transparent → colour A → colour B → transparent.
+// The whole ribbon slides across the header, so each colour fades in at the
+// left and out at the right instead of appearing as a hard block.
+const ribbon = (pane, key, width, from, to, period, a, b, alpha = "66") => {
+  const A = `${a}${alpha}`, B = `${b}${alpha}`;
+  return h_flex()
+    .id(`pane-aurora-${pane}-${key}`)
+    .absolute()
+    .top(0)
+    .h_full()
+    .w(width * 3)
+    .left(from)
+    .loop("left", { from, to, period, easing: "linear" })
+    .child(wash(`${a}00`, A).w(width).h_full())
+    .child(wash(A, B).w(width).h_full())
+    .child(wash(B, `${b}00`).w(width).h_full());
+};
+
+// Only the focused pane gets the aurora; inactive headers stay plain, and the
+// aurora itself is the focus mark (no accent frame or hairline).
+const aurora = (pane) => div()
+  .id(`pane-aurora-${pane}`)
+  .absolute()
+  .top(0)
+  .left(0)
+  .size_full()
+  // The wash itself fades in from the left, so the header enters as a soft
+  // colour instead of switching on; the moving ribbons carry it onward.
+  .child(wash("#ff4d9d0a", "#4de1ff4a"))
+  .child(wash("#7c5cff00", "#ffb84d42"))
+  .child(ribbon(pane, "rose", 320, -960, 3000, 14000, "#ff4d9d", "#ffb84d", "6b"))
+  .child(ribbon(pane, "ice", 380, -1140, 3200, 16000, "#4de1ff", "#7c5cff", "63"))
+  .child(ribbon(pane, "mint", 280, -840, 2800, 11000, "#5cffb0", "#4d7dff", "5c"))
+  .child(ribbon(pane, "sheen", 90, -270, 3000, 7000, "#ffffff", "#ffffff", "26"));
 
 function icon(p, size, color) {
   if (!p?.icon) return null;
@@ -53,10 +98,12 @@ export default class Pane extends View {
       .gap(8)
       .items_center()
       .bg("#1a1d22")
+      .overflow_hidden()
       .border_b(1)
       .border_color(t.border)
       .text_size(12)
       .on_click(() => run("pane.focus", { pane }))
+      .when(p.focused, (el) => el.child(aurora(pane)))
       .when(Boolean(pic), (el) => el.child(pic))
       .child(div().flex_none().truncate().max_w(260).text_size(12.5).font_medium().text_color(t.foreground).child(name))
       .child(div().flex_1().truncate().text_size(11.5).text_color(t.muted).child(folder(p.cwd)))

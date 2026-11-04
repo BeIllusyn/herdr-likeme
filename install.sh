@@ -14,7 +14,7 @@ REPO="${REPO:-BeIllusyn/herdr-likeme}"
 REF="${REF:-main}"
 DST="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
 LAYOUT="likeme"
-MODS=(my-sidebar my-tabs my-pane my-status my-files my-changes)
+MODS=(my-sidebar my-tabs my-pane my-files my-changes)
 
 if ! command -v herdr-app >/dev/null 2>&1; then
   echo "herdr-app is not in PATH" >&2

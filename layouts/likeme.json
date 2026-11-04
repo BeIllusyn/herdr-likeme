@@ -92,10 +92,6 @@
                     "width": 1,
                     "color": "border"
                   },
-                  "focus": {
-                    "width": 1,
-                    "color": "accent"
-                  },
                   "radius": 0,
                   "gap": 0,
                   "lone": true
@@ -138,16 +134,6 @@
           ],
           "padding": 0,
           "gap": 0
-        },
-        {
-          "id": "status",
-          "type": "block",
-          "content": {
-            "mod": "my-status"
-          },
-          "size": {
-            "px": 28
-          }
         }
       ],
       "resizable": false

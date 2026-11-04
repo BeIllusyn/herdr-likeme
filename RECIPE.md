@@ -12,7 +12,7 @@ the balloon selection, the tab close buttons and the spinner are the real UI._
 
 ## What you see
 
-The window is Herdr's `main` layout with four mods replaced. No system title bar
+The window is Herdr's `main` layout with five mods replaced. No system title bar
 (`"titlebar": "none"`); on macOS the traffic lights sit at `[12, 16]`. Background is
 the theme's `canvas`, with 1 px `border` dividers.
 
@@ -76,18 +76,17 @@ tabs share a folder (then the number is appended if the programs also collide). 
 `+` sits right after the last tab, inside the scrolling strip.
 
 **Panes.** Square, edge-to-edge cards: no gap, padding or terminal padding, 1 px
-`border`, `accent` border while focused, and a slightly lifted `#1a1d22` surface (the
+`border`, no pane-level focus border, and a slightly lifted `#1a1d22` surface (the
 terminal itself keeps its own background). 30 px header from the cloned `my-pane` mod
-(`reveal: always`), painted on the same `#1a1d22` surface, with a 1 px bottom hairline. The title is 12.5 px
+(`reveal: always`), painted on the same `#1a1d22` surface. Only the focused pane's
+header carries the aurora: two static left-to-right washes and four translucent colour
+ribbons sliding across at different speeds. The washes start transparent at the left
+edge, so the colour appears gradually, and the ribbons start offscreen to the left and
+fade out at their trailing edge. Inactive headers stay plain; the aurora itself is the
+focus mark, and the header's bottom hairline stays `border`. The title is 12.5 px
 `medium`, the folder 11.5 px `muted`, and the working state is the same gold braille
 character as the tabs and agents. The Files/Changes panel (368 px, hidden by default)
-is Herdr's `files`/`changes` stack. A 28 px `my-status` bar sits at the bottom.
-
-**Status bar.** 11.5 px `muted`: the machine (server/monitor icon), the space's branch,
-and the agent count with a 6 px dot colored by the most urgent agent. The count is
-singular when it is one ("1 agent"); a blocked count adds "· N needs you" in `blocked`.
-The palette chord on the right is a small keycap (`raised`, 1 px `border`, 18 px high)
-followed by "commands".
+is Herdr's `files`/`changes` stack.
 
 ## How it behaves
 
@@ -109,14 +108,13 @@ followed by "commands".
   opens the tab menu, the wheel switches tabs, every close button closes its own tab.
   A tab still named by its number is shown by what it runs, so "1" becomes the folder
   or program name; renaming a tab always wins. The `+` opens Herdr's `new-menu` popup.
-- **Pane header.** Click focuses the pane. The split-right, split-down, zoom/unzoom and
+- **Pane header.** Click focuses the pane. Only the focused pane's header shows the
+  aurora; inactive headers stay plain, and there is no accent frame or hairline to run
+  square into the window's rounded bottom-right. The split-right, split-down, zoom/unzoom and
   close buttons are always visible, and the status indicator keeps its place when there
   is one (working spinner, "Needs you", done dot); an idle agent shows nothing. Each
   button acts on its own pane (`props().pane`), not the focused one. Working shows the
   same braille character as the tabs and agents.
-- **Status bar.** The dot is the most urgent agent state (blocked > done > working >
-  idle > dim), the count is singular or plural, and the keycap chord opens the
-  palette (`app.palette`).
 - Everything else (Files/Changes, palette, dialogs and notifications) is unchanged
   from `main`.
 
@@ -136,10 +134,9 @@ root row (canvas, titlebar none, traffic_lights [12,16], terminal_padding [0,0],
    ├─ tabs block (42px, mod my-tabs, window_drag)
    ├─ work-body row (padding 0, gap 0)
    │  ├─ main block {tab: active, pane: {gap 0, radius 0, background #1a1d22, border 1/border,
-   │  │              focus 1/accent, lone true, header {mod my-pane, height 30, reveal always}}}
+   │  │              lone true, header {mod my-pane, height 30, reveal always}}}
    │  └─ panel column (368px, min 280, max 900, hidden) → panel-body stack
    │     {active files} → files block, changes block
-   └─ status block (28px, my-status)
 ```
 
 **Mods.**
@@ -148,8 +145,7 @@ root row (canvas, titlebar none, traffic_lights [12,16], terminal_padding [0,0],
 |---|---|
 | `my-sidebar` | One mod, two retained child views (`spaces.js` and `agents.js`) composed in a single scrolling column (`main.js`); `colors.js` holds the shared `MARK` table, `markColor()` and the `mix()` used for the balloon pills. It keeps the spaces logic (git lookup via `exec`, `hc machine ls`, `watchFolder`, drag-reorder) and the agents logic (live agent data, pins, groups, sub-agent trees) unchanged. Changed: the two sections share one scroll (no 50/50 split), the Agents header follows the spaces content without a top border, the worktree rows draw a real 1 px tree line, rows have spacing and balloon selection, and both retain the row/type/active-state changes from the earlier passes. The sort popup mounts a second copy of this mod (`props.sortMenu`) and returns only the agents view. |
 | `my-tabs` | The tab bar. Clone of the shipped `tabs`. Changed: 10 px radius, `px 12`/`gap 8`, 16 px icons, distinct labels for default-numbered tabs, `+` after the last tab, close button fades to 0.4 when inactive, balloon active tab in the space's colour, zoom glyph, spinner `frames([...], 80)`. |
-| `my-pane` | The pane header. Clone of the shipped `pane`. Changed: header surface `#1a1d22`, 12.5 px title / 11.5 px `muted` folder, braille working spinner instead of the rotating SVG, always-visible `muted` buttons; keeps the 1 px bottom hairline and the split/zoom/close buttons. |
-| `my-status` | The status bar. Clone of the shipped `workspace-status`. Changed: 11.5 px text, singular/plural agent count, 6 px dot colored by the most urgent agent, palette chord in an 18 px keycap. |
+| `my-pane` | The pane header. Clone of the shipped `pane`. Changed: header surface `#1a1d22`, 12.5 px title / 11.5 px `muted` folder, an iridescent aurora on the focused pane's header only (static washes plus four native `loop` ribbons), braille working spinner instead of the rotating SVG, always-visible `muted` buttons; no pane-level focus border and no accent hairline — the aurora is the focus mark — and it keeps the split/zoom/close buttons. |
 
 Herdr functions used: `spaces`, `agents`, `terminals`, `panes`, `focused`, `layout`,
 `theme`, `window`, `settings`, `keys`, `home`, `shared` / `setShared`, `setAgentOrder`,
@@ -173,11 +169,10 @@ carries its own `sort.svg`; `my-pane` carries its own `close/split/zoom` SVGs;
 ## Watch out
 
 - **Clones never update.** Herdr replaces its shipped
-  `spaces`/`agents`/`tabs`/`pane`/`workspace-status` on every start; these five sources
+  `spaces`/`agents`/`tabs`/`pane` on every start; these four sources
   are frozen at 0.1.12. After a Herdr upgrade, diff each shipped `main.js` against its
   copy and port whatever changed (`spaces`→`my-sidebar/spaces.js`,
-  `agents`→`my-sidebar/agents.js`, `tabs`→`my-tabs`, `pane`→`my-pane`,
-  `workspace-status`→`my-status`).
+  `agents`→`my-sidebar/agents.js`, `tabs`→`my-tabs`, `pane`→`my-pane`).
 - `my-sidebar` is a composition, not a clone: `main.js` mounts two retained child
   views with `cx.new(..., { embedded: true })`. The child reads `embedded` from its
   `init(props)` argument, **not** from the global `props()` (which is the host mod's
@@ -196,6 +191,16 @@ carries its own `sort.svg`; `my-pane` carries its own `close/split/zoom` SVGs;
 - The mods read shipped assets by path (`mods/workspace-chrome/...`,
   `mods/pane/close.svg` in `my-tabs`). If Herdr renames them, update the paths.
   `my-pane` uses its own `mods/my-pane/*.svg` copies instead.
+- The header aurora is painted with `window.paint_path(RECT, Background.linear_gradient(...))`;
+  `.bg()` takes only a Color, not a Background. The ribbons animate `left` with
+  `.loop`, at about 30 fps and without a script timer. Their `from` is minus the
+  ribbon's width and their `to` is past the header, so the loop's ping-pong reversal
+  happens offscreen and the visible motion stays left-to-right. All four ribbons and
+  both washes are separate elements; adding a timer here would redraw the whole window.
+- The pane frame has no `focus` border and the header has no accent hairline on purpose.
+  Any 1 px accent line around the pane runs square into the window's rounded
+  bottom-right corner, which reads as a bright, abrupt corner. The focused pane's
+  aurora is the focus mark; keep it in the header if you port this layout.
 - Heights are fixed: 44 px agent/space rows, 42 px worktree rows, 26 px sub-agent rows,
   29 px tabs. A larger font will clip rather than grow.
 - The balloon's 1 px border is reserved on every row and tab, transparent while
@@ -209,7 +214,7 @@ carries its own `sort.svg`; `my-pane` carries its own `close/split/zoom` SVGs;
   keeps a dragged edge from crossing that line, so the rail is reached only with the
   brand bar's collapse button. Running the state's `layout.resize` command is not
   clamped by `min`, so that button still works.
-- Mod names (`my-sidebar`, `my-tabs`, `my-pane`, `my-status`) are deliberately
+- Mod names (`my-sidebar`, `my-tabs`, `my-pane`, `my-files`, `my-changes`) are deliberately
   generic. Rename them on install if they clash, and update the `"mod"` fields in
   `likeme.json`.
 - The Files/Changes choice is remembered per space by `my-tabs` in `localStorage`
@@ -229,7 +234,8 @@ carries its own `sort.svg`; `my-pane` carries its own `close/split/zoom` SVGs;
 
 ## Done when
 
-- `herdr-app check mods/my-sidebar`, `.../my-tabs`, `.../my-pane`, `.../my-status` all
+- `herdr-app check mods/my-sidebar`, `.../my-tabs`, `.../my-pane`, `.../my-files`,
+  `.../my-changes` all
   pass.
 - `herdr-app do layout.switch '{"name":"likeme"}'` shows the layout and `herdr-app
   status` reports no errors.
@@ -247,13 +253,12 @@ carries its own `sort.svg`; `my-pane` carries its own `close/split/zoom` SVGs;
 - A working agent shows the braille spinner in its agent row, its tab, and the pane
   header; an idle agent shows no status mark anywhere.
 - The pane header uses the `#1a1d22` surface and a 12.5 px title / 11.5 px muted
-  folder; its always-visible buttons still split, zoom and close the pane they belong
-  to.
-- The status bar says "1 agent", colors its dot by the most urgent agent, and shows
-  the palette chord in a keycap.
+  folder; only the focused pane's header shows the aurora, inactive ones stay plain,
+  and no accent frame or hairline is drawn; its always-visible buttons still split,
+  zoom and close the pane they belong to.
 - Spaces and agents live in one scroll: the Agents header follows the spaces content
   with no 50/50 boundary, and scrolling moves both sections together.
 - A worktree space appears under its checkout with a 1 px tree line; the last child
   turns into its row instead of continuing down.
-- Deleting `layouts/likeme.json` and the four `mods/my-*` folders returns the app to
+- Deleting `layouts/likeme.json` and the five `mods/my-*` folders returns the app to
   the shipped layouts.
