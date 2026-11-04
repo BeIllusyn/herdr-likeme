@@ -96,8 +96,8 @@
                     "width": 1,
                     "color": "accent"
                   },
-                  "radius": 12,
-                  "gap": 10,
+                  "radius": 0,
+                  "gap": 0,
                   "lone": true
                 }
               }
@@ -136,8 +136,8 @@
               "hidden": true
             }
           ],
-          "padding": 10,
-          "gap": 10
+          "padding": 0,
+          "gap": 0
         },
         {
           "id": "status",
@@ -155,8 +155,8 @@
   ],
   "background": "canvas",
   "terminal_padding": [
-    12,
-    10
+    0,
+    0
   ],
   "divider": {
     "width": 1,

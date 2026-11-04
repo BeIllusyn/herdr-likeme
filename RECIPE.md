@@ -75,10 +75,10 @@ named by its number shows what it runs: the folder name, or the program name whe
 tabs share a folder (then the number is appended if the programs also collide). The
 `+` sits right after the last tab, inside the scrolling strip.
 
-**Panes.** Cards: 10 px gap and padding, 12 px radius, 1 px `border`, `accent` border
-while focused, and a slightly lifted `#1a1d22` surface (the terminal itself keeps its
-own background). 30 px header from the cloned `my-pane` mod (`reveal: always`), painted
-on the same `#1a1d22` surface, with a 1 px bottom hairline. The title is 12.5 px
+**Panes.** Square, edge-to-edge cards: no gap, padding or terminal padding, 1 px
+`border`, `accent` border while focused, and a slightly lifted `#1a1d22` surface (the
+terminal itself keeps its own background). 30 px header from the cloned `my-pane` mod
+(`reveal: always`), painted on the same `#1a1d22` surface, with a 1 px bottom hairline. The title is 12.5 px
 `medium`, the folder 11.5 px `muted`, and the working state is the same gold braille
 character as the tabs and agents. The Files/Changes panel (368 px, hidden by default)
 is Herdr's `files`/`changes` stack. A 28 px `my-status` bar sits at the bottom.
@@ -126,7 +126,7 @@ followed by "commands".
 "0.1.12"}`):
 
 ```
-root row (canvas, titlebar none, traffic_lights [12,16], terminal_padding [12,10], 1px divider)
+root row (canvas, titlebar none, traffic_lights [12,16], terminal_padding [0,0], 1px divider)
 ├─ sidebar column (268px, min 44, max 480, background chrome, resizable false)
 │  ├─ brand block (46px, workspace-chrome, window_drag)
 │  ├─ sidebar-list block (weight 1, min 90, mod my-sidebar)
@@ -134,8 +134,8 @@ root row (canvas, titlebar none, traffic_lights [12,16], terminal_padding [12,10
 │  └─ sidebar-footer block (69px, workspace-chrome, props {footer: true})
 └─ work column (resizable false)
    ├─ tabs block (42px, mod my-tabs, window_drag)
-   ├─ work-body row (padding 10, gap 10)
-   │  ├─ main block {tab: active, pane: {gap 10, radius 12, background #1a1d22, border 1/border,
+   ├─ work-body row (padding 0, gap 0)
+   │  ├─ main block {tab: active, pane: {gap 0, radius 0, background #1a1d22, border 1/border,
    │  │              focus 1/accent, lone true, header {mod my-pane, height 30, reveal always}}}
    │  └─ panel column (368px, min 280, max 900, hidden) → panel-body stack
    │     {active files} → files block, changes block
