@@ -78,14 +78,13 @@ tabs share a folder (then the number is appended if the programs also collide). 
 `+` sits right after the last tab, inside the scrolling strip.
 
 **Panes.** Square, edge-to-edge cards: no gap, padding or terminal padding, 1 px
-`border`, no pane-level focus border, and a slightly lifted `#1a1d22` surface (the
-terminal itself keeps its own background). 30 px header from the cloned `my-pane` mod
-(`reveal: always`), painted on the same `#1a1d22` surface. Only the focused pane's
-header carries the aurora: two static left-to-right washes and four translucent colour
-ribbons sliding across at different speeds. The washes start transparent at the left
-edge, so the colour appears gradually, and the ribbons start offscreen to the left and
-fade out at their trailing edge. Inactive headers stay plain; the aurora itself is the
-focus mark, and the header's bottom hairline stays `border`. The title is 12.5 px
+`border`, and a slightly lifted `#1a1d22` surface; inactive panes keep the neutral
+hairline. 30 px header from the cloned `my-pane` mod (`reveal: always`), painted on
+the same `#1a1d22` surface. The focused header carries the focus mark: the space's
+colour as an opaque 16% blend into `#1a1d22`, the same colour language as the active
+tab and the selected sidebar row, at a lower strength because a header is much larger
+than a tab. It is a flat solid fill — no gradient, animation or border — so a space's
+header colour changes with the space. Inactive headers stay plain. The title is 12.5 px
 `medium`, the folder 11.5 px `muted`, and the working state is the same gold braille
 character as the tabs and agents. The Files/Changes panel (368 px, hidden by default)
 is Herdr's `files`/`changes` stack.
@@ -111,9 +110,9 @@ is Herdr's `files`/`changes` stack.
   opens the tab menu, the wheel switches tabs, every close button closes its own tab.
   A tab still named by its number is shown by what it runs, so "1" becomes the folder
   or program name; renaming a tab always wins. The `+` opens Herdr's `new-menu` popup.
-- **Pane header.** Click focuses the pane. Only the focused pane's header shows the
-  aurora; inactive headers stay plain, and there is no accent frame or hairline to run
-  square into the window's rounded bottom-right. The split-right, split-down, zoom/unzoom and
+- **Pane header.** Click focuses the pane. Only the focused header is tinted with the
+  space's colour; inactive headers stay plain.
+  The split-right, split-down, zoom/unzoom and
   close buttons are always visible, and the status indicator keeps its place when there
   is one (working spinner, "Needs you", done dot); an idle agent shows nothing. Each
   button acts on its own pane (`props().pane`), not the focused one. Working shows the
@@ -148,7 +147,7 @@ root row (canvas, titlebar none, traffic_lights [12,16], terminal_padding [0,0],
 |---|---|
 | `my-sidebar` | One mod, two retained child views (`spaces.js` and `agents.js`) composed in a single scrolling column (`main.js`); `colors.js` holds the shared `MARK` table, `markColor()` and the `mix()` used for the balloon pills. It keeps the spaces logic (git lookup via `exec`, `hc machine ls`, `watchFolder`, drag-reorder) and the agents logic (live agent data, pins, groups, sub-agent trees) unchanged. Changed: the two sections share one scroll (no 50/50 split), the Agents header follows the spaces content without a top border, the worktree rows draw a real 1 px tree line, rows have spacing and balloon selection, and both retain the row/type/active-state changes from the earlier passes. The sort popup mounts a second copy of this mod (`props.sortMenu`) and returns only the agents view. |
 | `my-tabs` | The tab bar. Clone of the shipped `tabs`. Changed: 10 px radius, `px 12`/`gap 8`, 16 px icons, distinct labels for default-numbered tabs, `+` after the last tab, close button fades to 0.4 when inactive, balloon active tab in the space's colour, zoom glyph, spinner `frames([...], 80)`. |
-| `my-pane` | The pane header. Clone of the shipped `pane`. Changed: header surface `#1a1d22`, 12.5 px title / 11.5 px `muted` folder, an iridescent aurora on the focused pane's header only (static washes plus four native `loop` ribbons), braille working spinner instead of the rotating SVG, always-visible `muted` buttons; no pane-level focus border and no accent hairline — the aurora is the focus mark — and it keeps the split/zoom/close buttons. |
+| `my-pane` | The pane header. Clone of the shipped `pane`. Changed: header surface `#1a1d22`, 12.5 px title / 11.5 px `muted` folder, a flat space-colour tint on the focused header (16% blend into `#1a1d22`, no animation), braille working spinner instead of the rotating SVG, always-visible `muted` buttons, and it keeps the split/zoom/close buttons. |
 
 Herdr functions used: `spaces`, `agents`, `terminals`, `panes`, `focused`, `layout`,
 `theme`, `window`, `settings`, `keys`, `home`, `shared` / `setShared`, `setAgentOrder`,
@@ -196,16 +195,19 @@ carries its own `sort.svg`; `my-pane` carries its own `close/split/zoom` SVGs;
 - The mods read shipped assets by path (`mods/workspace-chrome/...`,
   `mods/pane/close.svg` in `my-tabs`). If Herdr renames them, update the paths.
   `my-pane` uses its own `mods/my-pane/*.svg` copies instead.
-- The header aurora is painted with `window.paint_path(RECT, Background.linear_gradient(...))`;
-  `.bg()` takes only a Color, not a Background. The ribbons animate `left` with
-  `.loop`, at about 30 fps and without a script timer. Their `from` is minus the
-  ribbon's width and their `to` is past the header, so the loop's ping-pong reversal
-  happens offscreen and the visible motion stays left-to-right. All four ribbons and
-  both washes are separate elements; adding a timer here would redraw the whole window.
-- The pane frame has no `focus` border and the header has no accent hairline on purpose.
-  Any 1 px accent line around the pane runs square into the window's rounded
-  bottom-right corner, which reads as a bright, abrupt corner. The focused pane's
-  aurora is the focus mark; keep it in the header if you port this layout.
+- The focused header's tint is a plain `.bg()` colour:
+  `mix("#1a1d22", markColor(...), 0.16)`. `markColor`/`mix` are copies of the
+  sidebar/tab helpers (`MARK`, opaque blends), so keep the three copies in sync. The
+  colour comes from `shared("space.colors")[space.id]` for the active space; a space
+  with no colour falls back to `#1d2128`. It is a solid fill because Herdr's pane frame
+  exposes only a solid `border`/`focus` colour and `pane.background` ignores `gradient`
+  and `image`; a layout-node background image with `terminal_opacity` below 1 shows
+  ghosting. Layout `focus`/`background` changes apply when the layout loads, not on a
+  live save: run `herdr-app do layout.switch '{"name":"likeme"}'` after editing. Mod
+  edits hot reload.
+- The header is the only surface that can take the space tint: a mod draws it, while
+  the pane frame around the terminal can only be a solid colour. Do not try to move the
+  tint onto the pane `background` — it would colour every pane, focused or not.
 - **Performance rules for these mods.** Every `spaces()`, `panes()`, `agents()` or
   `terminals()` call copies the whole host list into JS, so read each one once per
   render/tick and pass the snapshot down (the agents view used to call `panes()` once
@@ -241,9 +243,9 @@ carries its own `sort.svg`; `my-pane` carries its own `close/split/zoom` SVGs;
 - Only this layout is customized. `terminals` and `win98` keep Herdr's look.
 - On macOS the tab bar reserves room for the traffic lights using the layout's
   `sidebar` size, `traffic_lights` and the current zoom.
-- The pane surface `#1a1d22` and the balloon blends are dark-theme choices; the
-  balloons mix against `raised` and the space colour, so a light theme needs its own
-  check.
+- The pane/header `#1a1d22` surfaces, the header's space-colour tint and the balloon
+  blends are dark-theme choices; the balloons mix against `raised` and the space
+  colour, so a light theme needs its own check.
 - `line_height` takes a bare number as a multiplier (`1.45`), not pixels. The two-line
   rows use `"16px"` / `"14px"`; `line_height(16)` would make each line 16× tall.
 - A hand-named tab keeps its name; only numeric/id-like default names are replaced by
@@ -273,9 +275,8 @@ carries its own `sort.svg`; `my-pane` carries its own `close/split/zoom` SVGs;
   header; an idle agent keeps a faint ring in its agent row, so every row shows where
   its agent stands.
 - The pane header uses the `#1a1d22` surface and a 12.5 px title / 11.5 px muted
-  folder; only the focused pane's header shows the aurora, inactive ones stay plain,
-  and no accent frame or hairline is drawn; its always-visible buttons still split,
-  zoom and close the pane they belong to.
+  folder; only the focused header is tinted with the space's colour, inactive ones stay
+  plain; its always-visible buttons still split, zoom and close the pane they belong to.
 - Spaces and agents live in one scroll: the Agents header follows the spaces content
   with no 50/50 boundary, and scrolling moves both sections together.
 - A worktree space appears under its checkout with a 1 px tree line; the last child
