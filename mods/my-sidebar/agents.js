@@ -5,28 +5,16 @@ import { View, div, image, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay, window, layout } from "herdr";
 import { markColor, mix } from "./colors.js";
-
-function find(node, id) {
-  if (node?.id === id) return node;
-  for (const child of node?.children ?? []) {
-    const found = find(child, id);
-    if (found) return found;
-  }
-  return null;
-}
-
-// The sidebar's rail goes by its width, not a flag: dragging its edge narrows it too.
-// Read once per tick, not once per render.
-const RAIL = 160;
-const narrow = () => (find(layout(), "sidebar")?.size?.px ?? Infinity) < RAIL;
+import { find, isRail, backgroundTick } from "./util.js";
 
 // To the rail (on macOS wide enough for the traffic lights), or back to the width it had.
 function toggleSidebar() {
   const width = find(layout(), "sidebar")?.size?.px;
-  if (!narrow()) setShared("sidebar.width", width);
+  const collapsed = isRail(width);
+  if (!collapsed) setShared("sidebar.width", width);
   // Mods edited before the rail went by width still read the flag.
-  setShared("sidebar.collapsed", !narrow());
-  run("layout.resize", { id: "sidebar", px: narrow() ? (shared("sidebar.width") ?? 268) : window()?.platform === "macos" ? 76 : 44 });
+  setShared("sidebar.collapsed", collapsed);
+  run("layout.resize", { id: "sidebar", px: collapsed ? (shared("sidebar.width") ?? 268) : window()?.platform === "macos" ? 76 : 44 });
 }
 
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
@@ -103,8 +91,7 @@ export default class Agents extends View {
     cx.timer.every(250, (cx) => {
       // In the background nothing here needs four looks a second; one is enough
       // to catch up within a second of the window coming forward.
-      if (window()?.active) this.idleTicks = 0;
-      else if (++this.idleTicks % 4) return;
+      if (!backgroundTick(this)) return;
       const minute = Math.floor(Date.now() / 60000);
       // The rail switch reads the sidebar's width, so a resize is a change too.
       this.width = find(layout(), "sidebar")?.size?.px;
@@ -127,7 +114,7 @@ export default class Agents extends View {
   }
 
   narrow() {
-    return (this.width ?? Infinity) < RAIL;
+    return isRail(this.width);
   }
 
   // Stamps agents whose state changed. Done and idle count as one: looking at a
@@ -361,11 +348,9 @@ export default class Agents extends View {
     // title below it, and its space's colour as a faint wash behind both.
     // The tab and pane snapshots are read once for the whole list: the old
     // per-agent lookup copied `panes()` once per row and scanned every tab.
-    const tabById = new Map();
-    if (list.length) for (const s of spaces()) for (const tab of s.tabs) tabById.set(tab.id, tab);
     const leads = list.length ? leadPanes(panes()) : null;
     const tabTitle = new Map();
-    for (const [id, tab] of tabById) tabTitle.set(id, title(tab, leads.get(id)));
+    if (list.length) for (const s of spaces()) for (const tab of s.tabs) tabTitle.set(tab.id, title(tab, leads.get(tab.id)));
     const labelOf = (a) => tabTitle.get(a.tab) ?? (a.title || a.program?.name || "");
     // Every agent row is washed with its space's colour, faint when idle; the
     // focused one is a flat opaque tint, square and full-bleed, flush with its

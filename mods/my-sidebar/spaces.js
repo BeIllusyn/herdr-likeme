@@ -7,19 +7,7 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
 import { markColor, mix } from "./colors.js";
-
-function find(node, id) {
-  if (node?.id === id) return node;
-  for (const child of node?.children ?? []) {
-    const found = find(child, id);
-    if (found) return found;
-  }
-  return null;
-}
-
-// The sidebar's rail goes by its width, not a flag: dragging its edge narrows it too.
-// Read once per tick, not once per render or per row.
-const RAIL = 160;
+import { find, isRail, backgroundTick } from "./util.js";
 
 // A place key is machine + NUL + folder: neither part can contain NUL, so the
 // pair needs no JSON round-trip on the hot path (every 250 ms tick).
@@ -92,14 +80,13 @@ export default class Spaces extends View {
     // A tick where nothing can be seen (window in the background) is skipped:
     // three of four, so state still catches up within a second of returning.
     cx.timer.every(250, (cx) => {
-      if (window()?.active) this.idleTicks = 0;
-      else if (++this.idleTicks % 4) return;
+      if (!backgroundTick(this)) return;
       this.checkNew(cx);
     });
   }
 
   narrow() {
-    return (this.width ?? Infinity) < RAIL;
+    return isRail(this.width);
   }
 
   // Give every space a colour once, and keep the table in step as spaces come
@@ -134,13 +121,10 @@ export default class Spaces extends View {
       this.colorSig = own;
       this.syncColors(sp);
     }
-    const colors = shared("space.colors") ?? {};
-    let colorSig = "";
-    for (const id in colors) colorSig += `${id}=${colors[id]};`;
     // Everything the list draws changes under this view without the host telling
     // it: a closed space disappears, one is renamed, the active one moves. Redraw
-    // on that change alone, not every tick.
-    const sig = `${this.width}|${colorSig}|` + sp.map((s) => `${s.id}:${s.name}:${s.active ? 1 : 0}:${s.status}:${s.machine ?? ""}:${s.folder ?? ""}`).join("|");
+    // on that change alone, not every tick. Colours only change with `own` above.
+    const sig = `${this.width}|` + sp.map((s) => `${s.id}:${s.name}:${s.active ? 1 : 0}:${s.status}:${s.machine ?? ""}:${s.folder ?? ""}`).join("|");
     if (sig !== this.seen) {
       this.seen = sig;
       cx.notify();
@@ -269,7 +253,7 @@ export default class Spaces extends View {
         const worker = async () => {
           while (queue.length) await this.check(queue.shift(), cx);
         };
-        await Promise.all(Array.from({ length: Math.min(4, queue.length) }, worker));
+        await Promise.all(Array.from({ length: Math.min(4, queue.length) }, () => worker()));
       }
       const used = new Set();
       for (const g of Object.values(this.git)) if (g && !machineOf(g.repo)) used.add(cwdOf(g.repo));
@@ -290,7 +274,13 @@ export default class Spaces extends View {
       // Writes nothing under .git (index lock, fsmonitor cookie): watch() would wake on it.
       // Only the branch lines are read, so untracked files and rename detection
       // are pure work: `-uno --no-renames` skips both.
-      const r = await exec("git", ["--no-optional-locks", "-c", "core.fsmonitor=false", "status", "--porcelain=v2", "--branch", "-uno", "--no-renames"], { cwd, on });
+      // The two reads are independent: start the repo-name lookup alongside the
+      // status scan instead of waiting for it. A path that is not a repo pays for
+      // one extra process once; every real repo saves a round trip.
+      const [r, rp] = await Promise.all([
+        exec("git", ["--no-optional-locks", "-c", "core.fsmonitor=false", "status", "--porcelain=v2", "--branch", "-uno", "--no-renames"], { cwd, on }),
+        exec("git", ["rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir"], { cwd, on }),
+      ]);
       if (r.code !== 0) {
         // Only git's own "no" is remembered as no repo; anything else is asked again.
         if (!/not a git repository/i.test(r.stderr)) this.unsure.add(key);
@@ -302,11 +292,11 @@ export default class Spaces extends View {
       }
       // The repo's own .git folder names it; a worktree's top differs from it.
       // Both answers in one process.
-      const rp = await exec("git", ["rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir"], { cwd, on });
-      const [top, repo] = rp.stdout.split("\n");
-      if (rp.code !== 0 || !top || !repo) throw new Error("rev-parse");
-      const name = repo.trim().endsWith("/.git") ? base(repo.trim().slice(0, -5)) : base(repo.trim()).replace(/\.git$/, "");
-      const info = { name, branch: null, ahead: 0, behind: 0, repo: keyOf(on, repo.trim()), linked: repo.trim() !== `${top.trim()}/.git` };
+      const [topOut, repoOut] = rp.stdout.split("\n");
+      if (rp.code !== 0 || !topOut || !repoOut) throw new Error("rev-parse");
+      const top = topOut.trim(), repo = repoOut.trim();
+      const name = repo.endsWith("/.git") ? base(repo.slice(0, -5)) : base(repo).replace(/\.git$/, "");
+      const info = { name, branch: null, ahead: 0, behind: 0, repo: keyOf(on, repo), linked: repo !== `${top}/.git` };
       for (const line of r.stdout.split("\n")) {
         if (line.startsWith("# branch.head ")) info.branch = line.slice(14);
         else if (line.startsWith("# branch.ab ")) {
@@ -317,7 +307,7 @@ export default class Spaces extends View {
       }
       if (!sameGit(this.git[key], info)) this.gitDirty = true;
       this.git[key] = info;
-      if (!on) this.watch(repo.trim(), cx);
+      if (!on) this.watch(repo, cx);
     } catch {
       // Couldn't ask (the machine is away): keep what it showed, look again later.
       // The first failed look still counts as "known", so the space can show.

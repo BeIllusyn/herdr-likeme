@@ -2,21 +2,24 @@ import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, Scrollbar, v_virtual_list } from "gpui-base";
 import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, layout } from "herdr";
 
-function find(node, id) {
-  if (node?.id === id) return node;
-  for (const child of node?.children ?? []) {
-    const found = find(child, id);
-    if (found) return found;
+// Both nodes in one walk: `layout()` is the whole layout document.
+function findMany(root, ids) {
+  const wanted = new Set(ids), found = {};
+  const stack = [root];
+  while (stack.length) {
+    const node = stack.pop();
+    if (!node) continue;
+    if (wanted.has(node.id)) found[node.id] = node;
+    for (const child of node.children ?? []) stack.push(child);
   }
-  return null;
+  return found;
 }
 
 // The panel is hidden by default; a hidden panel does not need the worktree
 // scanned every ten seconds.
 function shown() {
-  const root = layout();
-  const panel = find(root, "panel"), body = find(root, "panel-body");
-  return Boolean(panel && !panel.hidden && body?.active === "changes");
+  const nodes = findMany(layout(), ["panel", "panel-body"]);
+  return Boolean(nodes.panel && !nodes.panel.hidden && nodes["panel-body"]?.active === "changes");
 }
 
 function location() {
@@ -58,15 +61,15 @@ export default class Changes extends View {
     this.input.on("focus", (_e, cx) => { this.typing = true; cx.notify(); });
     this.input.on("blur", (_e, cx) => { this.typing = false; cx.notify(); });
     this.stale = false;
-    this.visible = shown();
-    this.refresh(cx);
-    cx.timer.every(10000, (cx) => {
-      // Hidden, there is nothing to keep fresh: mark it and refresh when it is
-      // shown again. Git status and the diff walk are not free.
-      this.visible = shown();
-      if (this.visible) this.refresh(cx);
-      else this.stale = true;
-    });
+    this.wake(cx);
+    cx.timer.every(10000, (cx) => this.wake(cx));
+  }
+
+  // Hidden, there is nothing to keep fresh: mark it and refresh when it is
+  // shown again. Git status and the diff walk are not free.
+  wake(cx, loc, context) {
+    if (shown()) this.refresh(cx, loc, context);
+    else this.stale = true;
   }
 
   watch(root, cx) {
@@ -78,10 +81,7 @@ export default class Changes extends View {
           await watchFolder(root);
           // A save while the panel is closed is not worth a full status and
           // diff pass; the next render after it opens refreshes once.
-          if (this.watched === root) {
-            if (this.visible) this.refresh(cx);
-            else this.stale = true;
-          }
+          if (this.watched === root) this.wake(cx);
         }
       } catch { this.watched = null; }
     });
@@ -94,9 +94,9 @@ export default class Changes extends View {
       this.context = context; this.root = null; this.files = []; this.open = null;
       this.setLines([]); this.message = ""; this.input.set_value(""); this.error = null; this.note = null; this.watched = null; this.closed = false; this.limited = false;
     }
+    this.stale = false;
     if (!cwd) return;
     this.loading = true;
-    this.stale = false;
     cx.spawn(async (cx) => {
       try {
         const top = await exec("git", ["rev-parse", "--show-toplevel"], { cwd, on });
@@ -209,7 +209,7 @@ export default class Changes extends View {
     const parts = f.path.split("/"), name = parts.pop();
     return h_flex().h(28).flex_none().px(8).gap(8).items_center().cursor_pointer()
       .when(this.open === f.path, (e) => e.bg(t.selected)).hover((s) => s.bg(t.hover))
-      .child(div().w(14).text_size(11).text_color(f.status === "A" ? t.ansi2 : f.status === "D" ? t.ansi1 : f.status === "U" ? t.ansi1 : t.blocked).child(f.status))
+      .child(div().w(14).text_size(11).text_color(f.status === "A" ? t.ansi2 : f.status === "D" || f.status === "U" ? t.ansi1 : t.blocked).child(f.status))
       .child(h_flex().flex_1().min_w(0).child(div().text_color(t.dim).truncate().child(parts.length ? parts.join("/") + "/" : "")).child(div().max_w(260).min_w(0).truncate().child(name)))
       .when(f.add > 0, (e) => e.child(div().text_size(11).text_color(t.ansi2).child(`+${f.add}`))).when(f.del > 0, (e) => e.child(div().text_size(11).text_color(t.ansi1).child(`−${f.del}`)));
   }
@@ -227,15 +227,10 @@ export default class Changes extends View {
     // changes: results for the old folder are then discarded even though the
     // new refresh cannot start until the old one finishes.
     if (next !== this.context && (this.loading || this.busy)) this.context = null;
-    if (next !== this.context) {
+    if (next !== this.context || this.stale) {
       // Following every pane switch while the panel is closed is a full status
       // and diff pass nobody sees; mark it and load once when it opens.
-      this.visible = shown();
-      if (this.visible) this.refresh(cx, loc, next);
-      else this.stale = true;
-    } else if (this.stale) {
-      this.visible = shown();
-      if (this.visible) this.refresh(cx, loc, next);
+      this.wake(cx, loc, next);
     }
     const t = theme(), add = this.files.reduce((n, f) => n + f.add, 0), del = this.files.reduce((n, f) => n + f.del, 0);
     const enabled = Boolean(this.message.trim() && this.root && !this.busy && !this.loading);

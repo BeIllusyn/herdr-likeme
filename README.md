@@ -93,7 +93,8 @@ Herdr mods are trusted code: they can run programs, use the network and read fil
 These five are meant to be read:
 
 - **`my-sidebar`** is one mod with two retained child views (`spaces.js` and
-  `agents.js`) in one scroll column. The spaces half runs
+  `agents.js`, sharing `util.js`'s layout lookup, rail threshold and background tick)
+  in one scroll column. The spaces half runs
   `git --no-optional-locks status --porcelain=v2 --branch -uno --no-renames` and one
   `git rev-parse` in each space's live folder via `exec`, calls `hc machine ls` every
   15 s, and watches local git repos with `watchFolder`. The agents half uses Herdr's

@@ -8,7 +8,7 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { panes, props, run, theme, home, spaces, shared } from "herdr";
+import { panes, props, run, theme, home, focused, shared } from "herdr";
 
 const HOME = home();
 
@@ -65,17 +65,20 @@ export default class Pane extends View {
     const st = p.status;
     const pane = p.pane;
     // The active tab and selected sidebar row use a 30% blend; a whole header
-    // is much larger, so it takes the same colour at a quieter 16%.
-    const space = spaces().find((s) => s.active);
-    const fill = markColor((shared("space.colors") ?? {})[space?.id], t);
-    const focused_bg = fill ? mix("#1a1d22", fill, 0.16) : "#1d2128";
+    // is much larger, so it takes the same colour at a quieter 16%. Only the
+    // focused header wears it, so only that one does the lookup and blend.
+    let bg = "#1a1d22";
+    if (p.focused) {
+      const fill = markColor((shared("space.colors") ?? {})[focused()?.space], t);
+      bg = fill ? mix("#1a1d22", fill, 0.16) : "#1d2128";
+    }
     return h_flex()
       .id(`pane-head-${pane}`)
       .size_full()
       .px(10)
       .gap(8)
       .items_center()
-      .bg(p.focused ? focused_bg : "#1a1d22")
+      .bg(bg)
       .overflow_hidden()
       .border_b(1)
       .border_color(t.border)

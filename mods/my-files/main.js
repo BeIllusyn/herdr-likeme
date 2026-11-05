@@ -3,21 +3,24 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, Scrollbar, v_virtual_list } from "gpui-base";
 import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, window, layout } from "herdr";
 
-function find(node, id) {
-  if (node?.id === id) return node;
-  for (const child of node?.children ?? []) {
-    const found = find(child, id);
-    if (found) return found;
+// Both nodes in one walk: `layout()` is the whole layout document.
+function findMany(root, ids) {
+  const wanted = new Set(ids), found = {};
+  const stack = [root];
+  while (stack.length) {
+    const node = stack.pop();
+    if (!node) continue;
+    if (wanted.has(node.id)) found[node.id] = node;
+    for (const child of node.children ?? []) stack.push(child);
   }
-  return null;
+  return found;
 }
 
 // The panel is hidden by default; a hidden panel does not need a git status or
 // a directory listing every ten seconds.
 function shown() {
-  const root = layout();
-  const panel = find(root, "panel"), body = find(root, "panel-body");
-  return Boolean(panel && !panel.hidden && body?.active === "files");
+  const nodes = findMany(layout(), ["panel", "panel-body"]);
+  return Boolean(nodes.panel && !nodes.panel.hidden && nodes["panel-body"]?.active === "files");
 }
 
 function location() {
@@ -51,17 +54,19 @@ export default class Files extends View {
   init(_props, cx) {
     this.saved = new Map();
     this.entries = new Map(); this.folders = new Set(); this.pending = new Set(); this.marks = {};
+    this.flat = null;
+    this.want = null;
     this.stale = false;
-    this.visible = shown();
-    this.refresh(cx);
-    cx.timer.every(10000, cx => {
-      // Hidden, there is nothing to keep fresh: mark it and refresh when it is
-      // shown again. This saves a listing plus a git status every ten seconds
-      // in a layout whose panel starts closed.
-      this.visible = shown();
-      if (this.visible) this.refresh(cx);
-      else this.stale = true;
-    });
+    this.wake(cx);
+    cx.timer.every(10000, cx => this.wake(cx));
+  }
+
+  // Hidden, there is nothing to keep fresh: mark it and refresh when it is
+  // shown again. This saves a listing plus a git status every ten seconds in a
+  // layout whose panel starts closed.
+  wake(cx, loc) {
+    if (shown()) this.refresh(cx, loc);
+    else this.stale = true;
   }
 
   watch(root, cx) {
@@ -74,10 +79,7 @@ export default class Files extends View {
           await watchFolder(root);
           // A file saved while the panel is closed is not worth a listing and a
           // git status; the next render after it opens refreshes once.
-          if (this.current(context)) {
-            if (this.visible) this.refresh(cx);
-            else this.stale = true;
-          }
+          if (this.current(context)) this.wake(cx);
         }
       }
       catch { if (this.context === context) this.watched = null; }
@@ -85,10 +87,10 @@ export default class Files extends View {
   }
 
   current(context) {
-    // The host location is compared when a refresh starts (`render`/timer); an
-    // in-flight load only has to know whether it was superseded. Re-reading
+    // `want` is the position the next refresh will load, so an in-flight load
+    // stops at the next folder as soon as the place changed. Re-reading
     // `spaces()`/`focused()`/`panes()` here copied three host lists per folder.
-    return this.context === context;
+    return this.context === context && this.want === context.key;
   }
 
   async loadFolder(path, context) {
@@ -97,24 +99,26 @@ export default class Files extends View {
     if (!this.current(context) || (path && !this.folders.has(path))) return;
     const used = [...this.entries.entries()].filter(([p]) => p !== path).reduce((n, [, e]) => n + e.length, 0);
     this.entries.set(path, entries.slice(0, Math.max(0, Math.min(PER_FOLDER, TOTAL - used))).sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name)));
+    this.flat = null;
     if (entries.length > PER_FOLDER || used + entries.length > TOTAL) this.limited = true;
   }
 
   refresh(cx, loc = location()) {
     const { cwd, on } = loc, next = keyOf(loc);
+    this.want = next;
     if (next !== this.context?.key) {
       if (this.context) this.saved.set(this.context.key, { folders: this.folders, file: this.file });
       const saved = this.saved.get(next);
       this.context = { key: next, cwd, on }; this.root = cwd; this.on = on; this.entries = new Map(); this.folders = new Set(saved?.folders);
       this.pending = new Set(); this.marks = {}; this.show(null); this.watched = null; this.error = null; this.limited = false;
-      this.loading = false;
+      this.loading = false; this.flat = null;
       if (saved?.file) this.show(saved.file, cx);
     }
+    this.stale = false;
     if (!cwd || this.loading) return;
     const context = this.context;
     this.loading = true;
     this.limited = false;
-    this.stale = false;
     cx.spawn(async cx => {
       // The git look does not depend on the listings: start it alongside them
       // instead of doing the whole worktree scan after the folders.
@@ -140,7 +144,7 @@ export default class Files extends View {
         }
         const found = await marks;
         if (!this.current(context)) return;
-        this.marks = found; this.error = null; this.watch(cwd, cx);
+        this.marks = found; this.flat = null; this.error = null; this.watch(cwd, cx);
       } catch (e) { if (this.current(context)) this.error = String(e); }
       finally { if (this.context === context) this.loading = false; cx.notify(); }
     });
@@ -164,6 +168,7 @@ export default class Files extends View {
         });
       }
     }
+    this.flat = null;
     cx.notify();
   }
 
@@ -219,20 +224,14 @@ export default class Files extends View {
   render(cx) {
     const loc = location();
     const next = keyOf(loc);
-    if (next !== this.context?.key) {
+    this.want = next;
+    if (next !== this.context?.key || this.stale) {
       // Following every pane switch while the panel is closed is a listing and
       // a git status nobody sees; mark it and load once when it opens.
-      this.visible = shown();
-      if (this.visible) this.refresh(cx, loc);
-      else this.stale = true;
-    } else if (this.stale) {
-      this.visible = shown();
-      if (this.visible) this.refresh(cx, loc);
+      this.wake(cx, loc);
     }
     const t = theme();
-    const rows = this.file ? [] : this.flatten();
-    this.rowOf = new Map();
-    for (const r of rows) this.rowOf.set(r.path, r);
+    const rows = this.file ? [] : (this.flat ??= this.flatten());
     const message = this.error || (this.loading ? "Loading files…" : this.root ? "No files" : "No folder");
     return v_flex().id("files").size_full().min_h(0).overflow_hidden().bg(t.background).border_1().border_color(t.border).text_color(t.foreground).text_size(13)
       .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
@@ -244,7 +243,7 @@ export default class Files extends View {
           .child(v_virtual_list("files-tree-list", rows.length, 28, (i) => rows[i].path,
             (range) => rows.slice(range.start, range.end).map((r) => this.fileRow(r, t)))
             .on_item_click((path, cx) => {
-              const row = this.rowOf.get(path);
+              const row = rows.find((r) => r.path === path);
               if (row) row.dir ? this.toggle(path, cx) : this.show(path, cx);
             })
             .size_full())
