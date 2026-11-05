@@ -16,12 +16,12 @@ and the braille spinner are the real UI._
 
 | Area | Change |
 |---|---|
-| **Sidebar** | Spaces and agents share one scrolling column; the Agents section follows the spaces content instead of starting at the sidebar's midpoint, and the whole column scrolls together. |
+| **Sidebar** | Spaces and agents share one scrolling column; the Agents section follows the spaces content instead of starting at the sidebar's midpoint, and the whole column scrolls together. Both halves watch their data on a 250 ms timer while the window is in front, and take one look in four (1 s) while it is in the background; a redraw happens only when what they draw actually changed. |
 | **Spaces** | A 20 px tinted monogram with a dark letter; the project name (13 px) over the current git branch (11 px, muted, plus ahead/behind). Rows are square, full-bleed and flush against each other with no gap; resting rows lie flat under a whisper of the space's colour, while the active space is a flat opaque tint with no border or shadow; worktrees hang from a 1 px tree line under their checkout; with fewer than three spaces a dashed "New space" row fills the gap. |
-| **Agents** | The same square, full-bleed two-line row (space name over the agent's own title) with a whisper of its space's colour and no gap between rows; the focused agent is the same flat opaque tint, again without a border, instead of an accent bar. The column watches its data on a 250 ms timer and redraws when it changes, so focus and status turns show without hovering; every agent keeps a status mark visible — the working spinner, a "Needs you" badge, the done dot and a faint idle ring. The elapsed time and pin share a fixed slot, so hovering never shifts the text. Priority view keeps its section headers (Needs you / Done / Working / Idle) visible at all times, so an all-idle list still reads as "Idle"; a lone space group hides its redundant header, and the sort button uses an up/down icon. |
+| **Agents** | The same square, full-bleed two-line row (space name over the agent's own title) with a whisper of its space's colour and no gap between rows; the focused agent is the same flat opaque tint, again without a border, instead of an accent bar. The column watches its data on a 250 ms timer (1 s while the window is in the background) and redraws when it changes, so focus and status turns show without hovering; every agent keeps a status mark visible — the working spinner, a "Needs you" badge, the done dot and a faint idle ring. The elapsed time and pin share a fixed slot, so hovering never shifts the text. Priority view keeps its section headers (Needs you / Done / Working / Idle) visible at all times, so an all-idle list still reads as "Idle"; a lone space group hides its redundant header, and the sort button uses an up/down icon. |
 | **Tabs** | Tabs are square, fill the bar's full height and sit flush against each other with no gap; the active tab is the same flat opaque tint as a selected sidebar row, tinted with the space's colour and drawn without a border or shadow, while the others lie flat and keep a close button (dimmer when inactive). The `Files`/`Changes` toggles at the right are the same square, full-height blocks, tinted like the active tab when their panel is open. A default-numbered tab shows what it runs — the folder name, or the program when two tabs share it — and `+` sits right after the last tab. A zoomed tab gets a small zoom glyph instead of a trailing `Z`. The working spinner is a gold braille character (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, 80 ms per frame). |
 | **Panes** | Square corners and no gap, padding or terminal padding — the pane fills the work area edge to edge — a slightly lifted card surface (`#1a1d22`), and a cloned header on that same surface. Only the active pane's header paints a left-to-right aurora behind its text: a static wash that fades in from the dark left edge, plus four translucent colour ribbons sliding across at different speeds (native animations, no timer); inactive headers stay plain. The aurora is the focus mark — there is no accent frame or hairline, so no bright square corner is drawn into the window's rounded bottom-right. The split/zoom/close buttons are always visible; the status mark appears for working, blocked and done (nothing while idle). The header's working spinner is the same gold braille character as the tabs and agents. |
-| **Files / Changes** | Cloned from Herdr's `files` and `changes` mods with square corners: the panel body, the file and changed-file rows, the changed-file count badge and the commit field and button lose their rounding. |
+| **Files / Changes** | Cloned from Herdr's `files` and `changes` mods with square corners: the panel body, the file and changed-file rows, the changed-file count badge and the commit field and button lose their rounding. Both lists are virtualized, so a large tree or a thousand changed files only builds the rows on screen. While the panel is closed, their timers and folder watches stop doing git work. |
 | **Brand bar** | Cloned from `workspace-chrome` with its sidebar toggle removed: the sidebar stays open, so the collapse/expand switch is gone. The logo and search button are unchanged. |
 
 Everything else — menus — is Herdr's `main` layout unchanged.
@@ -94,11 +94,11 @@ These five are meant to be read:
 
 - **`my-sidebar`** is one mod with two retained child views (`spaces.js` and
   `agents.js`) in one scroll column. The spaces half runs
-  `git --no-optional-locks status --porcelain=v2 --branch` and `git rev-parse` in each
-  space's live folder via `exec`, calls `hc machine ls` every 15 s, and watches local
-  git repos with `watchFolder`. The agents half uses Herdr's live agent/terminal data.
-  Both use shipped SVGs; it reads git metadata and the local machine list and sends
-  nothing over the network.
+  `git --no-optional-locks status --porcelain=v2 --branch -uno --no-renames` and one
+  `git rev-parse` in each space's live folder via `exec`, calls `hc machine ls` every
+  15 s, and watches local git repos with `watchFolder`. The agents half uses Herdr's
+  live agent/terminal data. Both use shipped SVGs; it reads git metadata and the local
+  machine list and sends nothing over the network.
 - **`my-tabs`** uses Herdr's live tab/pane data and shipped SVGs. No `exec`, no
   network.
 - **`my-pane`** is a clone of the shipped pane header; it reads the same live pane

@@ -3,7 +3,7 @@
 
 import { View, div, image, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay, props, window, layout } from "herdr";
+import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay, window, layout } from "herdr";
 import { markColor, mix } from "./colors.js";
 
 function find(node, id) {
@@ -16,7 +16,9 @@ function find(node, id) {
 }
 
 // The sidebar's rail goes by its width, not a flag: dragging its edge narrows it too.
-const narrow = () => (find(layout(), "sidebar")?.size?.px ?? Infinity) < 160;
+// Read once per tick, not once per render.
+const RAIL = 160;
+const narrow = () => (find(layout(), "sidebar")?.size?.px ?? Infinity) < RAIL;
 
 // To the rail (on macOS wide enough for the traffic lights), or back to the width it had.
 function toggleSidebar() {
@@ -29,9 +31,17 @@ function toggleSidebar() {
 
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
 
-function lead(tab, all = panes()) {
-  const mine = all.filter(p => p.tab === tab.id && p.terminal);
-  return mine.find(p => p.program?.agent) ?? mine.find(p => p.focused) ?? mine[0];
+// The pane a tab's title comes from: its first agent, else its focused terminal,
+// else its first terminal. One pass over the snapshot, not one `panes()` read per
+// row (every host read copies the whole pane list into JS).
+function leadPanes(all) {
+  const leads = new Map();
+  for (const p of all) {
+    if (!p.terminal) continue;
+    const current = leads.get(p.tab);
+    if (!current || (!current.program?.agent && (p.program?.agent || (!current.focused && p.focused)))) leads.set(p.tab, p);
+  }
+  return leads;
 }
 
 function title(tab, l) {
@@ -76,27 +86,48 @@ export default class Agents extends View {
     this.overlay = props?.overlay;
     if (this.sortMenuOpen) return;
     this.folded = new Set();
+    this.width = find(layout(), "sidebar")?.size?.px;
+    this.orderSeen = null;
+    this.idleTicks = 0;
     // Each agent's last state and when it changed (ms), kept across restarts.
     this.changed = JSON.parse(localStorage.getItem("changed") ?? "{}");
     this.pendingPins = JSON.parse(localStorage.getItem("pins") ?? "[]");
     if (!this.pendingPins.length) localStorage.removeItem("pins");
     this.migratingPins = new Set();
+    if (this.pendingPins.length) this.migratePins(terminals());
     // This retained child isn't redrawn by the host's live updates the way a mod
     // root is. Watch what the list shows and redraw when it changes, not on every
     // tick: one redraw paints the whole window. The minute is in the signature so
-    // the elapsed time still moves along.
+    // the elapsed time under each row moves along.
     this.seen = null;
     cx.timer.every(250, (cx) => {
+      // In the background nothing here needs four looks a second; one is enough
+      // to catch up within a second of the window coming forward.
+      if (window()?.active) this.idleTicks = 0;
+      else if (++this.idleTicks % 4) return;
       const minute = Math.floor(Date.now() / 60000);
       // The rail switch reads the sidebar's width, so a resize is a change too.
-      const width = find(layout(), "sidebar")?.size?.px;
-      const list = agents().map((a) => `${a.address}:${a.status}:${a.focused ? 1 : 0}:${a.pinned ? 1 : 0}:${a.space_name}:${a.tab_name}:${a.title}`);
-      const kids = terminals().map((t) => `${t.address}:${t.state}:${t.status ?? ""}`);
-      const sig = `${width}|${minute}|${JSON.stringify(shared("space.colors") ?? {})}|${list.join(",")}|${kids.join(",")}`;
+      this.width = find(layout(), "sidebar")?.size?.px;
+      const list = agents();
+      // Sub-agent rows only exist under an agent: with none there is no tree to
+      // watch and this copy of every terminal is pure work.
+      const all = list.length ? terminals() : [];
+      // A pin's label echoes back through the terminal list; write it from the
+      // tick so rendering stays free of side effects.
+      if (this.pendingPins.length) this.migratePins(all);
+      let sig = `${this.width}|${minute}|${shared("agents.sort") ?? ""}`;
+      const colors = shared("space.colors") ?? {};
+      for (const id in colors) sig += `|${id}=${colors[id]}`;
+      for (const a of list) sig += `|${a.address}:${a.status}:${a.focused ? 1 : 0}:${a.pinned ? 1 : 0}:${a.pane}:${a.space}:${a.space_name}:${a.tab}:${a.tab_name}:${a.title}`;
+      for (const t of all) sig += `|${t.address}:${t.state}:${t.status ?? ""}:${t.parent ?? ""}`;
       if (sig === this.seen) return;
       this.seen = sig;
       cx.notify();
     });
+  }
+
+  narrow() {
+    return (this.width ?? Infinity) < RAIL;
   }
 
   // Stamps agents whose state changed. Done and idle count as one: looking at a
@@ -184,16 +215,40 @@ export default class Agents extends View {
     run("terminal.peek", { terminal: addr });
   }
 
-  // Live sub-agents of `addr`, depth first, each with the tree lines in front of it.
-  tree(all, addr, lead = []) {
-    const kids = all.filter((k) => k.parent === addr && k.state === "live");
-    return kids.flatMap((k, i) => {
-      const last = i === kids.length - 1;
-      return [
-        { t: k, lines: [...lead, last ? "└" : "├"] },
-        ...this.tree(all, k.address, [...lead, last ? "" : "│"]),
-      ];
-    });
+  // Live sub-agent trees for a whole render, computed once: a Map of parent to
+  // its rows (tree lines included) and a Map of parent to the most urgent state
+  // anywhere below it. The old per-agent recursion walked every terminal once
+  // per agent — quadratic on a list with sub-agents.
+  trees(all, list) {
+    const kidsOf = new Map();
+    for (const k of all) {
+      if (k.state !== "live" || !k.parent) continue;
+      let kids = kidsOf.get(k.parent);
+      if (!kids) kidsOf.set(k.parent, kids = []);
+      kids.push(k);
+    }
+    const subsOf = new Map();
+    const urgency = new Map();
+    const visit = (addr, lead) => {
+      const done = urgency.get(addr);
+      if (done !== undefined) return done;
+      const kids = kidsOf.get(addr) ?? [];
+      const subs = [];
+      let top = 0;
+      kids.forEach((k, i) => {
+        const last = i === kids.length - 1;
+        subs.push({ t: k, lines: [...lead, last ? "└" : "├"] });
+        const rank = RANK[kidStatus(k, this.listed)] ?? 0;
+        const below = visit(k.address, [...lead, last ? "" : "│"]);
+        if (rank > top) top = rank;
+        if (below > top) top = below;
+      });
+      subsOf.set(addr, subs);
+      urgency.set(addr, top);
+      return top;
+    };
+    for (const a of list) visit(a.address, []);
+    return { subsOf, urgency: (addr) => urgency.get(addr) ?? 0 };
   }
 
   subRow(t, s, shown, compact) {
@@ -237,28 +292,40 @@ export default class Agents extends View {
   render(cx) {
     const t = theme();
     if (this.sortMenuOpen) return this.sortMenu(t);
-    const collapsed = narrow();
+    const collapsed = this.narrow();
     const embedded = this.embedded;
     const sort = sortOf();
     let list = agents();
-    this.listed = new Map(list.map((a) => [a.address, a.status]));
-    const all = terminals();
-    this.migratePins(all);
+    // One pass over each host list: every read copies the whole list into JS.
+    const listed = new Map();
+    for (const a of list) listed.set(a.address, a.status);
+    this.listed = listed;
+    const all = list.length ? terminals() : [];
     const shown = focused()?.agent;
     const now = Date.now();
     this.track(list, now);
     this.hold(list);
     const byPriority = sort.id === "priority";
-    const urgency = new Map(list.map((a) => [a.address, Math.max(this.rank(a), ...this.tree(all, a.address).map((s) => RANK[kidStatus(s.t, this.listed)] ?? 0))]));
+    // Sub-agent rows and their most urgent state, once for the whole list.
+    const trees = this.trees(all, list);
+    const urgency = new Map();
+    for (const a of list) urgency.set(a.address, Math.max(this.rank(a), trees.urgency(a.address)));
     const rankOf = (a) => urgency.get(a.address);
     if (byPriority) list = [...list].sort((x, y) => rankOf(y) - rankOf(x) || this.since(y) - this.since(x) || y.seq - x.seq);
     const pinned = list.filter((a) => a.pinned);
     const rest = list.filter((a) => !a.pinned);
     list = [...pinned, ...rest];
-    setAgentOrder(list.map((a) => a.address));
+    // The host only needs the order when it changed; this is called on every
+    // hover otherwise.
+    const addresses = list.map((a) => a.address);
+    const order = addresses.join("\u0000");
+    if (order !== this.orderSeen) {
+      this.orderSeen = order;
+      setAgentOrder(addresses);
+    }
 
     const withKids = (a, i) => {
-      const subs = collapsed ? [] : this.tree(all, a.address);
+      const subs = collapsed ? [] : trees.subsOf.get(a.address) ?? [];
       const r = row(a, i, subs);
       if (this.folded.has(a.address)) return [r];
       return [r, ...subs.map((s) => this.subRow(t, s, shown, byPriority))];
@@ -292,27 +359,40 @@ export default class Agents extends View {
 
     // A row reads like a space row: its space's name on top, the agent's own
     // title below it, and its space's colour as a faint wash behind both.
-    const tabs = spaces().flatMap(s => s.tabs);
+    // The tab and pane snapshots are read once for the whole list: the old
+    // per-agent lookup copied `panes()` once per row and scanned every tab.
+    const tabById = new Map();
+    if (list.length) for (const s of spaces()) for (const tab of s.tabs) tabById.set(tab.id, tab);
+    const leads = list.length ? leadPanes(panes()) : null;
+    const tabTitle = new Map();
+    for (const [id, tab] of tabById) tabTitle.set(id, title(tab, leads.get(id)));
+    const labelOf = (a) => tabTitle.get(a.tab) ?? (a.title || a.program?.name || "");
     // Every agent row is washed with its space's colour, faint when idle; the
     // focused one is a flat opaque tint, square and full-bleed, flush with its
-    // neighbours.
+    // neighbours. Cache per space so a list of twenty does not repeat the same
+    // regex and blend twenty times.
     const colors = shared("space.colors") ?? {};
-    const fillOf = (a) => markColor(colors[a.space], t);
-    const label = (a) => {
-      const tab = tabs.find(tab => tab.id === a.tab);
-      return tab ? title(tab, lead(tab)) : a.title || a.program?.name || "";
+    const fills = new Map();
+    const fillOf = (a) => {
+      let fill = fills.get(a.space);
+      if (fill === undefined) {
+        fill = markColor(colors[a.space], t);
+        fills.set(a.space, fill);
+      }
+      return fill;
+    };
+    const balloons = new Map();
+    const balloonOf = (a) => {
+      let balloon = balloons.get(a.space);
+      if (balloon === undefined) {
+        const fill = fillOf(a);
+        balloon = fill ? mix(t.raised, fill, 0.32) : t.raised;
+        balloons.set(a.space, balloon);
+      }
+      return balloon;
     };
 
     const row = (a, i, subs = []) => {
-      const pic = icon(a.program, 16, t.foreground);
-      // An agent on another machine (`vps/t7`) says which.
-      const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
-      const fill = fillOf(a);
-      const balloon = fill ? mix(t.raised, fill, 0.32) : t.raised;
-      // Top: the project (its space). Bottom: the agent's own title.
-      const top = a.space_name || label(a);
-      const raw = label(a);
-      const under = raw && raw !== top && !/^\d+$/.test(raw) ? raw : "";
       if (collapsed) {
         return h_flex()
           .id(`ag-${a.address}`)
@@ -326,6 +406,14 @@ export default class Agents extends View {
           .child(div().flex_1().min_w(0).whitespace_nowrap().text_right().text_color(t.muted).child(String(i + 1)))
           .child(h_flex().w(18).flex_none().items_center().justify_center().child(this.status(t, a, true)));
       }
+      const pic = icon(a.program, 16, t.foreground);
+      // An agent on another machine (`vps/t7`) says which.
+      const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
+      const fill = fillOf(a);
+      // Top: the project (its space). Bottom: the agent's own title.
+      const raw = labelOf(a);
+      const top = a.space_name || raw;
+      const under = raw && raw !== top && !/^\d+$/.test(raw) ? raw : "";
       const when = this.since(a);
       const idle = a.status === "idle" && !a.focused;
       const isPinned = a.pinned;
@@ -353,14 +441,16 @@ export default class Agents extends View {
         .flex_none()
         .items_center()
         .gap(9)
-        .when(a.focused, (el) => el.bg(balloon))
+        .when(a.focused, (el) => el.bg(balloonOf(a)))
         .when(!a.focused, (el) => el
           .when(Boolean(fill), (r) => r.bg(fill + "0d"))
           .hover((s) => s.bg(t.hover)))
         .cursor_pointer()
         .on_hover((on, cx) => {
-          if (on) this.hovered = a.address;
-          else if (this.hovered === a.address) this.hovered = null;
+          // Only a change of which row is hovered needs a redraw; the event also
+          // fires for rows the pointer merely crosses.
+          if (on ? this.hovered === a.address : this.hovered !== a.address) return;
+          this.hovered = on ? a.address : null;
           cx.notify();
         })
         .on_click(() => run("pane.focus", { pane: a.pane }))

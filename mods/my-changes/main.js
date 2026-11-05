@@ -1,6 +1,23 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, Scrollbar, v_virtual_list } from "gpui-base";
-import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings } from "herdr";
+import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, layout } from "herdr";
+
+function find(node, id) {
+  if (node?.id === id) return node;
+  for (const child of node?.children ?? []) {
+    const found = find(child, id);
+    if (found) return found;
+  }
+  return null;
+}
+
+// The panel is hidden by default; a hidden panel does not need the worktree
+// scanned every ten seconds.
+function shown() {
+  const root = layout();
+  const panel = find(root, "panel"), body = find(root, "panel-body");
+  return Boolean(panel && !panel.hidden && body?.active === "changes");
+}
 
 function location() {
   const space = spaces().find((s) => s.active), f = focused();
@@ -8,7 +25,7 @@ function location() {
   const on = f?.pane === null ? (f.terminal?.includes("/") ? f.terminal.split("/")[0] : null) : space?.machine ?? null;
   return { cwd: pane?.cwd || f?.cwd || space?.folder, on };
 }
-const key = () => JSON.stringify(location());
+const keyOf = (loc) => JSON.stringify(loc);
 // Reads write nothing under .git (no index refresh or lock, no fsmonitor cookie):
 // the folder watch would see it, and every refresh would start the next one.
 const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "diff.autoRefreshIndex=false"];
@@ -40,8 +57,16 @@ export default class Changes extends View {
     this.input.on("submit", (_e, cx) => this.commit(cx));
     this.input.on("focus", (_e, cx) => { this.typing = true; cx.notify(); });
     this.input.on("blur", (_e, cx) => { this.typing = false; cx.notify(); });
+    this.stale = false;
+    this.visible = shown();
     this.refresh(cx);
-    cx.timer.every(10000, (cx) => this.refresh(cx));
+    cx.timer.every(10000, (cx) => {
+      // Hidden, there is nothing to keep fresh: mark it and refresh when it is
+      // shown again. Git status and the diff walk are not free.
+      this.visible = shown();
+      if (this.visible) this.refresh(cx);
+      else this.stale = true;
+    });
   }
 
   watch(root, cx) {
@@ -51,32 +76,45 @@ export default class Changes extends View {
       try {
         while (this.watched === root) {
           await watchFolder(root);
-          if (this.watched === root) this.refresh(cx);
+          // A save while the panel is closed is not worth a full status and
+          // diff pass; the next render after it opens refreshes once.
+          if (this.watched === root) {
+            if (this.visible) this.refresh(cx);
+            else this.stale = true;
+          }
         }
       } catch { this.watched = null; }
     });
   }
 
-  refresh(cx) {
+  refresh(cx, loc = location(), context = keyOf(loc)) {
     if (this.loading || this.busy) return;
-    const { cwd, on } = location(), context = key();
+    const { cwd, on } = loc;
     if (context !== this.context) {
       this.context = context; this.root = null; this.files = []; this.open = null;
       this.setLines([]); this.message = ""; this.input.set_value(""); this.error = null; this.note = null; this.watched = null; this.closed = false; this.limited = false;
     }
     if (!cwd) return;
     this.loading = true;
+    this.stale = false;
     cx.spawn(async (cx) => {
       try {
         const top = await exec("git", ["rev-parse", "--show-toplevel"], { cwd, on });
-        if (key() !== context) return;
+        if (this.context !== context) return;
         if (top.code !== 0) { this.root = null; this.files = []; this.setLines([]); this.open = null; this.error = "Not a git repository"; return; }
         const root = top.stdout.trim(), git = (args) => exec("git", [...READ, ...args], { cwd: root, on });
-        const status = await git(["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"]);
+        // The two reads are independent: one status scan and one rev read run
+        // together rather than one after the other.
+        const [status, head] = await Promise.all([
+          git(["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"]),
+          git(["rev-parse", "--verify", "HEAD"]),
+        ]);
+        if (this.context !== context) return;
         if (status.code !== 0) throw new Error(status.stderr);
-        const head = await git(["rev-parse", "--verify", "HEAD"]);
         const stats = {};
-        const results = head.code === 0 ? [await git(["diff", "HEAD", "--numstat", "-z", "--no-renames"])] : [await git(["diff", "--cached", "--numstat", "-z", "--no-renames"]), await git(["diff", "--numstat", "-z", "--no-renames"])];
+        const results = head.code === 0
+          ? [await git(["diff", "HEAD", "--numstat", "-z", "--no-renames"])]
+          : await Promise.all([git(["diff", "--cached", "--numstat", "-z", "--no-renames"]), git(["diff", "--numstat", "-z", "--no-renames"])]);
         for (const result of results) {
           if (result.code !== 0) throw new Error(result.stderr);
           for (const entry of result.stdout.split("\0")) {
@@ -95,7 +133,7 @@ export default class Changes extends View {
           const stat = stats[path] ?? { add: 0, del: 0 };
           files.push({ path, status: s, fresh, ...stat });
         }
-        if (key() !== context) return;
+        if (this.context !== context) return;
         this.root = root; this.on = on; this.hasHead = head.code === 0; this.files = files; this.limited = entries.length > 1000; this.error = null;
         this.watch(root, cx);
         if (this.open && !files.some((f) => f.path === this.open)) { this.open = null; this.setLines([]); }
@@ -103,9 +141,9 @@ export default class Changes extends View {
         if (!this.open && !this.closed && files.length) this.open = files[0].path;
         if (this.open) {
           try { await this.load(this.open, context); }
-          catch { if (key() === context) this.setLines(["Cannot preview this diff (too large or unreadable)"]); }
+          catch { if (this.context === context) this.setLines(["Cannot preview this diff (too large or unreadable)"]); }
         }
-      } catch (e) { if (key() === context) this.error = String(e); }
+      } catch (e) { if (this.context === context) this.error = String(e); }
       finally { this.loading = false; cx.notify(); }
     });
   }
@@ -128,7 +166,7 @@ export default class Changes extends View {
       const all = r.stdout.replace(/\n$/, "").split("\n"), first = all.findIndex((l) => l.startsWith("@@"));
       lines = first < 0 ? [file.binary ? "Binary file changed" : "No text diff available"] : all.slice(first);
     }
-    if (key() === context && this.open === path) this.setLines(lines.slice(0, 1500).map(line => line.length > 4000 ? line.slice(0, 4000) + "… (line truncated)" : line));
+    if (this.context === context && this.open === path) this.setLines(lines.slice(0, 1500).map(line => line.length > 4000 ? line.slice(0, 4000) + "… (line truncated)" : line));
   }
 
   setLines(lines) {
@@ -142,14 +180,14 @@ export default class Changes extends View {
     const context = this.context;
     if (this.open) cx.spawn(async (cx) => {
       try { await this.load(path, context); }
-      catch (e) { if (key() === context && this.open === path) this.note = `Cannot preview this diff (too large or unreadable): ${e}`; }
+      catch (e) { if (this.context === context && this.open === path) this.note = `Cannot preview this diff (too large or unreadable): ${e}`; }
       cx.notify();
     });
     cx.notify();
   }
 
   commit(cx) {
-    if (!this.message.trim() || !this.root || this.busy || this.loading || this.context !== key()) return;
+    if (!this.message.trim() || !this.root || this.busy || this.loading || this.context !== keyOf(location())) return;
     const root = this.root, on = this.on, context = this.context, message = this.message.trim();
     this.busy = true; this.note = null;
     cx.spawn(async (cx) => {
@@ -158,11 +196,22 @@ export default class Changes extends View {
           const r = await exec("git", args, { cwd: root, on });
           if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim());
         }
-        if (key() === context) { this.message = ""; this.input.set_value(""); }
-      } catch (e) { if (key() === context) this.note = `Commit failed: ${e}`; }
+        if (this.context === context) { this.message = ""; this.input.set_value(""); }
+      } catch (e) { if (this.context === context) this.note = `Commit failed: ${e}`; }
       finally { this.busy = false; this.refresh(cx); cx.notify(); }
     });
     cx.notify();
+  }
+
+  // A changed-file row inside the virtual renderer: no handler of its own; the
+  // list's `on_item_click` names the path.
+  fileRow(f, t) {
+    const parts = f.path.split("/"), name = parts.pop();
+    return h_flex().h(28).flex_none().px(8).gap(8).items_center().cursor_pointer()
+      .when(this.open === f.path, (e) => e.bg(t.selected)).hover((s) => s.bg(t.hover))
+      .child(div().w(14).text_size(11).text_color(f.status === "A" ? t.ansi2 : f.status === "D" ? t.ansi1 : f.status === "U" ? t.ansi1 : t.blocked).child(f.status))
+      .child(h_flex().flex_1().min_w(0).child(div().text_color(t.dim).truncate().child(parts.length ? parts.join("/") + "/" : "")).child(div().max_w(260).min_w(0).truncate().child(name)))
+      .when(f.add > 0, (e) => e.child(div().text_size(11).text_color(t.ansi2).child(`+${f.add}`))).when(f.del > 0, (e) => e.child(div().text_size(11).text_color(t.ansi1).child(`−${f.del}`)));
   }
 
   diffRow({ kind, number, text }, t) {
@@ -173,7 +222,21 @@ export default class Changes extends View {
   }
 
   render(cx) {
-    if (key() !== this.context) this.refresh(cx);
+    const loc = location(), next = keyOf(loc);
+    // While a load or commit is out, the context is cleared as soon as the place
+    // changes: results for the old folder are then discarded even though the
+    // new refresh cannot start until the old one finishes.
+    if (next !== this.context && (this.loading || this.busy)) this.context = null;
+    if (next !== this.context) {
+      // Following every pane switch while the panel is closed is a full status
+      // and diff pass nobody sees; mark it and load once when it opens.
+      this.visible = shown();
+      if (this.visible) this.refresh(cx, loc, next);
+      else this.stale = true;
+    } else if (this.stale) {
+      this.visible = shown();
+      if (this.visible) this.refresh(cx, loc, next);
+    }
     const t = theme(), add = this.files.reduce((n, f) => n + f.add, 0), del = this.files.reduce((n, f) => n + f.del, 0);
     const enabled = Boolean(this.message.trim() && this.root && !this.busy && !this.loading);
     return v_flex().id("changes").size_full().min_h(0).overflow_hidden().bg(t.background).border_1().border_color(t.border).text_color(t.foreground).text_size(13).track_focus(this.handle)
@@ -184,13 +247,16 @@ export default class Changes extends View {
         .child(div().font_semibold().child("Changes"))
         .child(div().px(5).py(1).border_1().border_color(t.border).text_size(10).text_color(t.muted).child(`${this.files.length} files`))
         .child(div().flex_1()).child(div().text_size(11).text_color(t.ansi2).child(`+${add}`)).child(div().text_size(11).text_color(t.ansi1).child(`−${del}`)))
-      .child(v_flex().id("changes-list").flex_none().h(Math.min(200, Math.max(44, this.files.length * 28 + 12))).overflow_y_scrollbar().p(6).border_b(1).border_color(t.border).children(this.files.map((f) => {
-        const parts = f.path.split("/"), name = parts.pop();
-        return h_flex().id(`change-${f.path}`).h(28).flex_none().px(8).gap(8).items_center().cursor_pointer().when(this.open === f.path, (e) => e.bg(t.selected)).hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.pick(f.path, cx))
-          .child(div().w(14).text_size(11).text_color(f.status === "A" ? t.ansi2 : f.status === "D" ? t.ansi1 : f.status === "U" ? t.ansi1 : t.blocked).child(f.status))
-          .child(h_flex().flex_1().min_w(0).child(div().text_color(t.dim).truncate().child(parts.length ? parts.join("/") + "/" : "")).child(div().max_w(260).min_w(0).truncate().child(name)))
-          .when(f.add > 0, (e) => e.child(div().text_size(11).text_color(t.ansi2).child(`+${f.add}`))).when(f.del > 0, (e) => e.child(div().text_size(11).text_color(t.ansi1).child(`−${f.del}`)));
-      })).when(!this.files.length, (e) => e.child(div().p(8).text_color(t.dim).child(this.error || (this.loading ? "Loading changes…" : this.root ? "No uncommitted changes" : "No folder")))))
+      .child(v_flex().id("changes-list").flex_none().h(Math.min(200, Math.max(44, this.files.length * 28 + 12))).p(6).border_b(1).border_color(t.border)
+        // Only the rows on screen are built: a thousand changed files used to
+        // cost a thousand elements on every render for a 200 px box.
+        .when(this.files.length > 0, (el) => el.child(v_flex().relative().flex_1().min_h(0)
+          .child(v_virtual_list("changes-files", this.files.length, 28, (i) => this.files[i].path,
+            (range) => this.files.slice(range.start, range.end).map((f) => this.fileRow(f, t)))
+            .on_item_click((path, cx) => this.pick(path, cx))
+            .size_full())
+          .child(Scrollbar.vertical("changes-files").absolute().inset_0())))
+        .when(!this.files.length, (e) => e.child(div().p(8).text_color(t.dim).child(this.error || (this.loading ? "Loading changes…" : this.root ? "No uncommitted changes" : "No folder")))))
       .when(this.limited, el => el.child(div().px(12).py(4).text_size(11).text_color(t.dim).child("Showing the first 1,000 changed files")))
       .child(div().flex_1().min_h(0).relative().font_family(settings().font_family ?? "JetBrains Mono").text_size(11)
         .child(div().id("changes-diff-x").size_full().overflow_x_scrollbar()

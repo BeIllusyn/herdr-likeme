@@ -184,10 +184,12 @@ carries its own `sort.svg`; `my-pane` carries its own `close/split/zoom` SVGs;
   only the agents entity.
 - A retained child does **not** get the host mod's live-data redraws. `Agents` watches
   what the list shows on a 250 ms timer — status, focus, pin, names, space colours,
-  the current minute — and redraws only when that signature changes. Without it a
-  status turn or a focus change waited for the next hover (which redraws) or 30 s.
-  `Spaces` already polls at 250 ms for git. Keep both when porting a shipped clone
-  into the composition.
+  the sort, the current minute (the elapsed time under each row) — and redraws only when
+  that signature changes. Without it a status turn or a focus change waited for the
+  next hover (which redraws) or 30 s. `Spaces` polls at 250 ms for git. Both timers
+  take only one look in four while the window is in the background, and catch up
+  within a second of it coming forward. Keep both when porting a shipped clone into
+  the composition.
 - If you upgrade from a version before the merge, delete the old
   `~/.config/herdr-app/mods/my-spaces` and `my-agents` folders by hand; `install.sh`
   never removes mods it did not install this run.
@@ -204,6 +206,19 @@ carries its own `sort.svg`; `my-pane` carries its own `close/split/zoom` SVGs;
   Any 1 px accent line around the pane runs square into the window's rounded
   bottom-right corner, which reads as a bright, abrupt corner. The focused pane's
   aurora is the focus mark; keep it in the header if you port this layout.
+- **Performance rules for these mods.** Every `spaces()`, `panes()`, `agents()` or
+  `terminals()` call copies the whole host list into JS, so read each one once per
+  render/tick and pass the snapshot down (the agents view used to call `panes()` once
+  per row). `setShared` re-renders every mod, so never call it from `render`:
+  `Spaces` assigns colours from `init` and its tick. `run()`/`migratePins()` also stay
+  out of render. Place keys are `machine + "\u0000" + folder`, not JSON, so the
+  250 ms tick does no parsing; `git status` adds `-uno --no-renames` because only its
+  branch lines are read, and the two `rev-parse` answers come from one process.
+  A git look that finds nothing new no longer redraws the list.
+- **Do not build a row per file.** The Files tree and the changed-file list use
+  `v_virtual_list`; a renderer may not register handlers or retain state, so the row
+  helpers are pure and the click is the list's `on_item_click` (keyed by path). A
+  non-virtualized tree built up to 5,000 elements on every render.
 - Heights are fixed: 44 px agent/space rows, 42 px worktree rows, 26 px sub-agent rows,
   29 px tabs. A larger font will clip rather than grow.
 - The balloon's 1 px border is reserved on every row and tab, transparent while

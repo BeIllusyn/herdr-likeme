@@ -9,14 +9,27 @@ import { View, div, svg, image, PathBuilder, Background } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { panes, props, run, theme, home } from "herdr";
 
-const RECT = () => PathBuilder.fill()
+// Immutable geometry, built once: each header used to rebuild a path for every
+// one of its fourteen washes on every render.
+const RECT = PathBuilder.fill()
   .move_to("0%", "0%").line_to("100%", "0%")
   .line_to("100%", "100%").line_to("0%", "100%")
   .close().build();
+const HOME = home();
+
+// Backgrounds are reusable and the aurora's colours never change: build each
+// gradient once instead of on every header render.
+const GRADIENTS = new Map();
+const gradient = (from, to) => {
+  const key = from + to;
+  let background = GRADIENTS.get(key);
+  if (!background) GRADIENTS.set(key, background = Background.linear_gradient(90, from, to));
+  return background;
+};
 
 // A left-to-right wash across the element it fills.
 const wash = (from, to) =>
-  window.paint_path(RECT(), Background.linear_gradient(90, from, to)).size_full();
+  window.paint_path(RECT, gradient(from, to)).size_full();
 
 // One soft colour ribbon: transparent → colour A → colour B → transparent.
 // The whole ribbon slides across the header, so each colour fades in at the
@@ -60,8 +73,7 @@ function icon(p, size, color) {
 
 function folder(cwd) {
   if (!cwd) return "";
-  const h = home();
-  return cwd === h ? "~" : cwd.startsWith(h + "/") ? "~" + cwd.slice(h.length) : cwd;
+  return cwd === HOME ? "~" : cwd.startsWith(HOME + "/") ? "~" + cwd.slice(HOME.length) : cwd;
 }
 
 export default class Pane extends View {

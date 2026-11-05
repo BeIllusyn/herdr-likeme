@@ -2,13 +2,18 @@ import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings } from "herdr";
 
-function find(node, id) {
-  if (node?.id === id) return node;
-  for (const child of node?.children ?? []) {
-    const found = find(child, id);
-    if (found) return found;
+// Every node the tab bar needs, in one walk: `layout()` is the whole layout
+// document, and the bar used to walk it three times per render.
+function findMany(root, ids) {
+  const wanted = new Set(ids), found = {};
+  const stack = [root];
+  while (stack.length) {
+    const node = stack.pop();
+    if (!node) continue;
+    if (wanted.has(node.id)) found[node.id] = node;
+    for (const child of node.children ?? []) stack.push(child);
   }
-  return null;
+  return found;
 }
 
 // The same space colours the sidebar paints with (kept in step with
@@ -69,8 +74,16 @@ export default class Tabs extends View {
       .on_mouse_down("left", stop).on_click(action).child(label);
     // A default name is the tab's number ("1") or its id: label it by what it
     // runs, and keep the labels distinct when two tabs share a folder.
+    // `panes()` is one copy per render, grouped by tab once; this used to call
+    // it inside the per-tab loop.
+    const panesByTab = new Map();
+    for (const p of panes()) {
+      let mine = panesByTab.get(p.tab);
+      if (!mine) panesByTab.set(p.tab, mine = []);
+      mine.push(p);
+    }
     const entries = shown.map((c, i) => {
-      const mine = panes().filter(p => p.tab === c.id);
+      const mine = panesByTab.get(c.id) ?? [];
       const pane = mine.find(p => p.program?.agent) ?? mine[0];
       const program = pane?.program;
       const auto = /^(tb)?\d+$/.test(c.name);
@@ -78,11 +91,18 @@ export default class Tabs extends View {
       return { c, i, program, auto, base: dir && dir !== "~" ? dir : program?.name ?? "Terminal" };
     });
     const programName = (e) => e.program?.name ?? "Terminal";
+    // One count per base and program, not a filter of all entries per entry.
+    const baseUse = new Map(), programUse = new Map();
+    for (const e of entries) {
+      baseUse.set(e.base, (baseUse.get(e.base) ?? 0) + 1);
+      const p = programName(e);
+      programUse.set(p, (programUse.get(p) ?? 0) + 1);
+    }
     const labels = new Map(entries.map((e) => {
       if (!e.auto) return [e.c.id, e.c.name];
-      if (entries.filter((x) => x.base === e.base).length === 1) return [e.c.id, e.base];
+      if (baseUse.get(e.base) === 1) return [e.c.id, e.base];
       const p = programName(e);
-      if (entries.filter((x) => programName(x) === p).length === 1) return [e.c.id, p];
+      if (programUse.get(p) === 1) return [e.c.id, p];
       return [e.c.id, `${p} ${e.i + 1}`];
     }));
     // The active tab is the same flat tint as a selected sidebar row: an opaque
@@ -114,12 +134,13 @@ export default class Tabs extends View {
           .when(c.status === "blocked" || c.status === "done", el => el.child(div().size(6).rounded(3).bg(t[c.status]))))
         .child(div().id(`close-${c.id}`).size(16).flex().flex_none().items_center().justify_center().rounded(4).text_color(t.muted).opacity(c.active ? 0.9 : 0.4).hover(s => s.bg(t.hover).text_color(t.foreground).opacity(1)).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/pane/close.svg").size(11)));
     };
-    const root = layout(), sidebar = find(root, "sidebar"), w = window();
+    const root = layout(), w = window();
+    const nodes = findMany(root, ["sidebar", "panel", "panel-body"]);
+    const sidebar = nodes.sidebar, panel = nodes.panel, body = nodes["panel-body"];
     // Old saved rails and a dragged-narrow sidebar can be smaller than the window buttons.
     const lightsPadding = w?.platform === "macos" && w.titlebar === "none" && !w.fullscreen && root?.traffic_lights
       ? Math.max(0, (root.traffic_lights[0] + 64) / settings().zoom - (sidebar?.hidden ? 0 : sidebar?.size?.px ?? 0))
       : 0;
-    const panel = find(root, "panel"), body = find(root, "panel-body");
     const enabled = shared("workspace.panels") ?? ["files", "changes"];
     this.syncPanel(space, panel, body, enabled);
     const panelButton = (id, label, icon) => {
