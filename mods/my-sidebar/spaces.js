@@ -5,9 +5,9 @@
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
+import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window } from "herdr";
 import { markColor, mix } from "./colors.js";
-import { find, isRail, backgroundTick } from "./util.js";
+import { backgroundTick } from "./util.js";
 
 // A place key is machine + NUL + folder: neither part can contain NUL, so the
 // pair needs no JSON round-trip on the hot path (every 250 ms tick).
@@ -31,20 +31,13 @@ const base = (path) => path.replace(/\/+$/, "").split("/").pop();
 // Changes made outside Herdr (an editor's save, a commit in another app): looked
 // for this often, in repos the list shows, while the window is in front.
 const FALLBACK = 60000;
-
-// A space speaks up only when something in it needs you.
-export function glyph(status) {
-  return status === "blocked" || status === "done" ? "●" : "·";
-}
-
-export function tone(t, status) {
-  return t[status] ?? t.unknown;
-}
+// Namespaced keys keep this mod's memory out of another mod's. The bare keys are
+// what earlier versions wrote; read them once so an update keeps the state.
+const stored = (key) => localStorage.getItem(`likeme.${key}`) ?? localStorage.getItem(key);
 
 export default class Spaces extends View {
   init(props, cx) {
     this.embedded = Boolean(props?.embedded);
-    this.width = find(layout(), "sidebar")?.size?.px;
     this.git = {}; // where() -> { name, branch, ahead, behind, repo, linked }, null: not a repo
     this.checked = {}; // where() -> when it was last looked at
     this.unsure = new Set(); // where()s git couldn't answer for (a machine away)
@@ -67,9 +60,9 @@ export default class Spaces extends View {
     this.pressed = null;
     this.over = null;
     this.machines = [];
-    this.reconnecting = JSON.parse(localStorage.getItem("machines.reconnecting") ?? "{}");
+    this.reconnecting = JSON.parse(stored("machines.reconnecting") ?? "{}");
     for (const state of Object.values(this.reconnecting)) state.busy = false;
-    this.folded = new Set(JSON.parse(localStorage.getItem("machines.folded") ?? "[]"));
+    this.folded = new Set(JSON.parse(stored("machines.folded") ?? "[]"));
     // Colours are assigned here, not in `render`: `setShared` re-renders every
     // mod, and doing that from inside a render pass cascades into the window.
     this.syncColors(spaces());
@@ -83,10 +76,6 @@ export default class Spaces extends View {
       if (!backgroundTick(this)) return;
       this.checkNew(cx);
     });
-  }
-
-  narrow() {
-    return isRail(this.width);
   }
 
   // Give every space a colour once, and keep the table in step as spaces come
@@ -113,8 +102,6 @@ export default class Spaces extends View {
   checkNew(cx) {
     const now = Date.now();
     const sp = spaces();
-    // The rail switch reads the sidebar's width, so a resize is a change too.
-    this.width = find(layout(), "sidebar")?.size?.px;
     // New or renamed spaces need a colour before the first frame that shows them.
     const own = sp.map((s) => `${s.id}:${s.name}`).join("|");
     if (own !== this.colorSig) {
@@ -124,7 +111,7 @@ export default class Spaces extends View {
     // Everything the list draws changes under this view without the host telling
     // it: a closed space disappears, one is renamed, the active one moves. Redraw
     // on that change alone, not every tick. Colours only change with `own` above.
-    const sig = `${this.width}|` + sp.map((s) => `${s.id}:${s.name}:${s.active ? 1 : 0}:${s.status}:${s.machine ?? ""}:${s.folder ?? ""}`).join("|");
+    const sig = sp.map((s) => `${s.id}:${s.name}:${s.active ? 1 : 0}:${s.machine ?? ""}:${s.folder ?? ""}`).join("|");
     if (sig !== this.seen) {
       this.seen = sig;
       cx.notify();
@@ -201,7 +188,7 @@ export default class Spaces extends View {
     const state = this.reconnecting[name] ??= { machine, removed: false };
     state.busy = true;
     state.error = null;
-    localStorage.setItem("machines.reconnecting", JSON.stringify(this.reconnecting));
+    localStorage.setItem("likeme.machines.reconnecting", JSON.stringify(this.reconnecting));
     cx.notify();
     cx.spawn(async cx => {
       try {
@@ -216,7 +203,7 @@ export default class Spaces extends View {
         if (!state.removed) {
           await ask(["machine", "rm", name]);
           state.removed = true;
-          localStorage.setItem("machines.reconnecting", JSON.stringify(this.reconnecting));
+          localStorage.setItem("likeme.machines.reconnecting", JSON.stringify(this.reconnecting));
         }
         const args = ["machine", "add"];
         if (machine.via) args.push("--via", machine.target);
@@ -226,13 +213,13 @@ export default class Spaces extends View {
         if (machine.temporary) args.push("--temp");
         await ask(args);
         this.folded.delete(name);
-        localStorage.setItem("machines.folded", JSON.stringify([...this.folded]));
+        localStorage.setItem("likeme.machines.folded", JSON.stringify([...this.folded]));
         delete this.reconnecting[name];
       } catch (e) {
         state.error = String(e.message ?? e);
         state.busy = false;
       }
-      localStorage.setItem("machines.reconnecting", JSON.stringify(this.reconnecting));
+      localStorage.setItem("likeme.machines.reconnecting", JSON.stringify(this.reconnecting));
       this.refreshMachines(cx);
       cx.notify();
     });
@@ -360,9 +347,9 @@ export default class Spaces extends View {
   }
 
   // The rows, under a header per machine once one isn't this computer.
-  grouped(t, collapsed, sp, ps, ms, fillOf) {
+  grouped(t, sp, ps, ms, fillOf) {
     const rows = this.ordered(sp, ps);
-    const draw = (r) => (collapsed ? this.compact(r, t) : this.row(r, t, fillOf));
+    const draw = (r) => this.row(r, t, fillOf);
     const remote = [...new Set([...rows.map(r => r.w.machine).filter(Boolean), ...this.machines.map(m => m.name), ...Object.keys(this.reconnecting)])].sort();
     const stateByName = new Map(ms.map(k => [k.name, k]));
     const loading = m => {
@@ -370,7 +357,7 @@ export default class Spaces extends View {
       return layout === "loading" || (!layout && this.machines.some(k => k.name === m && k.state === "connected"))
         || sp.some(s => (s.machine ?? null) === m && !this.shown.has(s.id));
     };
-    const loadingRow = m => div().id(`machine-loading-${m ?? "local"}`).h(28).flex_none().px(16).text_size(12).text_color(t.dim).child(collapsed ? "…" : "Loading…");
+    const loadingRow = m => div().id(`machine-loading-${m ?? "local"}`).h(28).flex_none().px(16).text_size(12).text_color(t.dim).child("Loading…");
     if (!remote.length) return loading(null) && !rows.length ? [loadingRow(null)] : rows.map(draw);
     const machineNames = [null, ...remote];
     return machineNames.flatMap((m) => {
@@ -380,15 +367,15 @@ export default class Spaces extends View {
       const connected = !m || machine?.state === "connected";
       const rebuilt = this.rebuilt(machine) || !!repair;
       const folded = this.folded.has(m);
-      const head = h_flex().id(`machine-${m ?? "local"}`).h(26).flex_none().px(collapsed ? 10 : 16).gap(7).items_center().text_size(11).text_color(t.dim)
+      const head = h_flex().id(`machine-${m ?? "local"}`).h(26).flex_none().px(16).gap(7).items_center().text_size(11).text_color(t.dim)
         .cursor_pointer().hover(s => s.bg(t.hover))
         .on_click((_e, cx) => {
           folded ? this.folded.delete(m) : this.folded.add(m);
-          localStorage.setItem("machines.folded", JSON.stringify([...this.folded]));
+          localStorage.setItem("likeme.machines.folded", JSON.stringify([...this.folded]));
           cx.notify();
         })
         .child(svg(`mods/workspace-chrome/${m ? "server" : "monitor"}.svg`).size(13).flex_none())
-        .when(!collapsed, el => el.child(div().flex_1().truncate().child(m ?? "This computer"))
+        .child(div().flex_1().truncate().child(m ?? "This computer")
           .when(!connected && !rebuilt, el => el.child(div().flex_none().child((machine?.state ?? "asleep").replace(/_/g, " "))))
           .when(rebuilt, el => el.child(h_flex().flex_none().gap(3).items_center()
             .child(div().max_w(140).truncate().child(repair?.error || "rebuilt ·"))
@@ -404,8 +391,8 @@ export default class Spaces extends View {
       const empty = h_flex().id(`machine-new-${m ?? "local"}`).h(28).flex_none().px(16).gap(7).items_center()
         .text_size(12).text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground))
         .on_click(() => run("space.new", { machine: m ?? "" }))
-        .child(svg("mods/workspace-chrome/plus.svg").size(12)).when(!collapsed, el => el.child("New space there"));
-      if (!collapsed && rebuilt) return [head];
+        .child(svg("mods/workspace-chrome/plus.svg").size(12)).child("New space there");
+      if (rebuilt) return [head];
       return [head, ...(folded ? [] : mine.length ? mine.map(draw) : [loading(m) ? loadingRow(m) : empty])];
     });
   }
@@ -450,7 +437,8 @@ export default class Spaces extends View {
         const over = this.over;
         this.pressed = null;
         this.over = null;
-        if (from !== null && over === i && from !== i) run("space.move", { id: spaces()[from].id, index: i + 1 });
+        const source = from === null ? null : spaces()[from];
+        if (source && over === i && from !== i) run("space.move", { id: source.id, index: i + 1 });
         else if (from === i) run("space.select", { id: w.id });
         cx.notify();
       })
@@ -491,20 +479,6 @@ export default class Spaces extends View {
       );
   }
 
-  compact({ w, i }, t) {
-    return h_flex()
-      .id(`space-${w.id}`)
-      .h(26)
-      .flex_none()
-      .justify_center()
-      .gap(4)
-      .when(w.active, (el) => el.bg(t.raised))
-      .hover((s) => s.bg(t.hover))
-      .on_click(() => run("space.select", { id: w.id }))
-      .child(div().text_color(w.active ? t.foreground : t.muted).child(String(i + 1)))
-      .child(div().text_color(tone(t, w.status)).child(glyph(w.status)));
-  }
-
   // Always keep a place to make the next space at the end of the list.
   ghost(t) {
     return h_flex().id("space-new-hint").h(34).flex_none().px(16).gap(8)
@@ -518,7 +492,6 @@ export default class Spaces extends View {
 
   render() {
     const t = theme();
-    const collapsed = this.narrow();
     // One read of each host list per render: every read copies the whole list
     // into JS, and the row helpers used to read them again per space.
     const sp = spaces();
@@ -541,12 +514,12 @@ export default class Spaces extends View {
       .when(!embedded, el => el.size_full().min_h(0).bg(t.chrome))
       .when(embedded, el => el.w_full().flex_none())
       .child(h_flex().h(31).pl(16).pr(10).items_center().justify_between().text_size(11).font_medium().text_color(t.muted)
-        .when(!collapsed, el => el.child("Spaces"))
+        .child("Spaces")
         .child(div().id("space-new").size(26).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(t.hover).text_color(t.foreground))
           .on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(14))))
       .child(v_flex().px(0).pb(embedded ? 8 : 14).gap(0)
         .when(!embedded, el => el.flex_1().min_h(0).overflow_y_scrollbar().mode("always"))
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
-        .children([...this.grouped(t, collapsed, sp, ps, ms, fillOf), ...(!collapsed ? [this.ghost(t)] : [])]));
+        .children([...this.grouped(t, sp, ps, ms, fillOf), this.ghost(t)]));
   }
 }

@@ -20,6 +20,15 @@ if ! command -v herdr-app >/dev/null 2>&1; then
   echo "herdr-app is not in PATH" >&2
   exit 1
 fi
+
+# The mods are built against 0.1.12's host API. A newer app is fine; an older one
+# would fail later with a less useful error from `check`.
+HAVE="$(herdr-app --version | awk '{print $NF}')"
+HAVE="${HAVE#v}"
+if [ -n "$HAVE" ] && [ "$(printf '%s\n%s\n' "0.1.12" "$HAVE" | sort -V | head -n1)" != "0.1.12" ]; then
+  echo "herdr-app $HAVE is older than the required 0.1.12; update Herdr first" >&2
+  exit 1
+fi
 if ! command -v rsync >/dev/null 2>&1; then
   echo "rsync is required (macOS ships it; on Linux install your distro's rsync)" >&2
   exit 1
@@ -59,7 +68,11 @@ for m in "${MODS[@]}"; do
   herdr-app check "$DST/mods/$m"
 done
 
-herdr-app do layout.switch "{\"name\":\"$LAYOUT\"}" >/dev/null 2>&1 || true
+if ! herdr-app do layout.switch "{\"name\":\"$LAYOUT\"}" >/dev/null; then
+  echo "Files are in place, but Herdr could not switch to \"$LAYOUT\":" >&2
+  herdr-app status >&2 || true
+  exit 1
+fi
 
 echo "Installed \"$LAYOUT\" into $DST."
 echo "Switch anytime with: herdr-app do layout.switch '{\"name\":\"$LAYOUT\"}'"

@@ -9,23 +9,9 @@
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { panes, props, run, theme, home, focused, shared } from "herdr";
+import { markColor, mix } from "./colors.js";
 
 const HOME = home();
-
-// The same table and blend the tab bar and sidebar use: a space's colour name
-// as a hex, mixed into a surface as an opaque tint. Kept in sync with
-// my-tabs/main.js and my-sidebar/colors.js.
-const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
-const markColor = (color, t) => {
-  const c = color?.startsWith("#") ? color : MARK[color] ?? t[color];
-  return /^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(c ?? "") ? c.slice(0, 7) : null;
-};
-const mix = (a, b, k) => {
-  if (!/^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(a ?? "") || !/^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(b ?? "")) return a || b;
-  const rgb = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
-  const [x, y] = [rgb(a), rgb(b)];
-  return "#" + x.map((v, i) => Math.round(v * (1 - k) + y[i] * k).toString(16).padStart(2, "0")).join("");
-};
 
 function icon(p, size, color) {
   if (!p?.icon) return null;
@@ -89,11 +75,13 @@ export default class Pane extends View {
       .child(div().flex_1().truncate().text_size(11.5).text_color(t.muted).child(folder(p.cwd)))
       // The window controls keep their places whether the pointer is here or not.
       // A quiet agent shows no status mark at all: a ring beside every idle pane
-      // read as something to act on.
-      .when(st === "working", el => el.child(div().w(18).h_full().flex_none().flex().items_center().justify_center()
-        .child(div().text_size(16).line_height("16px").text_color(t.working).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 80))))
-      .when(st === "blocked", el => el.child(div().flex_none().px(6).h(18).flex().items_center().rounded(5).bg(t.blocked + "26").text_size(10.5).font_semibold().text_color(t.blocked).child("Needs you")))
-      .when(st === "done", el => el.child(div().size(7).flex_none().rounded(4).bg(t.done)))
+      // read as something to act on. The slot keeps its width so a status turn
+      // never moves the folder's truncation point.
+      .child(div().w(64).h_full().flex_none().flex().items_center().justify_end()
+        .when(st === "working", el => el.child(div().w(18).h_full().flex_none().flex().items_center().justify_center()
+          .child(div().text_size(16).line_height("16px").text_color(t.working).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 80))))
+        .when(st === "blocked", el => el.child(div().flex_none().px(6).h(18).flex().items_center().rounded(5).bg(t.blocked + "26").text_size(10.5).font_semibold().text_color(t.blocked).child("Needs you")))
+        .when(st === "done", el => el.child(div().size(7).flex_none().rounded(4).bg(t.done))))
       .child(this.button(t, `ph-r-${pane}`, "split-right", "pane.split", { direction: "right", pane }))
       .child(this.button(t, `ph-d-${pane}`, "split-down", "pane.split", { direction: "down", pane }))
       .child(this.button(t, `ph-z-${pane}`, p.zoomed ? "unzoom" : "zoom", "pane.zoom", { pane }))

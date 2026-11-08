@@ -3,21 +3,14 @@
 
 import { View, div, image, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay, window, layout } from "herdr";
+import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay } from "herdr";
 import { markColor, mix } from "./colors.js";
-import { find, isRail, backgroundTick } from "./util.js";
-
-// To the rail (on macOS wide enough for the traffic lights), or back to the width it had.
-function toggleSidebar() {
-  const width = find(layout(), "sidebar")?.size?.px;
-  const collapsed = isRail(width);
-  if (!collapsed) setShared("sidebar.width", width);
-  // Mods edited before the rail went by width still read the flag.
-  setShared("sidebar.collapsed", collapsed);
-  run("layout.resize", { id: "sidebar", px: collapsed ? (shared("sidebar.width") ?? 268) : window()?.platform === "macos" ? 76 : 44 });
-}
+import { backgroundTick } from "./util.js";
 
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
+// Namespaced keys keep this mod's memory out of another mod's. The bare keys are
+// what earlier versions wrote; read them once so an update keeps the state.
+const stored = (key) => localStorage.getItem(`likeme.${key}`) ?? localStorage.getItem(key);
 
 // The pane a tab's title comes from: its first agent, else its focused terminal,
 // else its first terminal. One pass over the snapshot, not one `panes()` read per
@@ -39,6 +32,10 @@ function title(tab, l) {
   return (tab.name === prog || !tab.named) && telling ? live : tab.name;
 }
 const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
+// The row's mark and its section come from the same rank, so a parent with a
+// blocked child reads as blocked instead of sitting under "Needs you" with an
+// idle ring.
+const STATUS_OF_RANK = { 4: "blocked", 3: "done", 2: "working", 1: "idle" };
 // A sub-agent without a pane isn't in agents(): its raw word, error counting as
 // blocked. It's never done: it reports to its parent, and the parent's done is the news.
 const kidStatus = (k, listed) => {
@@ -74,13 +71,16 @@ export default class Agents extends View {
     this.overlay = props?.overlay;
     if (this.sortMenuOpen) return;
     this.folded = new Set();
-    this.width = find(layout(), "sidebar")?.size?.px;
     this.orderSeen = null;
     this.idleTicks = 0;
     // Each agent's last state and when it changed (ms), kept across restarts.
-    this.changed = JSON.parse(localStorage.getItem("changed") ?? "{}");
-    this.pendingPins = JSON.parse(localStorage.getItem("pins") ?? "[]");
-    if (!this.pendingPins.length) localStorage.removeItem("pins");
+    this.changed = JSON.parse(stored("changed") ?? "{}");
+    // Pins are one-way: once read, drop the old key so an empty new key doesn't
+    // fall back to it and re-migrate on every start.
+    const legacyPins = localStorage.getItem("pins");
+    this.pendingPins = JSON.parse(localStorage.getItem("likeme.pins") ?? legacyPins ?? "[]");
+    if (legacyPins !== null) localStorage.removeItem("pins");
+    if (!this.pendingPins.length) localStorage.removeItem("likeme.pins");
     this.migratingPins = new Set();
     if (this.pendingPins.length) this.migratePins(terminals());
     // This retained child isn't redrawn by the host's live updates the way a mod
@@ -93,8 +93,6 @@ export default class Agents extends View {
       // to catch up within a second of the window coming forward.
       if (!backgroundTick(this)) return;
       const minute = Math.floor(Date.now() / 60000);
-      // The rail switch reads the sidebar's width, so a resize is a change too.
-      this.width = find(layout(), "sidebar")?.size?.px;
       const list = agents();
       // Sub-agent rows only exist under an agent: with none there is no tree to
       // watch and this copy of every terminal is pure work.
@@ -102,7 +100,7 @@ export default class Agents extends View {
       // A pin's label echoes back through the terminal list; write it from the
       // tick so rendering stays free of side effects.
       if (this.pendingPins.length) this.migratePins(all);
-      let sig = `${this.width}|${minute}|${shared("agents.sort") ?? ""}`;
+      let sig = `${minute}|${shared("agents.sort") ?? ""}`;
       const colors = shared("space.colors") ?? {};
       for (const id in colors) sig += `|${id}=${colors[id]}`;
       for (const a of list) sig += `|${a.address}:${a.status}:${a.focused ? 1 : 0}:${a.pinned ? 1 : 0}:${a.pane}:${a.space}:${a.space_name}:${a.tab}:${a.tab_name}:${a.title}`;
@@ -111,10 +109,6 @@ export default class Agents extends View {
       this.seen = sig;
       cx.notify();
     });
-  }
-
-  narrow() {
-    return isRail(this.width);
   }
 
   // Stamps agents whose state changed. Done and idle count as one: looking at a
@@ -131,7 +125,7 @@ export default class Agents extends View {
     // Gone and old: the list alone is empty right after a start.
     const listed = new Set(list.map((a) => a.address));
     for (const [k, c] of Object.entries(this.changed)) if (!listed.has(k) && now - c.at > 30 * 86400000) delete this.changed[k];
-    localStorage.setItem("changed", JSON.stringify(this.changed));
+    localStorage.setItem("likeme.changed", JSON.stringify(this.changed));
   }
 
   // Keep offline pins until their terminal returns, and keep each pending until
@@ -150,8 +144,8 @@ export default class Agents extends View {
     });
     if (pending.length === this.pendingPins.length) return;
     this.pendingPins = pending;
-    if (pending.length) localStorage.setItem("pins", JSON.stringify(pending));
-    else localStorage.removeItem("pins");
+    if (pending.length) localStorage.setItem("likeme.pins", JSON.stringify(pending));
+    else localStorage.removeItem("likeme.pins");
   }
 
   since(a) {
@@ -279,7 +273,6 @@ export default class Agents extends View {
   render(cx) {
     const t = theme();
     if (this.sortMenuOpen) return this.sortMenu(t);
-    const collapsed = this.narrow();
     const embedded = this.embedded;
     const sort = sortOf();
     let list = agents();
@@ -311,9 +304,9 @@ export default class Agents extends View {
       setAgentOrder(addresses);
     }
 
-    const withKids = (a, i) => {
-      const subs = collapsed ? [] : trees.subsOf.get(a.address) ?? [];
-      const r = row(a, i, subs);
+    const withKids = (a) => {
+      const subs = trees.subsOf.get(a.address) ?? [];
+      const r = row(a, subs);
       if (this.folded.has(a.address)) return [r];
       return [r, ...subs.map((s) => this.subRow(t, s, shown, byPriority))];
     };
@@ -332,7 +325,7 @@ export default class Agents extends View {
         .items_center()
         .rounded(4)
         .text_size(11)
-        .text_color(open ? t.dim : (t[top] ?? t.dim))
+        .text_color(open ? t.dim : (t[STATUS_OF_RANK[rankOf(a)] ?? top] ?? t.dim))
         .cursor_pointer()
         .hover((s) => s.bg(t.hover).text_color(t.foreground))
         .on_click((_e, cx) => {
@@ -377,20 +370,7 @@ export default class Agents extends View {
       return balloon;
     };
 
-    const row = (a, i, subs = []) => {
-      if (collapsed) {
-        return h_flex()
-          .id(`ag-${a.address}`)
-          .h(26)
-          .px(8)
-          .flex_none()
-          .items_center()
-          .gap(4)
-          .hover((s) => s.bg(t.hover))
-          .on_click(() => run("pane.focus", { pane: a.pane }))
-          .child(div().flex_1().min_w(0).whitespace_nowrap().text_right().text_color(t.muted).child(String(i + 1)))
-          .child(h_flex().w(18).flex_none().items_center().justify_center().child(this.status(t, a, true)));
-      }
+    const row = (a, subs = []) => {
       const pic = icon(a.program, 16, t.foreground);
       // An agent on another machine (`vps/t7`) says which.
       const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
@@ -400,7 +380,8 @@ export default class Agents extends View {
       const top = a.space_name || raw;
       const under = raw && raw !== top && !/^\d+$/.test(raw) ? raw : "";
       const when = this.since(a);
-      const idle = a.status === "idle" && !a.focused;
+      const mark = STATUS_OF_RANK[rankOf(a)] ?? a.status;
+      const idle = mark === "idle" && !a.focused;
       const isPinned = a.pinned;
       const pin = div()
         .id(`pin-${a.address}`)
@@ -450,7 +431,7 @@ export default class Agents extends View {
             .flex_1()
             .min_w(0)
             .gap(2)
-            .child(div().min_w(0).truncate().text_size(13).line_height("16px").text_color(idle ? t.muted : t.foreground).child(top))
+            .child(div().min_w(0).truncate().text_size(13).line_height("16px").text_color(idle ? t.muted : t.foreground).tooltip(top).child(top))
             .when(Boolean(under) || Boolean(machine), el => el.child(
               h_flex()
                 .min_w(0)
@@ -459,7 +440,7 @@ export default class Agents extends View {
                 .text_size(11)
                 .line_height("14px")
                 .text_color(t.muted)
-                .when(Boolean(under), el => el.child(div().min_w(0).truncate().child(under)))
+                .when(Boolean(under), el => el.child(div().min_w(0).truncate().tooltip(under).child(under)))
                 .when(Boolean(under) && Boolean(machine), el => el.child(div().flex_none().child("·")))
                 .when(Boolean(machine), el => el.child(div().flex_none().text_size(10).child(machine))),
             )),
@@ -469,7 +450,7 @@ export default class Agents extends View {
         .child(div().w(32).flex_none().h_full().flex().items_center().justify_end()
           .when(this.hovered === a.address, el => el.child(pin))
           .when(this.hovered !== a.address && Boolean(when), el => el.child(div().text_size(11).text_color(t.muted).child(duration(now - when)))))
-        .child(div().min_w(18).flex_none().h_full().flex().items_center().justify_end().child(this.status(t, a, byPriority && !isPinned)));
+        .child(div().min_w(18).flex_none().h_full().flex().items_center().justify_end().child(this.status(t, { status: mark }, byPriority && !isPinned)));
     };
 
     // Groups in list order: spaces (grouped) or priority sections. Agents of a
@@ -485,7 +466,7 @@ export default class Agents extends View {
     // A group's header; it folds the group. Folded, it says how many and the most urgent state.
     const header = (g) => {
       const open = !this.folded.has(g.id);
-      const top = g.members.reduce((m, a) => ((RANK[a.status] ?? 0) > (RANK[m] ?? 0) ? a.status : m), null);
+      const top = g.members.reduce((m, a) => ((rankOf(a) ?? 0) > (RANK[m] ?? 0) ? STATUS_OF_RANK[rankOf(a)] : m), null);
       return h_flex()
         .id(g.id)
         .px(16)
@@ -513,12 +494,10 @@ export default class Agents extends View {
     // all-idle list still says "Idle". A single space group in the grouped view
     // would only repeat its rows, so it hides.
     const showHeaders = byPriority || groups.length > 1;
-    const rows = collapsed
-      ? list.flatMap(withKids)
-      : groups.flatMap((g) => showHeaders
-        ? [header(g), ...(this.folded.has(g.id) ? [] : g.members.flatMap(withKids))]
-        : g.members.flatMap(withKids));
-    const empty = list.length === 0 && !collapsed;
+    const rows = groups.flatMap((g) => showHeaders
+      ? [header(g), ...(this.folded.has(g.id) ? [] : g.members.flatMap(withKids))]
+      : g.members.flatMap(withKids));
+    const empty = list.length === 0;
     const emptyState = v_flex()
       .w_full()
       .items_center()
@@ -533,49 +512,30 @@ export default class Agents extends View {
       .text_size(13)
       .when(!embedded, el => el.size_full().min_h(0).bg(t.chrome).border_t(1).border_color(t.border))
       .when(embedded, el => el.w_full().flex_none())
-      .when(!collapsed, (el) =>
-        el.child(
-          h_flex()
-            .px(16)
-            .h(41)
-            .pt(embedded ? 10 : 14)
-            .pb(5)
-            .flex_none()
-            .items_center()
-            .justify_between()
-            .child(div().text_size(11).font_medium().text_color(t.muted).child("Agents"))
-            .child(
-              div()
-                .id("ag-sort")
-                .text_size(11)
-                .text_color(t.muted)
-                .hover((s) => s.text_color(t.foreground))
-                .on_click(() => openOverlay({ mod: "my-sidebar", kind: "popup", width: 200, height: 140, props: { sortMenu: true } }))
-                .tooltip(`Sort agents: ${sort.label}`)
-                .child(svg(sort.icon).size(14)),
-            ),
-        ),
+      .child(
+        h_flex()
+          .px(16)
+          .h(41)
+          .pt(embedded ? 10 : 14)
+          .pb(5)
+          .flex_none()
+          .items_center()
+          .justify_between()
+          .child(div().text_size(11).font_medium().text_color(t.muted).child("Agents"))
+          .child(
+            div()
+              .id("ag-sort")
+              .text_size(11)
+              .text_color(t.muted)
+              .hover((s) => s.text_color(t.foreground))
+              .on_click(() => openOverlay({ mod: "my-sidebar", kind: "popup", width: 200, height: 140, props: { sortMenu: true } }))
+              .tooltip(`Sort agents: ${sort.label}`)
+              .child(svg(sort.icon).size(14)),
+          ),
       )
       .child(v_flex().id("ag-list").px(0).gap(0)
         .when(!embedded, el => el.flex_1().min_h(0).overflow_y_scrollbar().mode("always"))
         .when(empty && !embedded, el => el.items_center().justify_center())
-        .children(empty ? [emptyState] : rows))
-      .when(collapsed, (el) =>
-        el.child(
-          h_flex()
-            .h(28)
-            .items_center()
-            .justify_center()
-            .child(
-              div()
-                .id("collapse")
-                .text_size(13)
-                .text_color(t.dim)
-                .hover((s) => s.text_color(t.foreground))
-                .on_click(toggleSidebar)
-                .child("»"),
-            ),
-        ),
-      );
+        .children(empty ? [emptyState] : rows));
   }
 }

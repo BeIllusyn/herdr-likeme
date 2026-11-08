@@ -1,5 +1,7 @@
-// Shared between spaces.js and agents.js: the same table paints a space's avatar
-// and tints its rows, so an agent row matches the space row it belongs to.
+// Shared by the sidebar, the tab bar and the pane header: the same table paints a
+// space's avatar and tints its rows, tabs and focused header, so every surface
+// speaks the same colour language. The same file lives in my-sidebar, my-tabs and
+// my-pane; `check.sh` fails when the three copies drift.
 
 // What a stored color name looks like on an avatar (the same in every mod that
 // draws space avatars): one strong color per hue, light and dark alike.
