@@ -1,6 +1,6 @@
 // A lazy file browser for the focused pane's folder, with bounded read-only previews.
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex, Editor, EditorState, Scrollbar, v_virtual_list } from "gpui-base";
+import { v_flex, h_flex, h_resizable, resizable_panel, Editor, EditorState, Scrollbar, v_virtual_list } from "gpui-base";
 import { spaces, panes, focused, props, exec, readTextFile, writeTextFile, watchFolder, theme, settings, window } from "herdr";
 
 // `tab` is the tab this copy lives in. While another tab is in front, null says
@@ -300,10 +300,11 @@ export default class Files extends View {
     const rows = this.flat ??= this.flatten();
     const message = this.error || (this.loading ? "Loading files…" : this.root ? "No files" : "No folder");
     const listId = `files-tree-${this.uid}`;
-    return h_flex().id(`files-${this.uid}`).size_full().min_h(0).min_w(0).overflow_hidden().bg(t.surface).text_color(t.foreground).text_size(13)
+    // 原生分栏按实例保留拖动后的宽度，重绘和切换标签不会重置。
+    return h_resizable(`files-${this.uid}`).size_full().min_h(0).min_w(0).overflow_hidden().bg(t.surface).text_color(t.foreground).text_size(13)
       // Left: the tree stays visible while a file is open, so a preview never
       // hides the way back. Its own header carries the folder name.
-      .child(v_flex().id(`files-tree-${this.uid}`).w(220).flex_none().h_full().min_h(0).p(6).gap(2)
+      .child(resizable_panel().size(220).size_range(160).child(v_flex().id(`files-tree-${this.uid}`).size_full().min_w(0).min_h(0).p(6).gap(2)
         .child(div().px(8).py(4).text_size(11).text_color(t.dim).truncate().child(this.root?.split(/[\\/]/).pop() ?? ""))
         .when(rows.length > 0, tree => tree.child(v_flex().relative().flex_1().min_h(0)
           .child(v_virtual_list(listId, rows.length, 28, (i) => rows[i].path,
@@ -319,10 +320,10 @@ export default class Files extends View {
             .size_full())
           .child(Scrollbar.vertical(listId).absolute().inset_0())))
         .when(Boolean(this.error) || !this.entries.get("")?.length, el => el.child(div().p(8).text_size(12).text_color(t.dim).child(message)))
-        .when(this.limited, el => el.child(div().flex_none().p(8).text_size(11).text_color(t.dim).child("File list limited to 500 entries per folder and 5,000 total"))))
+        .when(this.limited, el => el.child(div().flex_none().p(8).text_size(11).text_color(t.dim).child("File list limited to 500 entries per folder and 5,000 total")))))
       // Right: the preview, on the terminal's own background, with the file's
       // path above it.
-      .child(v_flex().flex_1().h_full().min_w(0).min_h(0).bg(t.background)
+      .child(resizable_panel().size_range(240).child(v_flex().size_full().min_w(0).min_h(0).bg(t.background)
         .when(Boolean(this.file), el => el
           .child(h_flex().h(32).flex_none().px(12).gap(8).items_center()
             .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(this.file))
@@ -336,6 +337,6 @@ export default class Files extends View {
               .on_click((_e, cx) => this.save(cx))
               .child(this.saveError ? "Save failed" : this.saving ? "Saving…" : this.dirty ? "Save" : "Saved"))))
           .child(this.code ? Editor.new(this.code).flex_1().min_h(0) : div().p(12).text_color(t.dim).child(this.fileError || "Loading file…")))
-        .when(!this.file, el => el.child(div().flex_1().flex().items_center().justify_center().text_size(12).text_color(t.dim).child("Select a file to preview"))));
+        .when(!this.file, el => el.child(div().flex_1().flex().items_center().justify_center().text_size(12).text_color(t.dim).child("Select a file to preview")))));
   }
 }
