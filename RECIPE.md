@@ -109,7 +109,11 @@ is Herdr's `files`/`changes` stack.
   it will land on, double-click renames, right-click opens the tab menu, every close
   button closes its own tab. A tab still named by its number is shown by what it runs,
   so "1" becomes the folder or program name; renaming a tab always wins. The `+` opens
-  Herdr's `new-menu` popup.
+  Herdr's `new-menu` popup, and four one-click starts follow it (Claude Code, Pi,
+  Lazygit, Neovim): each runs `tab.new` with its `argv`, so Herdr opens a tab in the
+  focused folder, and each uses the program table's own icon (`icons/claude.svg` as a
+  full-colour image, the rest as tinted glyphs). Claude starts with
+  `--dangerously-skip-permissions`, so it never stops for a permission prompt.
 - **Pane header.** Click focuses the pane. Only the focused header is tinted with the
   space's colour; inactive headers stay plain.
   The split-right, split-down, zoom/unzoom and
@@ -146,7 +150,7 @@ root row (canvas, titlebar none, traffic_lights [12,16], terminal_padding [0,0],
 | Mod | Role |
 |---|---|
 | `my-sidebar` | One mod, two retained child views (`spaces.js` and `agents.js`) composed in a single scrolling column (`main.js`); `colors.js` holds the shared `MARK` table, `markColor()` and the `mix()` used for the flat tint, and `util.js` the background-tick throttle. It keeps the spaces logic (git lookup via `exec`, `hc machine ls`, `watchFolder`, drag-reorder) and the agents logic (live agent data, pins, groups, sub-agent trees) unchanged. Changed: the two sections share one scroll (no 50/50 split), the Agents header follows the spaces content without a top border, the worktree rows draw a real 1 px tree line, rows are square and full-bleed with a flat opaque selection, and both retain the row/type/active-state changes from the earlier passes. The sort popup mounts a second copy of this mod (`props.sortMenu`) and returns only the agents view. |
-| `my-tabs` | The tab bar. Clone of the shipped `tabs`. Changed: full-height square tabs, `px 12`/`gap 8`, 16 px icons, distinct labels for default-numbered tabs, `+` after the last tab, close button fades to 0.4 when inactive, a flat opaque active tab in the space's colour, a drag-to-reorder line, zoom glyph, spinner `frames([...], 80)`. |
+| `my-tabs` | The tab bar. Clone of the shipped `tabs`. Changed: full-height square tabs, `px 12`/`gap 8`, 16 px icons, distinct labels for default-numbered tabs, `+` after the last tab, four quick-start icons after the `+` (Claude Code, Pi, Lazygit, Neovim via `tab.new`), close button fades to 0.4 when inactive, a flat opaque active tab in the space's colour, a drag-to-reorder line, zoom glyph, spinner `frames([...], 80)`. |
 | `my-pane` | The pane header. Clone of the shipped `pane`. Changed: header surface is the theme's `surface`, 12.5 px title / 11.5 px `muted` folder, a flat space-colour tint on the focused header (16% blend into `surface`, no animation), braille working spinner instead of the rotating SVG, always-visible `muted` buttons, and it keeps the split/zoom/close buttons. |
 
 Herdr functions used: `spaces`, `agents`, `terminals`, `panes`, `focused`, `layout`,
@@ -154,19 +158,23 @@ Herdr functions used: `spaces`, `agents`, `terminals`, `panes`, `focused`, `layo
 `run`, `openOverlay` / `closeOverlay`, `props`, `exec`, `hc`, `watchFolder`,
 `localStorage`.
 
-Commands used: `space.select`, `space.move`, `space.new`, `tab.select`, `tab.move`,
-`tab.close`, `tab.rename`, `pane.focus`, `pane.split`,
+Commands used: `space.select`, `space.move`, `space.new`, `tab.new`, `tab.select`,
+`tab.move`, `tab.close`, `tab.rename`, `pane.focus`, `pane.split`,
 `pane.zoom`, `pane.close`, `layout.select`, `layout.show`,
 `layout.hide`, `terminal.pin`, `terminal.peek`, `window.minimize`, `window.maximize`,
 `window.close`, `app.palette`.
 
-Programs run: `git` (via `exec`), `hc machine ls` (via `hc`).
+Programs run: `git` (via `exec`), `hc machine ls` (via `hc`). The quick starts ask
+Herdr to run `claude --dangerously-skip-permissions`, `pi`, `lazygit` and `nvim`
+(`tab.new`'s `argv`); the mod never spawns them itself.
 
 Art: Herdr's shipped `mods/workspace-chrome/*.svg` (branch, plus, chevron-down/right,
-pin, pin-off, server, monitor, check, layers), `mods/pane/close.svg` and `zoom.svg`
-(used by `my-tabs`), `mods/files/file.svg`, `mods/changes/changes.svg`; `my-sidebar`
-carries its own `sort.svg`; `my-pane` carries its own `close/split/zoom` SVGs;
-`my-tabs` carries its own `win-min/max/restore/close.svg` copies for Windows.
+pin, pin-off, server, monitor, check, layers), `icons/claude.svg`, `icons/pi.svg`,
+`icons/lazygit.svg` and `icons/nvim.svg` (the quick starts), `mods/pane/close.svg` and
+`zoom.svg` (used by `my-tabs`), `mods/files/file.svg`, `mods/changes/changes.svg`;
+`my-sidebar` carries its own `sort.svg`; `my-pane` carries its own
+`close/split/zoom` SVGs; `my-tabs` carries its own `win-min/max/restore/close.svg`
+copies for Windows.
 
 ## Watch out
 

@@ -156,9 +156,22 @@ export default class Tabs extends View {
     const newTab = div().id("tab-new").h_full().w(26).flex_none().flex().items_center().justify_center().text_color(t.muted)
       .hover(s => s.bg(t.hover).text_color(t.foreground)).on_mouse_down("left", stop)
       .on_click(() => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 })).child("+");
+    // One-click starts beside the +, using the program table's own icons: the
+    // shipped tinted glyphs inherit the button's colour, Claude's stays orange.
+    const launch = (id, label, icon, tint, argv) => div().id(id).h_full().w(26).flex_none().flex().items_center().justify_center()
+      .text_color(t.muted).tooltip(label)
+      .hover(s => s.bg(t.hover).text_color(t.foreground)).on_mouse_down("left", stop)
+      .on_click(() => run("tab.new", { space: space?.id, argv }))
+      .child(tint ? svg(icon).size(15) : image(icon).size(15));
+    const launches = [
+      launch("start-claude", "Claude Code", "icons/claude.svg", false, ["claude", "--dangerously-skip-permissions"]),
+      launch("start-pi", "Pi", "icons/pi.svg", true, ["pi"]),
+      launch("start-lazygit", "Lazygit", "icons/lazygit.svg", true, ["lazygit"]),
+      launch("start-nvim", "Neovim", "icons/nvim.svg", true, ["nvim"]),
+    ];
     return h_flex().size_full().min_w(0).gap(0).items_center().bg(t.chrome).border_b(1).border_color(t.border)
       .on_mouse_up("left", () => { this.pressed = null; this.over = null; })
-      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(0).overflow_x_scrollbar().children([...entries.map(item), newTab]))
+      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(0).overflow_x_scrollbar().children([...entries.map(item), newTab, ...launches]))
       .when(enabled.includes("files"), el => el.child(panelButton("files", "Files", "mods/my-files/file.svg")))
       .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/my-changes/changes.svg")))
       .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/my-tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))
