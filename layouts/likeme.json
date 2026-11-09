@@ -36,7 +36,7 @@
           "id": "sidebar-footer",
           "type": "block",
           "content": {
-            "mod": "workspace-chrome",
+            "mod": "my-brand",
             "props": {
               "footer": true
             }
@@ -88,12 +88,8 @@
                     "position": "top"
                   },
                   "background": "surface",
-                  "border": {
-                    "width": 1,
-                    "color": "border"
-                  },
                   "radius": 0,
-                  "gap": 0,
+                  "gap": 1,
                   "lone": true
                 }
               }
@@ -144,10 +140,6 @@
     0,
     0
   ],
-  "divider": {
-    "width": 1,
-    "color": "border"
-  },
   "titlebar": "none",
   "traffic_lights": [
     12,

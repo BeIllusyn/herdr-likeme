@@ -14,16 +14,17 @@ the flat square selection, the tab close buttons and the spinner are the real UI
 
 The window is Herdr's `main` layout with six mods replaced. No system title bar
 (`"titlebar": "none"`); on macOS the traffic lights sit at `[12, 16]`. Background is
-the theme's `canvas`, with 1 px `border` dividers.
+the theme's `canvas`, and regions meet with no dividers or separator borders: their
+backgrounds do the separating.
 
 **Sidebar (268 px, min 222, max 480, not resizable).** A 46 px brand block
 (`workspace-chrome`), then one `sidebar-list` block (`my-sidebar`, `weight: 1`,
-`min: 90`), then a 69 px footer (`workspace-chrome` with `props.footer`). The block is
+`min: 90`), then a 69 px footer (`my-brand` with `props.footer`, no top border). The block is
 one scrolling column: Spaces header → space rows → "New space" hint → Agents header →
 agent rows. The Agents header follows the spaces content (10 px top padding, no top
 border), so the two sections no longer split the sidebar in half.
 
-**Spaces.** A 31 px header ("Spaces", 11 px medium, `muted`, + button 26 px). Rows are
+**Spaces.** A 31 px header ("Spaces", 14 px medium, `muted`, + button 26 px). Rows are
 44 px (42 px for worktree children), square and full-bleed, sitting flush against each
 other with no gap. A resting row lies flat under a whisper of its space's colour (5 %);
 the active space is a flat opaque tint mixed from `raised` and its colour (32 %), with
@@ -39,12 +40,12 @@ resting row is the neutral `hover`, never a stronger colour. Each row:
   `foreground`, and below it the current git branch at 11 px (`line-height` 14 px) in
   `muted`. `detached` when the branch is unknown; `↑n` in `ansi2` / `↓n` in `ansi1`
   for ahead/behind. Spaces that are not a git repo show only the name.
-- with fewer than three spaces, a dashed 34 px "New space" row ends the list.
+- with fewer than three spaces, a muted 34 px "New space" row ends the list.
 
 A machine header (26 px) appears once more than one machine is known. The sidebar stays
 at its expanded width: there is no compact rail.
 
-**Agents.** A 41 px header ("Agents", 11 px medium `muted`, up/down sort icon). It
+**Agents.** A 41 px header ("Agents", 14 px medium `muted`, up/down sort icon). It
 follows the spaces content instead of a fixed half; group headers are 28 px. In the
 Priority view the section headers (Needs you / Done / Working / Idle) always show, so
 an all-idle list still says "Idle"; in the grouped view a lone space group hides its
@@ -75,18 +76,24 @@ named by its number shows what it runs: the folder name, or the program name whe
 tabs share a folder (then the number is appended if the programs also collide). The
 `+` sits right after the last tab, inside the scrolling strip.
 
-**Panes.** Square, edge-to-edge cards: no gap, padding or terminal padding, 1 px
-`border`, and the theme's `surface`; inactive panes keep the neutral hairline. 30 px
-header from the cloned `my-pane` mod (`reveal: always`), painted on the same theme
-`surface`. The focused header carries the focus mark: the space's colour as an opaque
-16% blend into `surface` (the theme's `raised` when the space has no colour), the same
+**Panes.** Square, edge-to-edge cards: no padding, terminal padding, frame border or
+header rule — the terminal and the header meet their neighbours directly, and the
+backgrounds tell the regions apart. Split panes keep a 1 px `gap`, so the layout's
+`canvas` shows between them instead of a drawn border; a lone pane still fills its
+tab edge to edge. The pane background is the theme's `surface`; the
+30 px header from the cloned `my-pane` mod (`reveal: always`) is painted on that same
+`surface` with no bottom border. The focused header carries the focus mark: the space's
+colour as an opaque 16% blend into `surface` (the theme's `raised` when the space has
+no colour), the same
 colour language as the active tab and the selected sidebar row, at a lower strength
 because a header is much larger than a tab. It is a flat solid fill — no gradient,
 animation or border — so a space's header colour changes with the space, and light and
 dark themes each get their own surface. Inactive headers stay plain. The title is 12.5 px
 `medium`, the folder 11.5 px `muted`, and the working state is the same gold braille
 character as the tabs and agents. The Files/Changes panel (368 px, hidden by default)
-is Herdr's `files`/`changes` stack.
+is Herdr's `files`/`changes` stack painted on `chrome` like the sidebar, with the
+Changes diff and the file preview on `background`; neither the panel nor its sections
+draw a rule.
 
 ## How it behaves
 
@@ -130,16 +137,16 @@ is Herdr's `files`/`changes` stack.
 "0.1.12"}`):
 
 ```
-root row (canvas, titlebar none, traffic_lights [12,16], terminal_padding [0,0], 1px divider)
+root row (canvas, titlebar none, traffic_lights [12,16], terminal_padding [0,0], no divider)
 ├─ sidebar column (268px, min 222, max 480, background chrome, resizable false)
-│  ├─ brand block (46px, workspace-chrome, window_drag)
+│  ├─ brand block (46px, my-brand, window_drag)
 │  ├─ sidebar-list block (weight 1, min 90, mod my-sidebar)
 │  │  └─ one scroll: Spaces section (spaces.js) + Agents section (agents.js)
-│  └─ sidebar-footer block (69px, workspace-chrome, props {footer: true})
+│  └─ sidebar-footer block (69px, my-brand, props {footer: true})
 └─ work column (resizable false)
    ├─ tabs block (42px, mod my-tabs, window_drag)
    ├─ work-body row (padding 0, gap 0)
-   │  ├─ main block {tab: active, pane: {gap 0, radius 0, background surface, border 1/border,
+   │  ├─ main block {tab: active, pane: {gap 1, radius 0, background surface,
    │  │              lone true, header {mod my-pane, height 30, reveal always}}}
    │  └─ panel column (368px, min 280, max 900, hidden) → panel-body stack
    │     {active files} → files block, changes block
@@ -169,7 +176,7 @@ Herdr to run `claude --dangerously-skip-permissions`, `pi`, `lazygit` and `nvim`
 (`tab.new`'s `argv`); the mod never spawns them itself.
 
 Art: Herdr's shipped `mods/workspace-chrome/*.svg` (branch, plus, chevron-down/right,
-pin, pin-off, server, monitor, check, layers), `icons/claude.svg`, `icons/pi.svg`,
+pin, pin-off, server, monitor, check, layers, search, settings), `icons/claude.svg`, `icons/pi.svg`,
 `icons/lazygit.svg` and `icons/nvim.svg` (the quick starts), `mods/pane/close.svg` and
 `zoom.svg` (used by `my-tabs`), `mods/files/file.svg`, `mods/changes/changes.svg`;
 `my-sidebar` carries its own `sort.svg`; `my-pane` carries its own
@@ -264,7 +271,7 @@ copies for Windows.
   under a whisper of its space's colour.
 - The active space is a flat opaque tint clearly apart from the flat rows and their
   neutral hover; rows are square, full-bleed and flush with no gap; a list shorter
-  than three spaces ends with a dashed "New space" row.
+  than three spaces ends with a muted "New space" row.
 - Each agent row shows two lines on a whisper of its space's colour; the focused agent
   is the same flat opaque tint, and the selection changes within 250 ms of the focus
   moving. Priority keeps its section headers visible even when only one section has

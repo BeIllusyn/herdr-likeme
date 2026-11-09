@@ -67,8 +67,6 @@ export default class Pane extends View {
       .items_center()
       .bg(bg)
       .overflow_hidden()
-      .border_b(1)
-      .border_color(t.border)
       .text_size(12)
       .on_click(() => run("pane.focus", { pane }))
       .when(Boolean(pic), (el) => el.child(pic))

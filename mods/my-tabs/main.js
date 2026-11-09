@@ -169,7 +169,7 @@ export default class Tabs extends View {
       launch("start-lazygit", "Lazygit", "icons/lazygit.svg", true, ["lazygit"]),
       launch("start-nvim", "Neovim", "icons/nvim.svg", true, ["nvim"]),
     ];
-    return h_flex().size_full().min_w(0).gap(0).items_center().bg(t.chrome).border_b(1).border_color(t.border)
+    return h_flex().size_full().min_w(0).gap(0).items_center().bg(t.chrome)
       .on_mouse_up("left", () => { this.pressed = null; this.over = null; })
       .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(0).overflow_x_scrollbar().children([...entries.map(item), newTab, ...launches]))
       .when(enabled.includes("files"), el => el.child(panelButton("files", "Files", "mods/my-files/file.svg")))

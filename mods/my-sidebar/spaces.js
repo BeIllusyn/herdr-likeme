@@ -482,7 +482,6 @@ export default class Spaces extends View {
   // Always keep a place to make the next space at the end of the list.
   ghost(t) {
     return h_flex().id("space-new-hint").h(34).flex_none().px(16).gap(8)
-      .border(1).border_dashed().border_color(t.border)
       .text_size(12).text_color(t.muted).items_center().cursor_pointer()
       .hover(s => s.bg(t.hover).text_color(t.foreground))
       .on_click(() => run("space.new"))
@@ -513,7 +512,7 @@ export default class Spaces extends View {
     return v_flex().text_size(13)
       .when(!embedded, el => el.size_full().min_h(0).bg(t.chrome))
       .when(embedded, el => el.w_full().flex_none())
-      .child(h_flex().h(31).pl(16).pr(10).items_center().justify_between().text_size(11).font_medium().text_color(t.muted)
+      .child(h_flex().h(31).pl(16).pr(10).items_center().justify_between().text_size(14).font_medium().text_color(t.muted)
         .child("Spaces")
         .child(div().id("space-new").size(26).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(t.hover).text_color(t.foreground))
           .on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(14))))
