@@ -455,8 +455,8 @@ export default class Spaces extends View {
             div().ml(10).w(6).flex_none().border_l(1).border_color(t.input)
               .when(tree === "└─", d => d.h(21).self_start().border_b(1).rounded_bl(6))
               .when(tree !== "└─", d => d.self_stretch()),
-          ).child(svg("mods/workspace-chrome/branch.svg").size(13).text_color(t.muted)))
-          .when(!tree, el => el.child(h_flex().size(20).flex_none().rounded(6).bg(fill).items_center().justify_center().text_size(11).font_semibold().text_color("#101114").child([...w.name][0]?.toUpperCase() ?? "?")))
+          ).child(svg("mods/workspace-chrome/branch.svg").size(20).text_color(t.muted)))
+          .when(!tree, el => el.child(h_flex().size(32).flex_none().rounded(10).bg(fill).items_center().justify_center().text_size(15).font_semibold().text_color("#101114").child([...w.name][0]?.toUpperCase() ?? "?")))
           // Left: the icon. Right: the project name over its branch.
           .child(
             v_flex()
