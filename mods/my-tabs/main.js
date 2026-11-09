@@ -1,6 +1,6 @@
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, panes, run, openOverlay, theme, window, shared, layout } from "herdr";
+import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings } from "herdr";
 import { markColor, mix } from "./colors.js";
 
 // Every node the tab bar needs, in one walk: `layout()` is the whole layout
@@ -138,8 +138,15 @@ export default class Tabs extends View {
         .child(div().id(`close-${c.id}`).size(16).flex().flex_none().items_center().justify_center().rounded(4).text_color(t.muted).opacity(c.active ? 0.9 : 0.4).hover(s => s.bg(t.hover).text_color(t.foreground).opacity(1)).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/pane/close.svg").size(11)));
     };
     const root = layout(), w = window();
-    const nodes = findMany(root, ["panel", "panel-body"]);
-    const panel = nodes.panel, body = nodes["panel-body"];
+    const nodes = findMany(root, ["panel", "panel-body", "sidebar"]);
+    const panel = nodes.panel, body = nodes["panel-body"], sidebar = nodes.sidebar;
+    // macOS draws the traffic lights over the window's top-left corner. While the
+    // sidebar is open it covers that corner; once it's hidden (cmd+b) the tab bar
+    // reaches x=0, so leave the buttons their room and start the tabs after them.
+    const lights = w?.platform === "macos" && w.titlebar === "none" && !w.fullscreen && root?.traffic_lights;
+    const left = lights
+      ? Math.max(8, (root.traffic_lights[0] + 64) / (settings().zoom ?? 1) - (sidebar?.hidden ? 0 : sidebar?.size?.px ?? 0))
+      : 8;
     const enabled = shared("workspace.panels") ?? ["files", "changes"];
     this.syncPanel(space, panel, body, enabled);
     const panelButton = (id, label, icon) => {
@@ -169,7 +176,7 @@ export default class Tabs extends View {
       launch("start-lazygit", "Lazygit", "icons/lazygit.svg", true, ["lazygit"]),
       launch("start-nvim", "Neovim", "icons/nvim.svg", true, ["nvim"]),
     ];
-    return h_flex().size_full().min_w(0).gap(4).pl(8).pr(8).items_center().bg(t.chrome)
+    return h_flex().size_full().min_w(0).gap(4).pl(left).pr(8).items_center().bg(t.chrome)
       .on_mouse_up("left", () => { this.pressed = null; this.over = null; })
       .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(4).overflow_x_scrollbar().children([...entries.map(item), newTab, ...launches]))
       .when(enabled.includes("files"), el => el.child(panelButton("files", "Files", "mods/my-files/file.svg")))
