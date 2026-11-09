@@ -87,7 +87,7 @@
                     "height": 30,
                     "position": "top"
                   },
-                  "background": "#1a1d22",
+                  "background": "surface",
                   "border": {
                     "width": 1,
                     "color": "border"

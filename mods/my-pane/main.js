@@ -3,8 +3,8 @@
 // Shows the program's icon (the app's program table), the agent's name or
 // the terminal's title, the folder, and the agent's status; buttons split, zoom and close
 // this pane. Props from the app: { pane, terminal }. Click: focus the pane.
-// The focused header wears its space's colour as a dark, opaque tint — the
-// same language as the active tab and the selected sidebar row.
+// The focused header wears its space's colour as an opaque tint on the theme's
+// surface — the same language as the active tab and the selected sidebar row.
 
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
@@ -53,10 +53,11 @@ export default class Pane extends View {
     // The active tab and selected sidebar row use a 30% blend; a whole header
     // is much larger, so it takes the same colour at a quieter 16%. Only the
     // focused header wears it, so only that one does the lookup and blend.
-    let bg = "#1a1d22";
+    // The surface is the theme's, so light and dark themes each get their own.
+    let bg = t.surface;
     if (p.focused) {
       const fill = markColor((shared("space.colors") ?? {})[focused()?.space], t);
-      bg = fill ? mix("#1a1d22", fill, 0.16) : "#1d2128";
+      bg = fill ? mix(t.surface, fill, 0.16) : t.raised;
     }
     return h_flex()
       .id(`pane-head-${pane}`)
