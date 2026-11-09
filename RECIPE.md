@@ -15,9 +15,8 @@ the rounded card selection, the tab close buttons and the spinner are the real U
 
 The window is Herdr's `main` layout with six mods replaced. No system title bar
 (`"titlebar": "none"`); on macOS the traffic lights sit at `[12, 16]`. Background is
-the theme's `canvas`; the sidebar and the right-hand panel column share the theme's
-`chrome`, and regions meet with no dividers or separator borders: their backgrounds do
-the separating.
+the theme's `canvas`; the sidebar and the tab bar share the theme's `chrome`, and regions
+meet with no dividers or separator borders: their backgrounds do the separating.
 
 **Sidebar (268 px, min 222, max 480, not resizable).** A 46 px empty brand block
 (`my-brand`, an empty window-drag surface), then one `sidebar-list` block (`my-sidebar`, `weight: 1`,
@@ -93,11 +92,18 @@ because a header is much larger than a tab. It is a flat solid fill — no gradi
 animation or border — so a space's header colour changes with the space, and light and
 dark themes each get their own surface. Inactive headers stay plain. The title is 12.5 px
 `medium`, the folder 11.5 px `muted`, and the working state is the same gold braille
-character as the tabs and agents. The Files/Changes panel (368 px, hidden by default)
-is Herdr's `files`/`changes` stack painted on `chrome` like the sidebar — the panel
-column itself carries `chrome`, so the right column matches the left one and separates
-from the pane by colour — with the Changes diff and the file preview on `background`;
-neither the panel nor its sections draw a rule.
+character as the tabs and agents. Files and Changes are not a side column: the tab bar's
+buttons open each in a tab of its own (`tab.new {name, mod, props: {cwd}}`), rooted in
+the focused terminal's folder. A Files/Changes tab gets the ordinary 30 px pane header
+(`my-pane`) with the name Files or Changes, and its body splits left/right: the file
+tree, or the changed files with the commit box under them, on the pane's `surface`; the
+file preview or the diff on the right, on the terminal's `background`; neither the pane
+nor its sections draw a rule. The open file and the selected change are tinted in the
+list. The file preview is editable: a burst of keystrokes writes once after a pause (and
+on blur, a file switch or closing the tab) through `writeTextFile`, with the text it read
+as `expected`; the path row says Saved / Saving… / Save failed, and a file too large to
+round-trip stays read-only. While another tab is in front, a Files/Changes tab keeps its
+root and its open folders.
 
 ## How it behaves
 
@@ -132,8 +138,12 @@ neither the panel nor its sections draw a rule.
   is one (working spinner, "Needs you", done dot); an idle agent shows nothing. Each
   button acts on its own pane (`props().pane`), not the focused one. Working shows the
   same braille character as the tabs and agents.
-- Everything else (Files/Changes, palette, dialogs and notifications) is unchanged
-  from `main`.
+- **Files / Changes.** The tab bar's buttons open a tab of their own, rooted in the
+  focused terminal's folder. The button is tinted while that tab is in front, selects
+  the tab when it is open in the background, and closes it on a click from that tab.
+  The tab keeps its folder and open folders while another tab is in front, so switching
+  back finds it as it was.
+- Everything else (the palette, dialogs and notifications) is unchanged from `main`.
 
 ## Built from
 
@@ -150,30 +160,33 @@ root row (canvas, titlebar none, traffic_lights [12,16], terminal_padding [0,0],
 └─ work column (resizable false)
    ├─ tabs block (42px, mod my-tabs, window_drag)
    ├─ work-body row (padding 0, gap 0)
-   │  ├─ main block {tab: active, pane: {gap 1, radius 0, background surface,
-   │  │              lone true, header {mod my-pane, height 30, reveal always}}}
-   │  └─ panel column (368px, min 280, max 900, background chrome, hidden)
-   │     → panel-body stack {active files} → files block, changes block
+   │  └─ main block {tab: active, pane: {gap 1, radius 0, background surface,
+   │                lone true, header {mod my-pane, height 30, reveal always}}}
 ```
+
+Files and Changes have no layout node: the tab bar opens each as a tab of its own
+(`tab.new {name, mod: "my-files" | "my-changes", props: {cwd}}`), selects it with
+`tab.select` when it is in the background, and closes it with `tab.close`. The tab is
+rooted in the folder the focused terminal was in, and Herdr saves its mod pane with the
+tab, so closing the app and switching tabs both find it as it was.
 
 **Mods.**
 
 | Mod | Role |
 |---|---|
 | `my-sidebar` | One mod, two retained child views (`spaces.js` and `agents.js`) composed in a single scrolling column (`main.js`); `colors.js` holds the shared `MARK` table, `markColor()` and the `mix()` used for the flat tint, and `util.js` the background-tick throttle. It keeps the spaces logic (git lookup via `exec`, `hc machine ls`, `watchFolder`, drag-reorder) and the agents logic (live agent data, pins, groups, sub-agent trees) unchanged. Changed: the two sections share one scroll (no 50/50 split), the Agents header follows the spaces content without a top border, the worktree rows draw a real 1 px tree line, rows are rounded cards with a soft opaque selection and a 4 px gap, and both retain the row/type/active-state changes from the earlier passes. The sort popup mounts a second copy of this mod (`props.sortMenu`) and returns only the agents view. |
-| `my-tabs` | The tab bar. Clone of the shipped `tabs`. Changed: 30 px rounded tabs (8 px radius), `px 10`/`gap 8`, 16 px icons, distinct labels for default-numbered tabs, `+` after the last tab, four quick-start icons after the `+` (Claude Code, Pi, Lazygit, Neovim via `tab.new`), close button fades to 0.4 when inactive, a soft opaque active tab in the space's colour, a drag-to-reorder line, zoom glyph, spinner `frames([...], 80)`. |
+| `my-tabs` | The tab bar. Clone of the shipped `tabs`. Changed: 30 px rounded tabs (8 px radius), `px 10`/`gap 8`, 16 px icons, distinct labels for default-numbered tabs, `+` after the last tab, four quick-start icons after the `+` (Claude Code, Pi, Lazygit, Neovim via `tab.new`), close button fades to 0.4 when inactive, a soft opaque active tab in the space's colour, a drag-to-reorder line, zoom glyph, spinner `frames([...], 80)`. The Files/Changes buttons open a tab of their own (`tab.new`), tinted while it is in front, select it when it is in the background, and close it on a click from that tab. |
 | `my-pane` | The pane header. Clone of the shipped `pane`. Changed: header surface is the theme's `surface`, 12.5 px title / 11.5 px `muted` folder, a flat space-colour tint on the focused header (16% blend into `surface`, no animation), braille working spinner instead of the rotating SVG, always-visible `muted` buttons, and it keeps the split/zoom/close buttons. |
 
 Herdr functions used: `spaces`, `agents`, `terminals`, `panes`, `focused`, `layout`,
 `theme`, `window`, `settings`, `keys`, `home`, `shared` / `setShared`, `setAgentOrder`,
-`run`, `openOverlay` / `closeOverlay`, `props`, `exec`, `hc`, `watchFolder`,
-`localStorage`.
+`run`, `openOverlay` / `closeOverlay`, `props`, `exec`, `readTextFile`,
+`writeTextFile`, `hc`, `watchFolder`, `localStorage`.
 
 Commands used: `space.select`, `space.move`, `space.new`, `tab.new`, `tab.select`,
 `tab.move`, `tab.close`, `tab.rename`, `pane.focus`, `pane.split`,
-`pane.zoom`, `pane.close`, `layout.select`, `layout.show`,
-`layout.hide`, `terminal.pin`, `terminal.peek`, `window.minimize`, `window.maximize`,
-`window.close`, `app.palette`.
+`pane.zoom`, `pane.close`, `terminal.pin`, `terminal.peek`, `window.minimize`,
+`window.maximize`, `window.close`, `app.palette`.
 
 Programs run: `git` (via `exec`), `hc machine ls` (via `hc`). The quick starts ask
 Herdr to run `claude --dangerously-skip-permissions`, `pi`, `lazygit` and `nvim`
@@ -240,6 +253,14 @@ copies for Windows.
   `v_virtual_list`; a renderer may not register handlers or retain state, so the row
   helpers are pure and the click is the list's `on_item_click` (keyed by path). A
   non-virtualized tree built up to 5,000 elements on every render.
+- **Saving is optimistic and whole-file.** `writeTextFile(path, text, expected)`
+  replaces the file only while it still holds `expected` (the text the copy read or last
+  wrote), so a file changed elsewhere says "Save failed" instead of being overwritten;
+  reopening the file loads the new content. A preview over 400,000 characters is cut for
+  display and stays read-only, so the cut text never goes back to disk. There is no
+  range API: every save writes the whole file. The editor writes on a 700 ms debounce
+  and again on blur, submit, a file switch and `close`; `set_value` keeps the change
+  listener out of the keystroke path.
 - Heights are fixed: 44 px agent/space rows, 42 px worktree rows, 26 px sub-agent rows,
   30 px tabs in a 42 px bar. A larger font will clip rather than grow.
 - The selected row and tab are an opaque blend, not an alpha layer, so they look the
@@ -251,8 +272,9 @@ copies for Windows.
 - Mod names (`my-sidebar`, `my-tabs`, `my-pane`, `my-files`, `my-changes`, `my-brand`)
   are deliberately generic. Rename them on install if they clash, and update the
   `"mod"` fields in `likeme.json`.
-- The Files/Changes choice is remembered per space by `my-tabs` in `localStorage`
-  (`likeme.panels`), not in the layout.
+- Files/Changes are tabs of their own, so the choice needs no `localStorage`: Herdr
+  saves a tab and its mod pane, the tab bar finds the tab by its one mod pane, and a
+  hidden tab keeps its folder and open folders. `my-tabs` keeps no panel state.
 - Space avatar colors are shared through `"space.colors"`; every layout sees them.
 - Only this layout is customized. `terminals` and `win98` keep Herdr's look.
 - On macOS the empty brand block leaves room for the traffic lights; the tab bar does
@@ -290,6 +312,16 @@ copies for Windows.
   folder; only the focused header is tinted with the space's colour, inactive ones stay
   plain; in a light theme the header is light too; its always-visible buttons still
   split, zoom and close the pane they belong to.
+- The tab bar's Files/Changes buttons open a tab of their own rooted in the focused
+  terminal folder, tinted while it is in front; a click from another tab brings it back,
+  a click from that tab closes it, and the pane header reads Files or Changes. Switching
+  tabs away and back finds the same folder, open folders and selected file. Both views
+  split left/right: the tree or the changed files (with the commit box) on the left, the
+  preview or diff on the right, and the open file or change is tinted in its list.
+- A file opened in Files can be typed into and saves itself after a pause (or on blur,
+  a file switch and closing the tab); the path row says Saved / Saving… / Save failed,
+  and the file on disk changes. A file edited elsewhere rejects the write instead of
+  being overwritten, and a truncated (>400,000 characters) preview stays read-only.
 - Spaces and agents live in one scroll: the Agents header follows the spaces content
   with no 50/50 boundary, and scrolling moves both sections together.
 - A worktree space appears under its checkout with a 1 px tree line; the last child

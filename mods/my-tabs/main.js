@@ -1,10 +1,10 @@
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings } from "herdr";
+import { spaces, panes, focused, run, openOverlay, theme, window, shared, layout, settings } from "herdr";
 import { markColor, mix } from "./colors.js";
 
-// Every node the tab bar needs, in one walk: `layout()` is the whole layout
-// document, and the bar used to walk it three times per render.
+// The bar reads the sidebar node out of `layout()` (the whole layout document);
+// the traffic lights and window facts come from the root and `window()`.
 function findMany(root, ids) {
   const wanted = new Set(ids), found = {};
   const stack = [root];
@@ -21,36 +21,6 @@ export default class Tabs extends View {
   init() {
     this.pressed = null;
     this.over = null;
-    // `likeme.` namespaces the choice; the bare key is the pre-rename one.
-    this.panels = JSON.parse((localStorage.getItem("likeme.panels") ?? localStorage.getItem("panels")) ?? "{}");
-  }
-
-  // The side panel is remembered per space: switching shows that space's choice
-  // (closed if it never had one), and opening or closing it records it.
-  syncPanel(space, panel, body, enabled) {
-    if (!space || !panel) return;
-    const now = panel.hidden ? null : body?.active ?? null;
-    if (space.id !== this.space) {
-      const first = this.space === undefined;
-      this.space = space.id; this.pending = null;
-      if (!(first && !(space.id in this.panels))) {
-        const stored = this.panels[space.id] ?? null, want = enabled.includes(stored) ? stored : null;
-        if (want !== now) {
-          this.pending = { want, until: Date.now() + 1000 };
-          if (want) { run("layout.select", { stack: "panel-body", child: want }); run("layout.show", { id: "panel" }); }
-          else run("layout.hide", { id: "panel" });
-          return;
-        }
-      }
-    }
-    // Until the restore lands (or something else won), the old state isn't a choice.
-    if (this.pending) {
-      if (this.pending.want !== now && Date.now() < this.pending.until) return;
-      this.pending = null;
-    }
-    if (this.panels[space.id] === now) return;
-    this.panels[space.id] = now;
-    localStorage.setItem("likeme.panels", JSON.stringify(this.panels));
   }
 
   render() {
@@ -71,7 +41,9 @@ export default class Tabs extends View {
     }
     const entries = shown.map((c, i) => {
       const mine = panesByTab.get(c.id) ?? [];
-      const pane = mine.find(p => p.program?.agent) ?? mine[0];
+      // A helper pane has no program: label the tab from its terminal, never
+      // from the Files/Changes pane beside it.
+      const pane = mine.find(p => p.program?.agent) ?? mine.find(p => p.terminal) ?? mine[0];
       const program = pane?.program;
       const auto = !c.named;
       const dir = pane?.cwd?.replace(/\/+$/, "").split("/").pop();
@@ -138,8 +110,7 @@ export default class Tabs extends View {
         .child(div().id(`close-${c.id}`).size(16).flex().flex_none().items_center().justify_center().rounded(4).text_color(t.muted).opacity(c.active ? 0.9 : 0.4).hover(s => s.bg(t.hover).text_color(t.foreground).opacity(1)).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/pane/close.svg").size(11)));
     };
     const root = layout(), w = window();
-    const nodes = findMany(root, ["panel", "panel-body", "sidebar"]);
-    const panel = nodes.panel, body = nodes["panel-body"], sidebar = nodes.sidebar;
+    const sidebar = findMany(root, ["sidebar"]).sidebar;
     // macOS draws the traffic lights over the window's top-left corner. While the
     // sidebar is open it covers that corner; once it's hidden (cmd+b) the tab bar
     // reaches x=0, so leave the buttons their room and start the tabs after them.
@@ -148,16 +119,37 @@ export default class Tabs extends View {
       ? Math.max(8, (root.traffic_lights[0] + 64) / (settings().zoom ?? 1) - (sidebar?.hidden ? 0 : sidebar?.size?.px ?? 0))
       : 8;
     const enabled = shared("workspace.panels") ?? ["files", "changes"];
-    this.syncPanel(space, panel, body, enabled);
+    // A Files/Changes tab has one pane, the mod: find that tab in this space.
+    const modTab = (mod) => shown.find(t => {
+      const mine = panesByTab.get(t.id) ?? [];
+      return mine.length === 1 && mine[0].mod === mod;
+    });
     const panelButton = (id, label, icon) => {
-      const on = panel && !panel.hidden && body?.active === id;
+      const mod = `my-${id}`, own = modTab(mod), on = Boolean(own?.active);
       return h_flex().id(`panel-${id}`).h(30).rounded(8).px(10).gap(5).flex_none().items_center()
         .text_size(12).bg(on ? balloon : fill ? fill + "0d" : t.chrome).text_color(on ? t.foreground : t.muted)
         // Hovering an open panel keeps its tint: the background is the only sign it's on.
         .when(!on, el => el.hover(s => s.bg(t.hover))).on_mouse_down("left", stop)
         .on_click(() => {
-          if (on) run("layout.hide", { id: "panel" });
-          else { run("layout.select", { stack: "panel-body", child: id }); run("layout.show", { id: "panel" }); }
+          // Read the space again at the click: a second press landing before the
+          // redraw must close or select that tab, not open another.
+          const s = spaces().find(p => p.active), tabs = s?.tabs ?? [], all = panes();
+          const openTab = tabs.find(t => {
+            const mine = all.filter(p => p.tab === t.id);
+            return mine.length === 1 && mine[0].mod === mod;
+          });
+          if (openTab) {
+            if (openTab.active) run("tab.close", { id: openTab.id });
+            else run("tab.select", { id: openTab.id });
+            return;
+          }
+          // A tab of its own, rooted in the folder the focused terminal is in.
+          // From another helper tab the focus is a mod pane (no folder), so take
+          // the space's first terminal instead.
+          const ids = new Set(tabs.map(t => t.id)), mine = all.filter(p => ids.has(p.tab));
+          const here = mine.find(p => p.pane === focused()?.pane);
+          const cwd = (here?.terminal ? here : mine.find(p => p.terminal))?.cwd || s?.folder;
+          run("tab.new", { name: label, space: s?.id, mod, ...(cwd ? { props: { cwd } } : {}) });
         }).child(svg(icon).size(14)).child(label);
     };
     const newTab = div().id("tab-new").h(30).w(30).rounded(8).flex_none().flex().items_center().justify_center().text_color(t.muted)

@@ -93,40 +93,6 @@
                   "lone": true
                 }
               }
-            },
-            {
-              "id": "panel",
-              "type": "column",
-              "children": [
-                {
-                  "id": "panel-body",
-                  "type": "stack",
-                  "children": [
-                    {
-                      "id": "files",
-                      "type": "block",
-                      "content": {
-                        "mod": "my-files"
-                      }
-                    },
-                    {
-                      "id": "changes",
-                      "type": "block",
-                      "content": {
-                        "mod": "my-changes"
-                      }
-                    }
-                  ],
-                  "active": "files"
-                }
-              ],
-              "size": {
-                "px": 368
-              },
-              "min": 280,
-              "max": 900,
-              "background": "chrome",
-              "hidden": true
             }
           ],
           "padding": 0,

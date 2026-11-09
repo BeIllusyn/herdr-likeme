@@ -12,6 +12,8 @@ import { panes, props, run, theme, home, focused, shared } from "herdr";
 import { markColor, mix } from "./colors.js";
 
 const HOME = home();
+// A mod pane carries its folder name as `title`; the helper panes read better.
+const MOD_NAMES = { "my-files": "Files", "my-changes": "Changes" };
 
 function icon(p, size, color) {
   if (!p?.icon) return null;
@@ -46,7 +48,7 @@ export default class Pane extends View {
     const t = theme();
     const p = this.me();
     if (!p) return div();
-    const name = ((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || "shell";
+    const name = ((p.program?.agent || p.program?.shell) && p.program.name) || (p.mod && MOD_NAMES[p.mod]) || p.title || p.program?.name || "shell";
     const pic = icon(p.program, 14, t.muted);
     const st = p.status;
     const pane = p.pane;
@@ -55,7 +57,11 @@ export default class Pane extends View {
     // focused header wears it, so only that one does the lookup and blend.
     // The surface is the theme's, so light and dark themes each get their own.
     let bg = t.surface;
-    if (p.focused) {
+    // A mod pane holds the keyboard; `focused` on the panes list is not always
+    // cleared for the terminal beside it, so trust the live focus when there is
+    // one. A layout terminal block (no model pane focused) keeps `focused`.
+    const liveFocus = focused()?.pane;
+    if (liveFocus ? liveFocus === p.pane : p.focused) {
       const fill = markColor((shared("space.colors") ?? {})[focused()?.space], t);
       bg = fill ? mix(t.surface, fill, 0.16) : t.raised;
     }

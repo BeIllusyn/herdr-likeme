@@ -1,33 +1,24 @@
 // A lazy file browser for the focused pane's folder, with bounded read-only previews.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, Scrollbar, v_virtual_list } from "gpui-base";
-import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, window, layout } from "herdr";
+import { spaces, panes, focused, props, exec, readTextFile, writeTextFile, watchFolder, theme, settings, window } from "herdr";
 
-// Both nodes in one walk: `layout()` is the whole layout document.
-function findMany(root, ids) {
-  const wanted = new Set(ids), found = {};
-  const stack = [root];
-  while (stack.length) {
-    const node = stack.pop();
-    if (!node) continue;
-    if (wanted.has(node.id)) found[node.id] = node;
-    for (const child of node.children ?? []) stack.push(child);
-  }
-  return found;
-}
-
-// The panel is hidden by default; a hidden panel does not need a git status or
-// a directory listing every ten seconds.
-function shown() {
-  const nodes = findMany(layout(), ["panel", "panel-body"]);
-  return Boolean(nodes.panel && !nodes.panel.hidden && nodes["panel-body"]?.active === "files");
-}
-
-function location() {
+// `tab` is the tab this copy lives in. While another tab is in front, null says
+// "keep what this copy shows": a Files tab is its own place, so switching tabs
+// neither reloads another folder nor forgets its open folders.
+function location(tab, openedAt) {
   const space = spaces().find(s => s.active), f = focused();
-  const pane = f?.pane ? panes().find(p => p.pane === f.pane) : null;
+  if (tab && f?.tab !== tab) return null;
+  const at = f?.pane ? panes().find(p => p.pane === f.pane) : null;
+  // Clicking the Files pane gives it the keyboard, and a mod pane has no folder:
+  // stay on the folder the tab was opened in.
+  if (at && !at.terminal) return { cwd: openedAt || space?.folder, on: space?.machine ?? null, space: space?.id };
+  // Before this copy has seen its own tab, start on the folder the tab was opened
+  // on rather than on whichever terminal happens to be focused elsewhere: when
+  // the first click then focuses this pane, the root does not change under it.
+  if (!tab && openedAt) return { cwd: openedAt, on: space?.machine ?? null, space: space?.id };
   const on = f?.pane === null ? (f.terminal?.includes("/") ? f.terminal.split("/")[0] : null) : space?.machine ?? null;
-  return { cwd: pane?.cwd || f?.cwd || space?.folder, on, space: space?.id };
+  return { cwd: at?.cwd || f?.cwd || space?.folder, on, space: space?.id };
 }
 const keyOf = (loc) => JSON.stringify(loc);
 const LANG = { ts: "js", tsx: "js", mts: "js", cts: "js", jsx: "js", mjs: "js", toml: "yaml", jsonc: "json", svelte: "html", vue: "html" };
@@ -56,17 +47,21 @@ export default class Files extends View {
     this.entries = new Map(); this.folders = new Set(); this.pending = new Set(); this.marks = {};
     this.flat = null;
     this.want = null;
-    this.stale = false;
-    this.wake(cx);
-    cx.timer.every(10000, cx => this.wake(cx));
-  }
-
-  // Hidden, there is nothing to keep fresh: mark it and refresh when it is
-  // shown again. This saves a listing plus a git status every ten seconds in a
-  // layout whose panel starts closed.
-  wake(cx, loc) {
-    if (shown()) this.refresh(cx, loc);
-    else this.stale = true;
+    // The tab is opened on the folder the person was working in; the copy keeps
+    // that root while it is its own tab (a mod pane has no folder of its own).
+    this.openedAt = props()?.cwd ?? null;
+    this.tab = null; this.lastLoc = null;
+    // The editor writes back through writeTextFile with the text it read, so a
+    // file changed elsewhere rejects instead of being overwritten.
+    this.original = null; this.dirty = false; this.saving = false; this.saveError = null;
+    this.editable = false; this.saveVersion = 0;
+    const f = focused(), at = f?.pane ? panes().find(p => p.pane === f.pane) : null;
+    if (at && !at.terminal && at.mod === "my-files") this.tab = f.tab;
+    // Several copies can be open, one per tab: keep their element ids apart so a
+    // click or scrollbar in one never lands on another's list.
+    this.uid = Math.random().toString(36).slice(2, 7);
+    this.refresh(cx);
+    cx.timer.every(10000, cx => this.refresh(cx));
   }
 
   watch(root, cx) {
@@ -77,9 +72,7 @@ export default class Files extends View {
       try {
         while (this.context === context) {
           await watchFolder(root);
-          // A file saved while the panel is closed is not worth a listing and a
-          // git status; the next render after it opens refreshes once.
-          if (this.current(context)) this.wake(cx);
+          if (this.current(context)) this.refresh(cx);
         }
       }
       catch { if (this.context === context) this.watched = null; }
@@ -103,18 +96,21 @@ export default class Files extends View {
     if (entries.length > PER_FOLDER || used + entries.length > TOTAL) this.limited = true;
   }
 
-  refresh(cx, loc = location()) {
+  refresh(cx, loc) {
+    // While another tab is in front, keep the folder this copy already shows.
+    loc ??= location(this.tab, this.openedAt) ?? this.lastLoc;
+    if (!loc) return;
+    this.lastLoc = loc;
     const { cwd, on } = loc, next = keyOf(loc);
     this.want = next;
     if (next !== this.context?.key) {
       if (this.context) this.saved.set(this.context.key, { folders: this.folders, file: this.file });
       const saved = this.saved.get(next);
       this.context = { key: next, cwd, on }; this.root = cwd; this.on = on; this.entries = new Map(); this.folders = new Set(saved?.folders);
-      this.pending = new Set(); this.marks = {}; this.show(null); this.watched = null; this.error = null; this.limited = false;
+      this.pending = new Set(); this.marks = {}; this.show(null, cx); this.watched = null; this.error = null; this.limited = false;
       this.loading = false; this.flat = null;
       if (saved?.file) this.show(saved.file, cx);
     }
-    this.stale = false;
     if (!cwd || this.loading) return;
     const context = this.context;
     this.loading = true;
@@ -172,8 +168,39 @@ export default class Files extends View {
     cx.notify();
   }
 
+  // Writes the editor's text back. `expected` is what the file said when it was
+  // read or last written; a change made elsewhere rejects rather than being lost.
+  save(cx) {
+    const path = this.file, code = this.code;
+    if (!path || !code || !this.dirty) return;
+    const text = code.value(), expected = this.original;
+    const root = this.root, on = this.on, context = this.context;
+    this.dirty = false; this.saving = true; this.saveError = null;
+    cx.notify();
+    cx.spawn(async cx => {
+      try {
+        await writeTextFile(`${root}/${path}`, text, expected);
+        if (this.context === context && this.file === path) {
+          this.original = text;
+          this.saving = false;
+          // An edit made while the write was out stays dirty for the next save.
+          if (this.code?.value() !== text) this.dirty = true;
+        }
+      } catch {
+        if (this.context === context && this.file === path) {
+          this.saving = false;
+          this.dirty = true;
+          this.saveError = "Save failed — the file changed on disk";
+        }
+      } finally { cx.notify(); }
+    });
+  }
+
   show(path, cx) {
+    // Switching files must not drop an edit sitting in the auto-save window.
+    if (this.dirty && cx) this.save(cx);
     this.code?.release(); this.code = null; this.file = path; this.fileError = null;
+    this.original = null; this.dirty = false; this.saving = false; this.saveError = null; this.editable = false;
     if (!path || !cx) return;
     const context = this.context, root = this.root, on = this.on;
     cx.spawn(async cx => {
@@ -183,13 +210,43 @@ export default class Files extends View {
         if (text === null) { this.fileError = "This file is no longer available"; return; }
         if (text.includes("\0")) { this.fileError = "Binary file · no text preview"; return; }
         const t = theme(), ext = path.includes(".") ? path.split(".").pop() : "txt";
-        this.code = EditorState.new({ language: LANG[ext] ?? ext, readonly: true,
-          value: text.length > 400000 ? text.slice(0, 400000) + "\n… (file truncated)" : text,
+        // A truncated preview must not be written back as the file's whole text.
+        const editable = text.length <= 400000;
+        this.original = text; this.editable = editable;
+        this.code = EditorState.new({ language: LANG[ext] ?? ext, readonly: !editable,
+          value: editable ? text : text.slice(0, 400000) + "\n… (file truncated)",
           font_family: settings().font_family, font_size: 12,
           syntax: { keyword: t.ansi5, string: t.ansi2, comment: t.dim, function: t.ansi4, type: t.ansi3, number: t.ansi1, constant: t.ansi6 } });
+        if (editable) {
+          // Coalesce keystrokes: one write after a pause, plus one on blur,
+          // submit, file switch or close.
+          this.code.on("change", (_e, cx) => {
+            // Getting focus can report a change with the same text: that is not
+            // an edit, and turning it into a save round-trip only redraws.
+            if (this.code.value() === this.original) {
+              if (!this.dirty) return;
+              this.dirty = false; this.saveVersion++; cx.notify();
+              return;
+            }
+            const wasDirty = this.dirty;
+            this.dirty = true;
+            const version = ++this.saveVersion;
+            if (!wasDirty) cx.notify();
+            cx.timer.after(700, cx => { if (this.saveVersion === version) this.save(cx); });
+          });
+          this.code.on("blur", (_e, cx) => this.save(cx));
+          this.code.on("submit", (_e, cx) => this.save(cx));
+        }
       } catch { if (this.file === path && this.current(context)) this.fileError = "Cannot preview this file (binary, too large, or unreadable)"; }
       finally { cx.notify(); }
     });
+  }
+
+  // A tab closed while the auto-save timer is still pending still gets its edit.
+  async close(cx) {
+    const path = this.file, code = this.code;
+    if (!this.dirty || !path || !code) return;
+    try { await writeTextFile(`${this.root}/${path}`, code.value(), this.original); } catch { }
   }
 
   // Visible rows, flat: the tree the renderer draws is a list of entries with a
@@ -214,7 +271,9 @@ export default class Files extends View {
   // A row inside the virtual renderer: no handlers here (the list owns the
   // click), and it is rebuilt only while its row is on screen.
   fileRow(r, t) {
-    return h_flex().h(28).flex_none().pl(8 + r.depth * 18).pr(8).gap(7).items_center().rounded(6).cursor_pointer().hover(s => s.bg(t.hover))
+    return h_flex().h(28).flex_none().pl(8 + r.depth * 18).pr(8).gap(7).items_center().rounded(6).cursor_pointer()
+      .when(this.file === r.path && !r.dir, el => el.bg(t.selected))
+      .hover(s => s.bg(t.hover))
       .child(r.dir ? svg(`mods/my-files/chevron-${r.open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
       .child(svg(`mods/my-files/${r.dir ? "folder" : "file"}.svg`).size(14).flex_none().text_color(t.muted))
       .child(div().flex_1().min_w(0).truncate().child(r.name))
@@ -222,34 +281,61 @@ export default class Files extends View {
   }
 
   render(cx) {
-    const loc = location();
-    const next = keyOf(loc);
-    this.want = next;
-    if (next !== this.context?.key || this.stale) {
-      // Following every pane switch while the panel is closed is a listing and
-      // a git status nobody sees; mark it and load once when it opens.
-      this.wake(cx, loc);
+    // The first render may be the one where this copy becomes the focused pane;
+    // remember its tab then, so later tab switches leave its state alone.
+    const f = focused();
+    if (this.tab === null && f?.pane) {
+      const at = panes().find(p => p.pane === f.pane);
+      if (at && !at.terminal && at.mod === "my-files") this.tab = f.tab;
+    }
+    const now = location(this.tab, this.openedAt);
+    if (now) this.lastLoc = now;
+    const loc = now ?? this.lastLoc;
+    if (loc) {
+      const next = keyOf(loc);
+      this.want = next;
+      if (next !== this.context?.key) this.refresh(cx, loc);
     }
     const t = theme();
-    const rows = this.file ? [] : (this.flat ??= this.flatten());
+    const rows = this.flat ??= this.flatten();
     const message = this.error || (this.loading ? "Loading files…" : this.root ? "No files" : "No folder");
-    return v_flex().id("files").size_full().min_h(0).overflow_hidden().bg(t.chrome).text_color(t.foreground).text_size(13)
-      .child(h_flex().h(42).flex_none().px(14).gap(8).items_center()
-        .when(Boolean(this.file), el => el.child(div().id("files-back").w(20).cursor_pointer().text_color(t.muted).on_click((_e, cx) => { this.show(null); cx.notify(); }).child("←")))
-        .child(div().font_semibold().child("Files"))
-        .child(div().flex_1().min_w(0).truncate().text_right().text_size(12).text_color(t.dim).child(this.file ?? this.root?.split(/[\\/]/).pop() ?? "")))
-      .when(!this.file, el => el.child(v_flex().id("files-tree").flex_1().min_h(0).p(6)
+    const listId = `files-tree-${this.uid}`;
+    return h_flex().id(`files-${this.uid}`).size_full().min_h(0).min_w(0).overflow_hidden().bg(t.surface).text_color(t.foreground).text_size(13)
+      // Left: the tree stays visible while a file is open, so a preview never
+      // hides the way back. Its own header carries the folder name.
+      .child(v_flex().id(`files-tree-${this.uid}`).w(220).flex_none().h_full().min_h(0).p(6).gap(2)
+        .child(div().px(8).py(4).text_size(11).text_color(t.dim).truncate().child(this.root?.split(/[\\/]/).pop() ?? ""))
         .when(rows.length > 0, tree => tree.child(v_flex().relative().flex_1().min_h(0)
-          .child(v_virtual_list("files-tree-list", rows.length, 28, (i) => rows[i].path,
+          .child(v_virtual_list(listId, rows.length, 28, (i) => rows[i].path,
             (range) => rows.slice(range.start, range.end).map((r) => this.fileRow(r, t)))
             .on_item_click((path, cx) => {
               const row = rows.find((r) => r.path === path);
-              if (row) row.dir ? this.toggle(path, cx) : this.show(path, cx);
+              if (!row) return;
+              if (row.dir) this.toggle(path, cx);
+              // A second click on the open file goes back to the empty preview.
+              else if (this.file === path) { this.show(null, cx); cx.notify(); }
+              else this.show(path, cx);
             })
             .size_full())
-          .child(Scrollbar.vertical("files-tree-list").absolute().inset_0())))
+          .child(Scrollbar.vertical(listId).absolute().inset_0())))
         .when(Boolean(this.error) || !this.entries.get("")?.length, el => el.child(div().p(8).text_size(12).text_color(t.dim).child(message)))
-        .when(this.limited, el => el.child(div().flex_none().p(8).text_size(11).text_color(t.dim).child("File list limited to 500 entries per folder and 5,000 total")))))
-      .when(Boolean(this.file), el => el.child(this.code ? Editor.new(this.code).flex_1().min_h(0) : div().p(12).text_color(t.dim).child(this.fileError || "Loading file…")));
+        .when(this.limited, el => el.child(div().flex_none().p(8).text_size(11).text_color(t.dim).child("File list limited to 500 entries per folder and 5,000 total"))))
+      // Right: the preview, on the terminal's own background, with the file's
+      // path above it.
+      .child(v_flex().flex_1().h_full().min_w(0).min_h(0).bg(t.background)
+        .when(Boolean(this.file), el => el
+          .child(h_flex().h(32).flex_none().px(12).gap(8).items_center()
+            .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(this.file))
+            // The file saves itself after a pause; this says where a write stands
+            // and saves at once when pressed.
+            .when(!this.editable, el => el.child(div().text_size(11).text_color(t.dim).child("Read-only")))
+            .when(this.editable, el => el.child(div().text_size(11)
+              .text_color(this.saveError ? t.ansi1 : this.dirty || this.saving ? t.muted : t.dim)
+              .when(this.dirty, e => e.cursor_pointer().hover(s => s.text_color(t.foreground)))
+              .when(Boolean(this.saveError), e => e.tooltip(this.saveError))
+              .on_click((_e, cx) => this.save(cx))
+              .child(this.saveError ? "Save failed" : this.saving ? "Saving…" : this.dirty ? "Save" : "Saved"))))
+          .child(this.code ? Editor.new(this.code).flex_1().min_h(0) : div().p(12).text_color(t.dim).child(this.fileError || "Loading file…")))
+        .when(!this.file, el => el.child(div().flex_1().flex().items_center().justify_center().text_size(12).text_color(t.dim).child("Select a file to preview"))));
   }
 }

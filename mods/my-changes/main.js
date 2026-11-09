@@ -1,32 +1,22 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, Scrollbar, v_virtual_list } from "gpui-base";
-import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, layout } from "herdr";
+import { spaces, panes, focused, props, exec, readTextFile, watchFolder, theme, settings } from "herdr";
 
-// Both nodes in one walk: `layout()` is the whole layout document.
-function findMany(root, ids) {
-  const wanted = new Set(ids), found = {};
-  const stack = [root];
-  while (stack.length) {
-    const node = stack.pop();
-    if (!node) continue;
-    if (wanted.has(node.id)) found[node.id] = node;
-    for (const child of node.children ?? []) stack.push(child);
-  }
-  return found;
-}
-
-// The panel is hidden by default; a hidden panel does not need the worktree
-// scanned every ten seconds.
-function shown() {
-  const nodes = findMany(layout(), ["panel", "panel-body"]);
-  return Boolean(nodes.panel && !nodes.panel.hidden && nodes["panel-body"]?.active === "changes");
-}
-
-function location() {
+// `tab` is the tab this copy lives in. While another tab is in front, null says
+// "keep what this copy shows": a Changes tab is its own place, so switching tabs
+// neither reloads another folder nor forgets the file that was open.
+function location(tab, openedAt) {
   const space = spaces().find((s) => s.active), f = focused();
-  const pane = f?.pane ? panes().find(p => p.pane === f.pane) : null;
+  if (tab && f?.tab !== tab) return null;
+  const at = f?.pane ? panes().find(p => p.pane === f.pane) : null;
+  // Clicking the Changes pane gives it the keyboard, and a mod pane has no
+  // folder: stay on the folder the tab was opened in.
+  if (at && !at.terminal) return { cwd: openedAt || space?.folder, on: space?.machine ?? null, space: space?.id };
+  // Before this copy has seen its own tab, start on the folder the tab was opened
+  // on rather than on whichever terminal happens to be focused elsewhere.
+  if (!tab && openedAt) return { cwd: openedAt, on: space?.machine ?? null, space: space?.id };
   const on = f?.pane === null ? (f.terminal?.includes("/") ? f.terminal.split("/")[0] : null) : space?.machine ?? null;
-  return { cwd: pane?.cwd || f?.cwd || space?.folder, on };
+  return { cwd: at?.cwd || f?.cwd || space?.folder, on, space: space?.id };
 }
 const keyOf = (loc) => JSON.stringify(loc);
 // Reads write nothing under .git (no index refresh or lock, no fsmonitor cookie):
@@ -60,16 +50,17 @@ export default class Changes extends View {
     this.input.on("submit", (_e, cx) => this.commit(cx));
     this.input.on("focus", (_e, cx) => { this.typing = true; cx.notify(); });
     this.input.on("blur", (_e, cx) => { this.typing = false; cx.notify(); });
-    this.stale = false;
-    this.wake(cx);
-    cx.timer.every(10000, (cx) => this.wake(cx));
-  }
-
-  // Hidden, there is nothing to keep fresh: mark it and refresh when it is
-  // shown again. Git status and the diff walk are not free.
-  wake(cx, loc, context) {
-    if (shown()) this.refresh(cx, loc, context);
-    else this.stale = true;
+    // The tab is opened on the folder the person was working in; the copy keeps
+    // that root while it is its own tab (a mod pane has no folder of its own).
+    this.openedAt = props()?.cwd ?? null;
+    this.tab = null; this.lastLoc = null;
+    const f = focused(), at = f?.pane ? panes().find(p => p.pane === f.pane) : null;
+    if (at && !at.terminal && at.mod === "my-changes") this.tab = f.tab;
+    // Several copies can be open, one per tab: keep their element ids apart so a
+    // click or scrollbar in one never lands on another's list.
+    this.uid = Math.random().toString(36).slice(2, 7);
+    this.refresh(cx);
+    cx.timer.every(10000, (cx) => this.refresh(cx));
   }
 
   watch(root, cx) {
@@ -79,22 +70,24 @@ export default class Changes extends View {
       try {
         while (this.watched === root) {
           await watchFolder(root);
-          // A save while the panel is closed is not worth a full status and
-          // diff pass; the next render after it opens refreshes once.
-          if (this.watched === root) this.wake(cx);
+          if (this.watched === root) this.refresh(cx);
         }
       } catch { this.watched = null; }
     });
   }
 
-  refresh(cx, loc = location(), context = keyOf(loc)) {
+  refresh(cx, loc, context) {
+    // While another tab is in front, keep the folder this copy already shows.
+    loc ??= location(this.tab, this.openedAt) ?? this.lastLoc;
+    if (!loc) return;
+    this.lastLoc = loc;
+    context ??= keyOf(loc);
     if (this.loading || this.busy) return;
     const { cwd, on } = loc;
     if (context !== this.context) {
       this.context = context; this.root = null; this.files = []; this.open = null;
       this.setLines([]); this.message = ""; this.input.set_value(""); this.error = null; this.note = null; this.watched = null; this.closed = false; this.limited = false;
     }
-    this.stale = false;
     if (!cwd) return;
     this.loading = true;
     cx.spawn(async (cx) => {
@@ -187,7 +180,8 @@ export default class Changes extends View {
   }
 
   commit(cx) {
-    if (!this.message.trim() || !this.root || this.busy || this.loading || this.context !== keyOf(location())) return;
+    const loc = location(this.tab, this.openedAt) ?? this.lastLoc;
+    if (!this.message.trim() || !this.root || this.busy || this.loading || !loc || this.context !== keyOf(loc)) return;
     const root = this.root, on = this.on, context = this.context, message = this.message.trim();
     this.busy = true; this.note = null;
     cx.spawn(async (cx) => {
@@ -222,46 +216,58 @@ export default class Changes extends View {
   }
 
   render(cx) {
-    const loc = location(), next = keyOf(loc);
-    // While a load or commit is out, the context is cleared as soon as the place
-    // changes: results for the old folder are then discarded even though the
-    // new refresh cannot start until the old one finishes.
-    if (next !== this.context && (this.loading || this.busy)) this.context = null;
-    if (next !== this.context || this.stale) {
-      // Following every pane switch while the panel is closed is a full status
-      // and diff pass nobody sees; mark it and load once when it opens.
-      this.wake(cx, loc, next);
+    // The first render may be the one where this copy becomes the focused pane;
+    // remember its tab then, so later tab switches leave its state alone.
+    const f = focused();
+    if (this.tab === null && f?.pane) {
+      const at = panes().find(p => p.pane === f.pane);
+      if (at && !at.terminal && at.mod === "my-changes") this.tab = f.tab;
+    }
+    const now = location(this.tab, this.openedAt);
+    if (now) this.lastLoc = now;
+    const loc = now ?? this.lastLoc;
+    if (loc) {
+      const next = keyOf(loc);
+      // While a load or commit is out, the context is cleared as soon as the
+      // place changes: results for the old folder are then discarded even though
+      // the new refresh cannot start until the old one finishes.
+      if (next !== this.context && (this.loading || this.busy)) this.context = null;
+      if (next !== this.context) this.refresh(cx, loc, next);
     }
     const t = theme(), add = this.files.reduce((n, f) => n + f.add, 0), del = this.files.reduce((n, f) => n + f.del, 0);
     const enabled = Boolean(this.message.trim() && this.root && !this.busy && !this.loading);
-    return v_flex().id("changes").size_full().min_h(0).overflow_hidden().bg(t.chrome).text_color(t.foreground).text_size(13).track_focus(this.handle)
+    const filesId = `changes-files-${this.uid}`, diffId = `changes-diff-${this.uid}`;
+    return v_flex().id(`changes-${this.uid}`).size_full().min_h(0).overflow_hidden().bg(t.surface).text_color(t.foreground).text_size(13).track_focus(this.handle)
       .on_key_down((e, cx) => {
         if (e.key === "escape" && this.typing) { this.typing = false; this.handle.focus(); cx.stop_propagation(); cx.notify(); }
       })
-      .child(h_flex().h(42).flex_none().px(14).gap(8).items_center()
-        .child(div().font_semibold().child("Changes"))
-        .child(div().px(5).py(1).rounded(5).border_1().border_color(t.border).text_size(10).text_color(t.muted).child(`${this.files.length} files`))
-        .child(div().flex_1()).child(div().text_size(11).text_color(t.ansi2).child(`+${add}`)).child(div().text_size(11).text_color(t.ansi1).child(`−${del}`)))
-      .child(v_flex().id("changes-list").flex_none().h(Math.min(200, Math.max(44, this.files.length * 28 + 12))).p(6)
-        // Only the rows on screen are built: a thousand changed files used to
-        // cost a thousand elements on every render for a 200 px box.
-        .when(this.files.length > 0, (el) => el.child(v_flex().relative().flex_1().min_h(0)
-          .child(v_virtual_list("changes-files", this.files.length, 28, (i) => this.files[i].path,
-            (range) => this.files.slice(range.start, range.end).map((f) => this.fileRow(f, t)))
-            .on_item_click((path, cx) => this.pick(path, cx))
-            .size_full())
-          .child(Scrollbar.vertical("changes-files").absolute().inset_0())))
-        .when(!this.files.length, (e) => e.child(div().p(8).text_color(t.dim).child(this.error || (this.loading ? "Loading changes…" : this.root ? "No uncommitted changes" : "No folder")))))
-      .when(this.limited, el => el.child(div().px(12).py(4).text_size(11).text_color(t.dim).child("Showing the first 1,000 changed files")))
-      .child(div().flex_1().min_h(0).relative().bg(t.background).font_family(settings().font_family ?? "JetBrains Mono").text_size(11)
-        .child(div().id("changes-diff-x").size_full().overflow_x_scrollbar()
-          .child(div().w_full().min_w(this.diffWidth).h_full().child(v_virtual_list("changes-diff", this.rows.length, 20, (i) => String(i),
-            (range) => this.rows.slice(range.start, range.end).map((row) => this.diffRow(row, t))).size_full())))
-        .child(Scrollbar.vertical("changes-diff").viewport_from_layout().absolute().inset_0())
-        .when(!this.open && this.files.length > 0, (e) => e.child(div().absolute().top(6).px(12).text_color(t.dim).child("Select a file to view its changes"))))
-      .when(Boolean(this.note), (e) => e.child(div().px(10).pb(8).text_size(11).text_color(t.ansi1).child(this.note)))
-      .child(h_flex().flex_none().p(10).gap(8)
-        .child(div().id("commit-message").flex_1().min_w(0).h(32).px(10).flex().items_center().rounded(8).border_1().border_color(this.typing ? t.accent : t.border).cursor_text().on_mouse_down("left", (_e, cx) => cx.stop_propagation()).child(Input.new(this.input).h_full().text_size(12).text_color(t.foreground)))
-        .child(div().id("commit").h(32).px(14).flex().items_center().rounded(8).bg(enabled ? t.solid : t.raised).text_color(enabled ? t.solid_foreground : t.dim).text_size(12).when(enabled, (e) => e.cursor_pointer()).on_click((_e, cx) => this.commit(cx)).child(this.busy ? "Committing…" : "Commit")));
+      // Left: the changed files and the commit box, above the diff's list height.
+      .child(h_flex().flex_1().min_h(0)
+        .child(v_flex().w(240).flex_none().h_full().min_h(0)
+          .child(h_flex().h(34).flex_none().px(12).gap(8).items_center()
+            .child(div().px(5).py(1).rounded(5).border_1().border_color(t.border).text_size(10).text_color(t.muted).child(`${this.files.length} files`))
+            .child(div().flex_1()).child(div().text_size(11).text_color(t.ansi2).child(`+${add}`)).child(div().text_size(11).text_color(t.ansi1).child(`−${del}`)))
+          .child(v_flex().id(`changes-list-${this.uid}`).flex_1().min_h(0).p(6)
+            // Only the rows on screen are built: a thousand changed files used to
+            // cost a thousand elements on every render for a 200 px box.
+            .when(this.files.length > 0, (el) => el.child(v_flex().relative().flex_1().min_h(0)
+              .child(v_virtual_list(filesId, this.files.length, 28, (i) => this.files[i].path,
+                (range) => this.files.slice(range.start, range.end).map((f) => this.fileRow(f, t)))
+                .on_item_click((path, cx) => this.pick(path, cx))
+                .size_full())
+              .child(Scrollbar.vertical(filesId).absolute().inset_0())))
+            .when(!this.files.length, (e) => e.child(div().p(8).text_color(t.dim).child(this.error || (this.loading ? "Loading changes…" : this.root ? "No uncommitted changes" : "No folder")))))
+          .when(this.limited, el => el.child(div().px(10).pb(2).text_size(11).text_color(t.dim).child("Showing the first 1,000 changed files")))
+          .when(Boolean(this.note), (e) => e.child(div().px(10).pb(4).text_size(11).text_color(t.ansi1).child(this.note)))
+          .child(v_flex().flex_none().p(8).gap(6)
+            .child(div().id(`commit-message-${this.uid}`).w_full().h(32).px(10).flex().items_center().rounded(8).border_1().border_color(this.typing ? t.accent : t.border).cursor_text().on_mouse_down("left", (_e, cx) => cx.stop_propagation()).child(Input.new(this.input).h_full().text_size(12).text_color(t.foreground)))
+            .child(div().id(`commit-${this.uid}`).w_full().h(32).flex().items_center().justify_center().rounded(8).bg(enabled ? t.solid : t.raised).text_color(enabled ? t.solid_foreground : t.dim).text_size(12).when(enabled, (e) => e.cursor_pointer()).on_click((_e, cx) => this.commit(cx)).child(this.busy ? "Committing…" : "Commit"))))
+        // Right: the diff on the terminal's background.
+        .child(div().flex_1().h_full().min_w(0).min_h(0).relative().bg(t.background).font_family(settings().font_family ?? "JetBrains Mono").text_size(11)
+          .child(div().id(`changes-diff-x-${this.uid}`).size_full().overflow_x_scrollbar()
+            .child(div().w_full().min_w(this.diffWidth).h_full().child(v_virtual_list(diffId, this.rows.length, 20, (i) => String(i),
+              (range) => this.rows.slice(range.start, range.end).map((row) => this.diffRow(row, t))).size_full())))
+          .child(Scrollbar.vertical(diffId).viewport_from_layout().absolute().inset_0())
+          .when(!this.open && this.files.length > 0, (e) => e.child(div().absolute().top(6).px(12).text_color(t.dim).child("Select a file to view its changes")))));
   }
 }
