@@ -239,12 +239,13 @@ export default class Agents extends View {
     const on = k.address === shown;
     return h_flex()
       .id(`sub-${k.address}`)
-      .pl(47)
+      .pl(41)
       .pr(8)
       .h(26)
       .flex_none()
       .gap(0)
       .items_center()
+      .rounded(8)
       .text_size(12.5)
       .when(on, (el) => el.bg(t.raised))
       .hover((s) => s.bg(t.hover))
@@ -402,11 +403,12 @@ export default class Agents extends View {
         .child(svg(`mods/workspace-chrome/${isPinned ? "pin-off" : "pin"}.svg`).size(13));
       return h_flex()
         .id(`ag-${a.address}`)
-        .px(16)
+        .px(10)
         .h(44)
         .flex_none()
         .items_center()
         .gap(9)
+        .rounded(10)
         .when(a.focused, (el) => el.bg(balloonOf(a)))
         .when(!a.focused, (el) => el
           .when(Boolean(fill), (r) => r.bg(fill + "0d"))
@@ -469,12 +471,13 @@ export default class Agents extends View {
       const top = g.members.reduce((m, a) => ((rankOf(a) ?? 0) > (RANK[m] ?? 0) ? STATUS_OF_RANK[rankOf(a)] : m), null);
       return h_flex()
         .id(g.id)
-        .px(16)
+        .px(10)
         .pt(4)
         .h(28)
         .flex_none()
         .gap(6)
         .items_center()
+        .rounded(7)
         .text_size(11)
         .font_medium()
         .cursor_pointer()
@@ -533,7 +536,7 @@ export default class Agents extends View {
               .child(svg(sort.icon).size(14)),
           ),
       )
-      .child(v_flex().id("ag-list").px(0).gap(0)
+      .child(v_flex().id("ag-list").px(6).gap(4)
         .when(!embedded, el => el.flex_1().min_h(0).overflow_y_scrollbar().mode("always"))
         .when(empty && !embedded, el => el.items_center().justify_center())
         .children(empty ? [emptyState] : rows));

@@ -1,15 +1,16 @@
 # Likeme
 
 A Herdr layout built on top of the shipped `main` layout: every space and agent row
-is an icon with two lines of text beside it, the active item is a flat, square tint in
-with its space's colour (the active tab too), and the working spinner is a gold braille
-character instead of a rotating ring.
+is an icon with two lines of text beside it, rows and tabs are rounded cards, the active
+item is a soft tint in with its space's colour (the active tab too), panes fill the work
+area edge to edge, and the working spinner is a gold braille character instead of a
+rotating ring.
 
 Built from Herdr `main` @ 0.1.12 (`cloned_from` in `layouts/likeme.json`).
 
 ![Likeme](preview.png)
 
-_A live capture: the two-line rows, the flat square selection, the tab close buttons
+_A live capture: the two-line rows, the rounded card selection, the tab close buttons
 and the braille spinner are the real UI._
 
 ## What changes
@@ -17,12 +18,12 @@ and the braille spinner are the real UI._
 | Area | Change |
 |---|---|
 | **Sidebar** | Spaces and agents share one scrolling column; the Agents section follows the spaces content instead of starting at the sidebar's midpoint, and the whole column scrolls together. Both halves watch their data on a 250 ms timer while the window is in front, and take one look in four (1 s) while it is in the background; a redraw happens only when what they draw actually changed. |
-| **Spaces** | A 20 px tinted monogram with a dark letter; the project name (13 px) over the current git branch (11 px, muted, plus ahead/behind). Rows are square, full-bleed and flush against each other with no gap; resting rows lie flat under a whisper of the space's colour, while the active space is a flat opaque tint with no border or shadow; worktrees hang from a 1 px tree line under their checkout; with fewer than three spaces a muted "New space" row fills the gap. |
-| **Agents** | The same square, full-bleed two-line row (space name over the agent's own title) with a whisper of its space's colour and no gap between rows; the focused agent is the same flat opaque tint, again without a border, instead of an accent bar. The column watches its data on a 250 ms timer (1 s while the window is in the background) and redraws when it changes, so focus and status turns show without hovering; every agent keeps a status mark visible — the working spinner, a "Needs you" badge, the done dot and a faint idle ring. The elapsed time and pin share a fixed slot, so hovering never shifts the text. Priority view keeps its section headers (Needs you / Done / Working / Idle) visible at all times, so an all-idle list still reads as "Idle"; a lone space group hides its redundant header, and the sort button uses an up/down icon. |
-| **Tabs** | Tabs are square, fill the bar's full height and sit flush against each other with no gap; the active tab is the same flat opaque tint as a selected sidebar row, tinted with the space's colour and drawn without a border or shadow, while the others lie flat and keep a close button (dimmer when inactive). The `Files`/`Changes` toggles at the right are the same square, full-height blocks, tinted like the active tab when their panel is open. Dragging a tab shows the accent line it will land on. A default-numbered tab shows what it runs — the folder name, or the program when two tabs share it — and `+` sits right after the last tab. A zoomed tab gets a small zoom glyph instead of a trailing `Z`. Four one-click starts sit right after the `+` — Claude Code (with `--dangerously-skip-permissions`), Pi, Lazygit and Neovim — each opening a tab in the focused folder and using Herdr's own program icon (Claude keeps its orange, the other three are tinted glyphs). The working spinner is a gold braille character (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, 80 ms per frame). |
+| **Spaces** | A 20 px tinted monogram with a dark letter; the project name (13 px) over the current git branch (11 px, muted, plus ahead/behind). Rows are separate 10 px-radius cards with 6 px side insets and a 4 px gap; resting cards lie flat under a whisper of the space's colour, while the active space is a soft opaque tint with no border or shadow; worktrees hang from a 1 px tree line under their checkout; with fewer than three spaces a muted "New space" card fills the gap. |
+| **Agents** | The same rounded two-line card (space name over the agent's own title) with a whisper of its space's colour and a 4 px gap between cards; the focused agent is the same soft opaque tint, again without a border, instead of an accent bar. The column watches its data on a 250 ms timer (1 s while the window is in the background) and redraws when it changes, so focus and status turns show without hovering; every agent keeps a status mark visible — the working spinner, a "Needs you" badge, the done dot and a faint idle ring. The elapsed time and pin share a fixed slot, so hovering never shifts the text. Priority view keeps its section headers (Needs you / Done / Working / Idle) visible at all times, so an all-idle list still reads as "Idle"; a lone space group hides its redundant header, and the sort button uses an up/down icon. |
+| **Tabs** | Tabs are 30 px rounded cards (8 px radius) with a 4 px gap, centred in the 42 px bar; the active tab is the same soft opaque tint as a selected sidebar row, tinted with the space's colour and drawn without a border or shadow, while the others lie flat and keep a close button (dimmer when inactive). The `Files`/`Changes` toggles at the right are the same 30 px rounded blocks, tinted like the active tab when their panel is open. Dragging a tab shows the accent line it will land on. A default-numbered tab shows what it runs — the folder name, or the program when two tabs share it — and `+` sits right after the last tab. A zoomed tab gets a small zoom glyph instead of a trailing `Z`. Four one-click starts sit right after the `+` — Claude Code (with `--dangerously-skip-permissions`), Pi, Lazygit and Neovim — each opening a tab in the focused folder and using Herdr's own program icon (Claude keeps its orange, the other three are tinted glyphs). The working spinner is a gold braille character (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, 80 ms per frame). |
 | **Panes** | Square corners and no padding or terminal padding — a lone pane fills the work area edge to edge, and split panes keep a 1 px gap where the layout's `canvas` shows through instead of a drawn border — a card surface named by the theme (`surface`), and a cloned header on that same surface. Only the focused header wears the space's colour: an opaque 16% blend of the space colour into the header's theme `surface` (or the theme's `raised` when the space has no colour), the same colour language as the active tab and the selected sidebar row; inactive headers stay plain `surface`. It is a flat solid colour — no gradient, animation or border — and it follows the theme, so a light theme gets a light header. The split/zoom/close buttons are always visible; the status mark appears for working, blocked and done (nothing while idle). The header's working spinner is the same gold braille character as the tabs and agents. |
-| **Files / Changes** | Cloned from Herdr's `files` and `changes` mods with square corners: the panel body, the file and changed-file rows, the changed-file count badge and the commit field and button lose their rounding. The panel sits on the theme's `chrome` like the sidebar and tab bar, with no outline and no section rules; the Changes diff and the file preview keep the terminal's `background`, so the regions separate by colour alone. Both lists are virtualized, so a large tree or a thousand changed files only builds the rows on screen. While the panel is closed, their timers and folder watches stop doing git work. |
-| **Brand bar** | Cloned from `workspace-chrome` with its sidebar toggle removed: the sidebar stays open, so the collapse/expand switch is gone. The logo and search button are unchanged. The same clone draws the sidebar footer (Settings / Add machine) without its top border, so the chrome column has no rule above it. |
+| **Files / Changes** | Cloned from Herdr's `files` and `changes` mods; the panel column sits on `chrome` like the sidebar and tab bar, so the right column matches the left one and separates from the pane by colour, with no outline and no section rules. The file and changed-file rows are 6 px cards, the changed-file count badge 5 px and the commit field and button 8 px. The Changes diff and the file preview keep the terminal's `background`, so the regions separate by colour alone. Both lists are virtualized, so a large tree or a thousand changed files only builds the rows on screen. While the panel is closed, their timers and folder watches stop doing git work. |
+| **Brand bar** | Cloned from `workspace-chrome` with its sidebar toggle, logo and search button removed: the sidebar stays open, and the top-left block is an empty window-drag surface (the macOS traffic lights still sit there). The same clone draws the sidebar footer (Settings / Add machine) without its top border, so the chrome column has no rule above it. |
 
 Everything else — menus — is Herdr's `main` layout unchanged.
 
@@ -118,7 +119,8 @@ These six are meant to be read:
   commands (`status`, `diff`, `rev-parse`) via `exec` and watches the worktree. No
   network.
 - **`my-brand`** is a clone of the shipped brand bar and sidebar footer with the
-  sidebar toggle and the footer's top border removed. No `exec`, no network.
+  sidebar toggle, logo and search button removed, and the footer's top border gone. No
+  `exec`, no network.
 
 `RECIPE.md` has the full build notes, including the exact layout tree, the two-line
 row structure, and what a fresh build would get wrong.

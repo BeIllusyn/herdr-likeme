@@ -125,6 +125,7 @@
               },
               "min": 280,
               "max": 900,
+              "background": "chrome",
               "hidden": true
             }
           ],

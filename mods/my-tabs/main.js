@@ -99,7 +99,7 @@ export default class Tabs extends View {
     const balloon = fill ? mix(t.raised, fill, 0.30) : t.raised;
     const item = ({ c, i, program }) => {
       const name = labels.get(c.id);
-      return h_flex().id(`tab-${c.id}`).relative().h_full().px(12).gap(8).items_center().flex_none().text_size(13)
+      return h_flex().id(`tab-${c.id}`).relative().h(30).rounded(8).px(10).gap(8).items_center().flex_none().text_size(13)
         .when(c.active, el => el.bg(balloon).text_color(t.foreground))
         .when(!c.active, el => el
           .when(Boolean(fill), r => r.bg(fill + "0d"))
@@ -124,7 +124,7 @@ export default class Tabs extends View {
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }); })
         // The drop line sits on the edge the tab would move past.
         .when(this.pressed !== null && this.pressed !== i && this.over === i, el => el.child(
-          div().absolute().top(0).bottom(0).w(2).bg(t.accent)
+          div().absolute().top(4).bottom(4).w(2).rounded(1).bg(t.accent)
             .when(this.pressed < i, line => line.right(0))
             .when(this.pressed > i, line => line.left(0)),
         ))
@@ -144,7 +144,7 @@ export default class Tabs extends View {
     this.syncPanel(space, panel, body, enabled);
     const panelButton = (id, label, icon) => {
       const on = panel && !panel.hidden && body?.active === id;
-      return h_flex().id(`panel-${id}`).h_full().px(12).gap(5).flex_none().items_center()
+      return h_flex().id(`panel-${id}`).h(30).rounded(8).px(10).gap(5).flex_none().items_center()
         .text_size(12).bg(on ? balloon : fill ? fill + "0d" : t.chrome).text_color(on ? t.foreground : t.muted)
         // Hovering an open panel keeps its tint: the background is the only sign it's on.
         .when(!on, el => el.hover(s => s.bg(t.hover))).on_mouse_down("left", stop)
@@ -153,12 +153,12 @@ export default class Tabs extends View {
           else { run("layout.select", { stack: "panel-body", child: id }); run("layout.show", { id: "panel" }); }
         }).child(svg(icon).size(14)).child(label);
     };
-    const newTab = div().id("tab-new").h_full().w(26).flex_none().flex().items_center().justify_center().text_color(t.muted)
+    const newTab = div().id("tab-new").h(30).w(30).rounded(8).flex_none().flex().items_center().justify_center().text_color(t.muted)
       .hover(s => s.bg(t.hover).text_color(t.foreground)).on_mouse_down("left", stop)
       .on_click(() => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 })).child("+");
     // One-click starts beside the +, using the program table's own icons: the
     // shipped tinted glyphs inherit the button's colour, Claude's stays orange.
-    const launch = (id, label, icon, tint, argv) => div().id(id).h_full().w(26).flex_none().flex().items_center().justify_center()
+    const launch = (id, label, icon, tint, argv) => div().id(id).h(30).w(30).rounded(8).flex_none().flex().items_center().justify_center()
       .text_color(t.muted).tooltip(label)
       .hover(s => s.bg(t.hover).text_color(t.foreground)).on_mouse_down("left", stop)
       .on_click(() => run("tab.new", { space: space?.id, argv }))
@@ -169,9 +169,9 @@ export default class Tabs extends View {
       launch("start-lazygit", "Lazygit", "icons/lazygit.svg", true, ["lazygit"]),
       launch("start-nvim", "Neovim", "icons/nvim.svg", true, ["nvim"]),
     ];
-    return h_flex().size_full().min_w(0).gap(0).items_center().bg(t.chrome)
+    return h_flex().size_full().min_w(0).gap(4).pl(8).pr(8).items_center().bg(t.chrome)
       .on_mouse_up("left", () => { this.pressed = null; this.over = null; })
-      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(0).overflow_x_scrollbar().children([...entries.map(item), newTab, ...launches]))
+      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(4).overflow_x_scrollbar().children([...entries.map(item), newTab, ...launches]))
       .when(enabled.includes("files"), el => el.child(panelButton("files", "Files", "mods/my-files/file.svg")))
       .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/my-changes/changes.svg")))
       .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/my-tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))

@@ -214,7 +214,7 @@ export default class Files extends View {
   // A row inside the virtual renderer: no handlers here (the list owns the
   // click), and it is rebuilt only while its row is on screen.
   fileRow(r, t) {
-    return h_flex().h(28).flex_none().pl(8 + r.depth * 18).pr(8).gap(7).items_center().cursor_pointer().hover(s => s.bg(t.hover))
+    return h_flex().h(28).flex_none().pl(8 + r.depth * 18).pr(8).gap(7).items_center().rounded(6).cursor_pointer().hover(s => s.bg(t.hover))
       .child(r.dir ? svg(`mods/my-files/chevron-${r.open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
       .child(svg(`mods/my-files/${r.dir ? "folder" : "file"}.svg`).size(14).flex_none().text_color(t.muted))
       .child(div().flex_1().min_w(0).truncate().child(r.name))

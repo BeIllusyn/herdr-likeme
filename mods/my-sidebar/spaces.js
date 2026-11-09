@@ -357,7 +357,7 @@ export default class Spaces extends View {
       return layout === "loading" || (!layout && this.machines.some(k => k.name === m && k.state === "connected"))
         || sp.some(s => (s.machine ?? null) === m && !this.shown.has(s.id));
     };
-    const loadingRow = m => div().id(`machine-loading-${m ?? "local"}`).h(28).flex_none().px(16).text_size(12).text_color(t.dim).child("Loading…");
+    const loadingRow = m => div().id(`machine-loading-${m ?? "local"}`).h(32).flex_none().px(10).text_size(12).text_color(t.dim).child("Loading…");
     if (!remote.length) return loading(null) && !rows.length ? [loadingRow(null)] : rows.map(draw);
     const machineNames = [null, ...remote];
     return machineNames.flatMap((m) => {
@@ -367,7 +367,7 @@ export default class Spaces extends View {
       const connected = !m || machine?.state === "connected";
       const rebuilt = this.rebuilt(machine) || !!repair;
       const folded = this.folded.has(m);
-      const head = h_flex().id(`machine-${m ?? "local"}`).h(26).flex_none().px(16).gap(7).items_center().text_size(11).text_color(t.dim)
+      const head = h_flex().id(`machine-${m ?? "local"}`).h(28).flex_none().px(10).gap(7).items_center().rounded(7).text_size(11).text_color(t.dim)
         .cursor_pointer().hover(s => s.bg(t.hover))
         .on_click((_e, cx) => {
           folded ? this.folded.delete(m) : this.folded.add(m);
@@ -388,7 +388,7 @@ export default class Spaces extends View {
             .on_click((_e, cx) => { cx.stop_propagation(); run("space.new", { machine: m ?? "" }); }).child("+")))
           .child(div().size(6).rounded(3).flex_none().bg(connected ? t.ansi2 : t.dim))
           .child(svg(`mods/workspace-chrome/chevron-${folded ? "right" : "down"}.svg`).size(11).flex_none()));
-      const empty = h_flex().id(`machine-new-${m ?? "local"}`).h(28).flex_none().px(16).gap(7).items_center()
+      const empty = h_flex().id(`machine-new-${m ?? "local"}`).h(32).flex_none().px(10).gap(7).items_center().rounded(7)
         .text_size(12).text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground))
         .on_click(() => run("space.new", { machine: m ?? "" }))
         .child(svg("mods/workspace-chrome/plus.svg").size(12)).child("New space there");
@@ -408,15 +408,16 @@ export default class Spaces extends View {
     return v_flex()
       .relative()
       .id(`space-${w.id}`)
-      .px(16)
+      .px(10)
       .h(rowHeight({ tree }))
       .flex_none()
       .justify_center()
+      .rounded(10)
       .when(on, (el) => el.bg(balloon))
       .when(!on, (el) => el.bg(wash("0d")).hover((s) => s.bg(t.hover)))
       .when(this.pressed === i && this.over !== i, (el) => el.opacity(0.5))
       .when(this.pressed !== null && this.over === i && this.pressed !== i, (el) => el.child(
-        div().absolute().left(0).right(0).h(2).bg(t.accent)
+        div().absolute().left(4).right(4).h(2).rounded(1).bg(t.accent)
           .when(this.pressed < i, line => line.bottom(0))
           .when(this.pressed > i, line => line.top(0)),
       ))
@@ -481,7 +482,7 @@ export default class Spaces extends View {
 
   // Always keep a place to make the next space at the end of the list.
   ghost(t) {
-    return h_flex().id("space-new-hint").h(34).flex_none().px(16).gap(8)
+    return h_flex().id("space-new-hint").h(38).flex_none().px(10).gap(8).rounded(10)
       .text_size(12).text_color(t.muted).items_center().cursor_pointer()
       .hover(s => s.bg(t.hover).text_color(t.foreground))
       .on_click(() => run("space.new"))
@@ -516,7 +517,7 @@ export default class Spaces extends View {
         .child("Spaces")
         .child(div().id("space-new").size(26).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(t.hover).text_color(t.foreground))
           .on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(14))))
-      .child(v_flex().px(0).pb(embedded ? 8 : 14).gap(0)
+      .child(v_flex().px(6).pb(embedded ? 8 : 14).gap(4)
         .when(!embedded, el => el.flex_1().min_h(0).overflow_y_scrollbar().mode("always"))
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
         .children([...this.grouped(t, sp, ps, ms, fillOf), this.ghost(t)]));
