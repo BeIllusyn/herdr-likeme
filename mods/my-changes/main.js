@@ -2,11 +2,16 @@ import { View, div } from "gpui-kit";
 import { v_flex, h_flex, h_resizable, resizable_panel, InputState, Input, Scrollbar, v_virtual_list } from "gpui-base";
 import { spaces, panes, focused, props, exec, readTextFile, watchFolder, theme, settings } from "herdr";
 
-// `tab` is the tab this copy lives in. While another tab is in front, null says
-// "keep what this copy shows": a Changes tab is its own place, so switching tabs
-// neither reloads another folder nor forgets the file that was open.
-function location(tab, openedAt) {
+// 工作区固定视图跟随当前终端目录；旧版独立工具 Tab 保留自己的根目录和选中文件。
+function location(tab, openedAt, workspace = false) {
   const space = spaces().find((s) => s.active), f = focused();
+  if (workspace) {
+    const all = panes(), ids = new Set((space?.tabs ?? []).map(t => t.id));
+    const at = all.find(p => p.pane === f?.pane && p.terminal);
+    const terminal = at ?? all.find(p => p.tab === f?.tab && p.terminal) ?? all.find(p => ids.has(p.tab) && p.terminal);
+    const on = f?.pane === null ? (f.terminal?.includes("/") ? f.terminal.split("/")[0] : null) : space?.machine ?? null;
+    return { cwd: (f?.pane === null ? f.cwd : terminal?.cwd) || space?.folder, on, space: space?.id };
+  }
   if (tab && f?.tab !== tab) return null;
   const at = f?.pane ? panes().find(p => p.pane === f.pane) : null;
   // Clicking the Changes pane gives it the keyboard, and a mod pane has no
@@ -50,12 +55,12 @@ export default class Changes extends View {
     this.input.on("submit", (_e, cx) => this.commit(cx));
     this.input.on("focus", (_e, cx) => { this.typing = true; cx.notify(); });
     this.input.on("blur", (_e, cx) => { this.typing = false; cx.notify(); });
-    // The tab is opened on the folder the person was working in; the copy keeps
-    // that root while it is its own tab (a mod pane has no folder of its own).
+    // 布局中的固定视图跟随终端；旧版工具 Tab 仍使用打开时的目录。
     this.openedAt = props()?.cwd ?? null;
+    this.workspace = Boolean(props()?.workspace);
     this.tab = null; this.lastLoc = null;
     const f = focused(), at = f?.pane ? panes().find(p => p.pane === f.pane) : null;
-    if (at && !at.terminal && at.mod === "my-changes") this.tab = f.tab;
+    if (!this.workspace && at && !at.terminal && at.mod === "my-changes") this.tab = f.tab;
     // Several copies can be open, one per tab: keep their element ids apart so a
     // click or scrollbar in one never lands on another's list.
     this.uid = Math.random().toString(36).slice(2, 7);
@@ -78,7 +83,7 @@ export default class Changes extends View {
 
   refresh(cx, loc, context) {
     // While another tab is in front, keep the folder this copy already shows.
-    loc ??= location(this.tab, this.openedAt) ?? this.lastLoc;
+    loc ??= location(this.tab, this.openedAt, this.workspace) ?? this.lastLoc;
     if (!loc) return;
     this.lastLoc = loc;
     context ??= keyOf(loc);
@@ -180,7 +185,7 @@ export default class Changes extends View {
   }
 
   commit(cx) {
-    const loc = location(this.tab, this.openedAt) ?? this.lastLoc;
+    const loc = location(this.tab, this.openedAt, this.workspace) ?? this.lastLoc;
     if (!this.message.trim() || !this.root || this.busy || this.loading || !loc || this.context !== keyOf(loc)) return;
     const root = this.root, on = this.on, context = this.context, message = this.message.trim();
     this.busy = true; this.note = null;
@@ -221,9 +226,9 @@ export default class Changes extends View {
     const f = focused();
     if (this.tab === null && f?.pane) {
       const at = panes().find(p => p.pane === f.pane);
-      if (at && !at.terminal && at.mod === "my-changes") this.tab = f.tab;
+      if (!this.workspace && at && !at.terminal && at.mod === "my-changes") this.tab = f.tab;
     }
-    const now = location(this.tab, this.openedAt);
+    const now = location(this.tab, this.openedAt, this.workspace);
     if (now) this.lastLoc = now;
     const loc = now ?? this.lastLoc;
     if (loc) {

@@ -23,10 +23,13 @@ export default class Tabs extends View {
     this.over = null;
   }
 
-  render() {
+  render(cx) {
     const t = theme();
     const space = spaces().find(p => p.active);
-    const shown = space?.tabs ?? [];
+    const tabs = space?.tabs ?? [];
+    const root = layout(), w = window();
+    const nodes = findMany(root, ["sidebar", "work-body"]);
+    const body = nodes["work-body"], sidebar = nodes.sidebar;
     const stop = (_e, cx) => cx.stop_propagation();
     const button = (id, label, action) => div().id(id).size(26).flex_none().flex().items_center().justify_center().rounded(6).text_color(t.muted).hover(s => s.bg(t.hover).text_color(t.foreground))
       .on_mouse_down("left", stop).on_click(action).child(label);
@@ -39,6 +42,24 @@ export default class Tabs extends View {
       if (!mine) panesByTab.set(p.tab, mine = []);
       mine.push(p);
     }
+    // 旧版创建的独立工具 Tab 不再重复显示；仍保留原实例，避免丢失编辑。
+    const shown = tabs.filter(tab => {
+      const mine = panesByTab.get(tab.id) ?? [];
+      return mine.length !== 1 || !["my-files", "my-changes"].includes(mine[0].mod);
+    });
+    const panelOpen = body?.active && body.active !== "main";
+    const showMain = () => run("layout.select", { stack: "work-body", child: "main" });
+    const focus = focused();
+    const selection = `${space?.id}/${tabs.find(tab => tab.active)?.id}/${focus?.pane ?? focus?.terminal}`;
+    // 快捷键、侧栏或新建 Tab 改变当前终端时，也退出工具视图。
+    // 延迟到渲染之后执行布局命令，不在 render 中直接修改宿主状态。
+    if (this.selection !== undefined && this.selection !== selection && panelOpen) {
+      cx.timer.after(0, () => {
+        const f = focused();
+        if (`${f?.space}/${f?.tab}/${f?.pane ?? f?.terminal}` === selection) showMain();
+      });
+    }
+    this.selection = selection;
     const entries = shown.map((c, i) => {
       const mine = panesByTab.get(c.id) ?? [];
       // A helper pane has no program: label the tab from its terminal, never
@@ -70,10 +91,10 @@ export default class Tabs extends View {
     const fill = markColor((shared("space.colors") ?? {})[space?.id], t);
     const balloon = fill ? mix(t.raised, fill, 0.30) : t.raised;
     const item = ({ c, i, program }) => {
-      const name = labels.get(c.id);
+      const name = labels.get(c.id), active = c.active && !panelOpen;
       return h_flex().id(`tab-${c.id}`).relative().h(30).rounded(8).px(10).gap(8).items_center().flex_none().text_size(13)
-        .when(c.active, el => el.bg(balloon).text_color(t.foreground))
-        .when(!c.active, el => el
+        .when(active, el => el.bg(balloon).text_color(t.foreground))
+        .when(!active, el => el
           .when(Boolean(fill), r => r.bg(fill + "0d"))
           .text_color(t.muted)
           .hover(s => s.bg(t.hover)))
@@ -90,7 +111,7 @@ export default class Tabs extends View {
           // is not a tab press: don't select the tab being closed.
           if (from === null) return;
           if (shown[from] && over === i && from !== i) run("tab.move", { id: shown[from].id, index: space.tabs.findIndex(x => x.id === c.id) + 1 });
-          else if (from === i) run("tab.select", { id: c.id });
+          else if (from === i) { showMain(); run("tab.select", { id: c.id }); }
           cx.notify();
         })
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }); })
@@ -107,10 +128,8 @@ export default class Tabs extends View {
         .child(div().w(18).h_full().flex_none().flex().items_center().justify_center()
           .when(c.status === "working", el => el.child(div().text_size(16).line_height("16px").text_color(t.working).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 80)))
           .when(c.status === "blocked" || c.status === "done", el => el.child(div().size(6).rounded(3).bg(t[c.status]))))
-        .child(div().id(`close-${c.id}`).size(16).flex().flex_none().items_center().justify_center().rounded(4).text_color(t.muted).opacity(c.active ? 0.9 : 0.4).hover(s => s.bg(t.hover).text_color(t.foreground).opacity(1)).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/pane/close.svg").size(11)));
+        .child(div().id(`close-${c.id}`).size(16).flex().flex_none().items_center().justify_center().rounded(4).text_color(t.muted).opacity(active ? 0.9 : 0.4).hover(s => s.bg(t.hover).text_color(t.foreground).opacity(1)).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/pane/close.svg").size(11)));
     };
-    const root = layout(), w = window();
-    const sidebar = findMany(root, ["sidebar"]).sidebar;
     // macOS draws the traffic lights over the window's top-left corner. While the
     // sidebar is open it covers that corner; once it's hidden (cmd+b) the tab bar
     // reaches x=0, so leave the buttons their room and start the tabs after them.
@@ -119,39 +138,43 @@ export default class Tabs extends View {
       ? Math.max(8, (root.traffic_lights[0] + 64) / (settings().zoom ?? 1) - (sidebar?.hidden ? 0 : sidebar?.size?.px ?? 0))
       : 8;
     const enabled = shared("workspace.panels") ?? ["files", "changes"];
-    // A Files/Changes tab has one pane, the mod: find that tab in this space.
-    const modTab = (mod) => shown.find(t => {
-      const mine = panesByTab.get(t.id) ?? [];
-      return mine.length === 1 && mine[0].mod === mod;
-    });
     const panelButton = (id, label, icon) => {
-      const mod = `my-${id}`, own = modTab(mod), on = Boolean(own?.active);
+      const own = tabs.find(tab => {
+        const mine = panesByTab.get(tab.id) ?? [];
+        return mine.length === 1 && mine[0].mod === `my-${id}`;
+      });
+      const on = body?.active === id || (!panelOpen && Boolean(own?.active));
       return h_flex().id(`panel-${id}`).h(30).rounded(8).px(10).gap(5).flex_none().items_center()
         .text_size(12).bg(on ? balloon : fill ? fill + "0d" : t.chrome).text_color(on ? t.foreground : t.muted)
-        // Hovering an open panel keeps its tint: the background is the only sign it's on.
         .when(!on, el => el.hover(s => s.bg(t.hover))).on_mouse_down("left", stop)
         .on_click(() => {
-          // Read the space again at the click: a second press landing before the
-          // redraw must close or select that tab, not open another.
-          const s = spaces().find(p => p.active), tabs = s?.tabs ?? [], all = panes();
-          const openTab = tabs.find(t => {
-            const mine = all.filter(p => p.tab === t.id);
-            return mine.length === 1 && mine[0].mod === mod;
-          });
-          if (openTab) {
-            if (openTab.active) run("tab.close", { id: openTab.id });
-            else run("tab.select", { id: openTab.id });
+          // 点击时重读布局，连续点击也只切换视图，不创建或关闭 Tab。
+          const current = findMany(layout(), ["work-body"])["work-body"];
+          const tabs = spaces().find(p => p.active)?.tabs ?? [], all = panes();
+          const helper = tab => {
+            const mine = all.filter(p => p.tab === tab.id);
+            return mine.length === 1 && ["my-files", "my-changes"].includes(mine[0].mod) ? mine[0].mod : null;
+          };
+          const legacy = tabs.find(tab => helper(tab) === `my-${id}`);
+          // 升级时复用旧工具 Tab 中的编辑器和分栏状态，但入口只显示一次。
+          if (legacy) {
+            showMain();
+            if (legacy.active && current?.active === "main") {
+              const back = tabs.find(tab => tab.id === this.returnTab && !helper(tab)) ?? tabs.find(tab => !helper(tab));
+              if (back) run("tab.select", { id: back.id });
+            } else {
+              const active = tabs.find(tab => tab.active && !helper(tab));
+              if (active) this.returnTab = active.id;
+              run("tab.select", { id: legacy.id });
+            }
             return;
           }
-          // A tab of its own, rooted in the folder the focused terminal is in.
-          // From another helper tab the focus is a mod pane (no folder), so take
-          // the space's first terminal instead.
-          const ids = new Set(tabs.map(t => t.id)), mine = all.filter(p => ids.has(p.tab));
-          const here = mine.find(p => p.pane === focused()?.pane);
-          const cwd = (here?.terminal ? here : mine.find(p => p.terminal))?.cwd || s?.folder;
-          run("tab.new", { name: label, space: s?.id, mod, ...(cwd ? { props: { cwd } } : {}) });
+          run("layout.select", { stack: "work-body", child: current?.active === id ? "main" : id });
         }).child(svg(icon).size(14)).child(label);
     };
+    const panels = [];
+    if (enabled.includes("files")) panels.push(panelButton("files", "Files", "mods/my-files/file.svg"));
+    if (enabled.includes("changes")) panels.push(panelButton("changes", "Changes", "mods/my-changes/changes.svg"));
     const newTab = div().id("tab-new").h(30).w(30).rounded(8).flex_none().flex().items_center().justify_center().text_color(t.muted)
       .hover(s => s.bg(t.hover).text_color(t.foreground)).on_mouse_down("left", stop)
       .on_click(() => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 })).child("+");
@@ -160,7 +183,7 @@ export default class Tabs extends View {
     const launch = (id, label, icon, tint, argv) => div().id(id).h(30).w(30).rounded(8).flex_none().flex().items_center().justify_center()
       .text_color(t.muted).tooltip(label)
       .hover(s => s.bg(t.hover).text_color(t.foreground)).on_mouse_down("left", stop)
-      .on_click(() => run("tab.new", { space: space?.id, argv }))
+      .on_click(() => { showMain(); run("tab.new", { space: space?.id, argv }); })
       .child(tint ? svg(icon).size(15) : image(icon).size(15));
     const launches = [
       launch("start-claude", "Claude Code", "icons/claude.svg", false, ["claude", "--dangerously-skip-permissions"]),
@@ -170,9 +193,7 @@ export default class Tabs extends View {
     ];
     return h_flex().size_full().min_w(0).gap(4).pl(left).pr(8).items_center().bg(t.chrome)
       .on_mouse_up("left", () => { this.pressed = null; this.over = null; })
-      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(4).overflow_x_scrollbar().children([...entries.map(item), newTab, ...launches]))
-      .when(enabled.includes("files"), el => el.child(panelButton("files", "Files", "mods/my-files/file.svg")))
-      .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/my-changes/changes.svg")))
+      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(4).overflow_x_scrollbar().children([...entries.map(item), ...panels, newTab, ...launches]))
       .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/my-tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))
         .child(button("maximize", w.platform === "windows" ? svg(`mods/my-tabs/${w.maximized ? "win-restore" : "win-max"}.svg`).size(16) : "□", () => run("window.maximize")))
         .child(button("close-window", w.platform === "windows" ? svg("mods/my-tabs/win-close.svg").size(16) : svg("mods/pane/close.svg").size(13), () => run("window.close"))));

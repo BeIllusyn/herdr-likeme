@@ -71,7 +71,8 @@
         },
         {
           "id": "work-body",
-          "type": "row",
+          "type": "stack",
+          "active": "main",
           "children": [
             {
               "id": "main",
@@ -93,10 +94,29 @@
                   "lone": true
                 }
               }
+            },
+            {
+              "id": "files",
+              "type": "block",
+              "content": {
+                "mod": "my-files",
+                "props": {
+                  "workspace": true
+                }
+              }
+            },
+            {
+              "id": "changes",
+              "type": "block",
+              "content": {
+                "mod": "my-changes",
+                "props": {
+                  "workspace": true
+                }
+              }
             }
           ],
-          "padding": 0,
-          "gap": 0
+          "padding": 0
         }
       ],
       "resizable": false
