@@ -1,10 +1,11 @@
 # Likeme
 
-A Herdr layout built on `main`: each space and agent row is an icon on the left with
-two lines of text beside it, rows and tabs are rounded cards, panes fill the work area
-edge to edge, resting items lie flat under a whisper of their space's colour and the
-selected one is a soft, opaque rounded tint (the active tab too), and the working
-spinner is a gold braille text spinner instead of a rotating ring.
+A Herdr layout built on `main` with a **Glassmorphism** design: each space and agent
+row is an icon on the left with two lines of text beside it, rows and tabs are frosted
+glass cards with subtle borders and transparency, panes fill the work area edge to edge,
+resting items lie flat under a whisper of their space's colour with a delicate glass
+border, the selected one glows with a brighter semi-transparent tint (the active tab
+too), and the working spinner is a gold braille text spinner instead of a rotating ring.
 
 ![Likeme](preview.png)
 

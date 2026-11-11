@@ -22,3 +22,43 @@ export function mix(a, b, k) {
   const [x, y] = [rgb(a), rgb(b)];
   return "#" + x.map((v, i) => Math.round(v * (1 - k) + y[i] * k).toString(16).padStart(2, "0")).join("");
 }
+
+// === Glassmorphism helpers ===
+
+// Convert hex + alpha to #rrggbbaa format
+export function alpha(hex, alphaHex) {
+  if (!hex || !/^#[0-9a-f]{6}$/i.test(hex)) return hex;
+  return hex + alphaHex;
+}
+
+// Glass surface for panels (sidebar, tab bar) - semi-transparent
+export function glassSurface(t) {
+  return t.chrome + "c0"; // 75% opacity
+}
+
+// Glass card background with border
+export function glassCard(t, tint = null, active = false) {
+  const base = tint || t.surface;
+  const alphaHex = active ? "59" : "26"; // 35% or 15%
+  const borderAlpha = active ? "66" : "26"; // 40% or 15%
+  return {
+    bg: base + alphaHex,
+    borderColor: t.foreground + borderAlpha,
+  };
+}
+
+// Active glass: brighter, more opaque
+export function glassActive(t, tint) {
+  return {
+    bg: (tint || t.raised) + "66", // 40%
+    borderColor: (tint || t.foreground) + "80", // 50%
+  };
+}
+
+// Hover glass: slightly brighter
+export function glassHover(t, tint) {
+  return {
+    bg: (tint || t.hover) + "40", // 25%
+    borderColor: t.foreground + "40", // 25%
+  };
+}

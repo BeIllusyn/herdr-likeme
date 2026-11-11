@@ -2,6 +2,10 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, h_resizable, resizable_panel, Editor, EditorState, Scrollbar, v_virtual_list } from "gpui-base";
 import { spaces, panes, focused, props, exec, readTextFile, writeTextFile, watchFolder, theme, settings, window, shared } from "herdr";
+// Helper: ensure 6-digit hex before appending alpha
+const hex6 = (c) => c && /^#[0-9a-f]{8}$/i.test(c) ? c.slice(0, 7) : c;
+const withAlpha = (c, a) => { const h = hex6(c); return h ? h + a : c; };
+
 
 // 工作区固定视图跟随当前终端目录；旧版独立工具 Tab 保留自己的根目录和展开状态。
 function location(tab, openedAt, workspace = false) {
@@ -471,7 +475,7 @@ export default class Files extends View {
     const listId = `files-tree-${this.uid}`, compareId = `files-compare-${this.uid}-${this.diffSeq}`;
     const repo = this.repoPath();
     // 原生分栏按实例保留拖动后的宽度，重绘和切换标签不会重置。
-    return h_resizable(`files-${this.uid}`).size_full().min_h(0).min_w(0).overflow_hidden().bg(t.surface).text_color(t.foreground).text_size(13)
+    return h_resizable(`files-${this.uid}`).size_full().min_h(0).min_w(0).overflow_hidden().bg(withAlpha(t.surface, "e6")).text_color(t.foreground).text_size(13)
       // Left: the tree stays visible while a file is open, so a preview never
       // hides the way back. Its own header carries the folder name.
       .child(resizable_panel().size(220).size_range(160).child(v_flex().id(`files-tree-${this.uid}`).size_full().min_w(0).min_h(0).p(6).gap(2)
@@ -493,7 +497,7 @@ export default class Files extends View {
         .when(this.limited, el => el.child(div().flex_none().p(8).text_size(11).text_color(t.dim).child("File list limited to 500 entries per folder and 5,000 total")))))
       // Right: the preview, on the terminal's own background, with the file's
       // path above it.
-      .child(resizable_panel().size_range(240).child(v_flex().size_full().min_w(0).min_h(0).bg(t.background)
+      .child(resizable_panel().size_range(240).child(v_flex().size_full().min_w(0).min_h(0).bg(withAlpha(t.background, "e6"))
         .when(Boolean(this.file), el => el
           .child(h_flex().h(32).flex_none().px(12).gap(8).items_center()
             .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(this.file))

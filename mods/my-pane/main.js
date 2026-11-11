@@ -11,6 +11,10 @@ import { h_flex } from "gpui-base";
 import { panes, props, run, theme, home, focused, shared } from "herdr";
 import { markColor, mix } from "./colors.js";
 
+// Helper: ensure 6-digit hex before appending alpha
+const hex6 = (c) => c && /^#[0-9a-f]{8}$/i.test(c) ? c.slice(0, 7) : c;
+const withAlpha = (c, a) => { const h = hex6(c); return h ? h + a : c; };
+
 const HOME = home();
 // A mod pane carries its folder name as `title`; the helper panes read better.
 const MOD_NAMES = { "my-files": "Files", "my-changes": "Changes" };
@@ -56,14 +60,17 @@ export default class Pane extends View {
     // is much larger, so it takes the same colour at a quieter 16%. Only the
     // focused header wears it, so only that one does the lookup and blend.
     // The surface is the theme's, so light and dark themes each get their own.
-    let bg = t.surface;
+    let bg = withAlpha(t.surface, "cc");
+    let borderColor = withAlpha(t.foreground, "10");
     // A mod pane holds the keyboard; `focused` on the panes list is not always
     // cleared for the terminal beside it, so trust the live focus when there is
     // one. A layout terminal block (no model pane focused) keeps `focused`.
     const liveFocus = focused()?.pane;
     if (liveFocus ? liveFocus === p.pane : p.focused) {
-      const fill = markColor((shared("space.colors") ?? {})[focused()?.space], t);
-      bg = fill ? mix(t.surface, fill, 0.16) : t.raised;
+      const fillRaw = markColor((shared("space.colors") ?? {})[focused()?.space], t);
+      const fill = fillRaw ? fillRaw.slice(0, 7) : null;
+      bg = fill ? withAlpha(fill, "40") : withAlpha(t.raised, "cc");
+      borderColor = fill ? withAlpha(fill, "60") : withAlpha(t.foreground, "30");
     }
     return h_flex()
       .id(`pane-head-${pane}`)
@@ -72,6 +79,7 @@ export default class Pane extends View {
       .gap(8)
       .items_center()
       .bg(bg)
+      .border_b(1).border_color(borderColor)
       .overflow_hidden()
       .text_size(12)
       .on_click(() => run("pane.focus", { pane }))

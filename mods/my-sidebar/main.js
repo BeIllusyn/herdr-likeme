@@ -18,7 +18,9 @@ export default class Sidebar extends View {
   render() {
     if (props()?.sortMenu) return this.agents;
     const t = theme();
-    return v_flex().size_full().min_h(0).bg(t.chrome).overflow_y_scrollbar().mode("always")
+    return v_flex().size_full().min_h(0)
+      .bg(t.chrome + "c0")
+      .overflow_y_scrollbar().mode("always")
       .child(this.spaces)
       .child(this.agents);
   }

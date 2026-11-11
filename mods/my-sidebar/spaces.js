@@ -7,6 +7,10 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window } from "herdr";
 import { markColor, mix } from "./colors.js";
+
+// Helper: ensure 6-digit hex before appending alpha
+const hex6 = (c) => c && /^#[0-9a-f]{8}$/i.test(c) ? c.slice(0, 7) : c;
+const withAlpha = (c, a) => { const h = hex6(c); return h ? h + a : c; };
 import { backgroundTick } from "./util.js";
 
 // A place key is machine + NUL + folder: neither part can contain NUL, so the
@@ -412,9 +416,17 @@ export default class Spaces extends View {
       .h(rowHeight({ tree }))
       .flex_none()
       .justify_center()
-      .rounded(10)
-      .when(on, (el) => el.bg(balloon))
-      .when(!on, (el) => el.bg(wash("0d")).hover((s) => s.bg(t.hover)))
+      .rounded(12)
+      .border(1)
+      .when(on, (el) => el
+        .bg(withAlpha(fill, "40"))
+        .border_color(withAlpha(fill, "60")))
+      .when(!on, (el) => el
+        .bg(withAlpha(fill, "0d"))
+        .border_color(withAlpha(fill, "20"))
+        .hover((s) => s
+          .bg(withAlpha(fill, "1a"))
+          .border_color(withAlpha(fill, "35"))))
       .when(this.pressed === i && this.over !== i, (el) => el.opacity(0.5))
       .when(this.pressed !== null && this.over === i && this.pressed !== i, (el) => el.child(
         div().absolute().left(4).right(4).h(2).rounded(1).bg(t.accent)
@@ -504,7 +516,8 @@ export default class Spaces extends View {
       const color = colors[id] ?? "ansi6";
       let fill = fills.get(color);
       if (fill === undefined) {
-        fill = markColor(color, t) ?? t.muted;
+        const raw = markColor(color, t) ?? t.muted;
+        fill = raw ? raw.slice(0, 7) : null;
         fills.set(color, fill);
       }
       return fill;

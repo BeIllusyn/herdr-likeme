@@ -1,6 +1,10 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, h_resizable, resizable_panel, InputState, Input, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { spaces, panes, focused, props, exec, readTextFile, watchFolder, theme, settings, run, setShared } from "herdr";
+// Helper: ensure 6-digit hex before appending alpha
+const hex6 = (c) => c && /^#[0-9a-f]{8}$/i.test(c) ? c.slice(0, 7) : c;
+const withAlpha = (c, a) => { const h = hex6(c); return h ? h + a : c; };
+
 
 // 工作区固定视图跟随当前终端目录；旧版独立工具 Tab 保留自己的根目录和选中文件。
 function location(tab, openedAt, workspace = false) {
@@ -305,7 +309,7 @@ export default class Changes extends View {
       .tooltip(tip)
       .on_click((_e, cx) => { if (on) action(cx); })
       .child(label);
-    return v_flex().id(`changes-${this.uid}`).size_full().min_w(0).min_h(0).overflow_hidden().bg(t.surface).text_color(t.foreground).text_size(13).track_focus(this.handle)
+    return v_flex().id(`changes-${this.uid}`).size_full().min_w(0).min_h(0).overflow_hidden().bg(withAlpha(t.surface, "e6")).text_color(t.foreground).text_size(13).track_focus(this.handle)
       .on_key_down((e, cx) => {
         if (e.key === "escape" && this.typing) { this.typing = false; this.handle.focus(); cx.stop_propagation(); cx.notify(); }
       })
@@ -333,7 +337,7 @@ export default class Changes extends View {
             .child(div().id(`commit-${this.uid}`).w_full().h(32).flex().items_center().justify_center().rounded(8).bg(enabled ? t.solid : t.raised).text_color(enabled ? t.solid_foreground : t.dim).text_size(12).when(enabled, (e) => e.cursor_pointer()).on_click((_e, cx) => this.commit(cx)).child(this.busy ? "Committing…" : "Commit")))))
         // Right: the diff on the terminal's background, with the file path and
         // change navigation above it.
-        .child(resizable_panel().size_range(240).child(v_flex().size_full().min_w(0).min_h(0).bg(t.background)
+        .child(resizable_panel().size_range(240).child(v_flex().size_full().min_w(0).min_h(0).bg(withAlpha(t.background, "e6"))
           .when(Boolean(this.open), (el) => el.child(h_flex().h(30).flex_none().px(10).gap(6).items_center().text_size(11)
             .child(div().flex_1().min_w(0).truncate().text_color(t.dim).tooltip(this.open).child(this.open))
             .child(diffButton("prev", "↑", "Previous change", this.changes.length > 0, () => this.step(-1, cx)))

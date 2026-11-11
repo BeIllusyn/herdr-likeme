@@ -5,6 +5,10 @@ import { View, div, image, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay } from "herdr";
 import { markColor, mix } from "./colors.js";
+
+// Helper: ensure 6-digit hex before appending alpha
+const hex6 = (c) => c && /^#[0-9a-f]{8}$/i.test(c) ? c.slice(0, 7) : c;
+const withAlpha = (c, a) => { const h = hex6(c); return h ? h + a : c; };
 import { backgroundTick } from "./util.js";
 
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
@@ -363,7 +367,8 @@ export default class Agents extends View {
     const fillOf = (a) => {
       let fill = fills.get(a.space);
       if (fill === undefined) {
-        fill = markColor(colors[a.space], t);
+        const raw = markColor(colors[a.space], t);
+        fill = raw ? raw.slice(0, 7) : null;
         fills.set(a.space, fill);
       }
       return fill;
@@ -419,11 +424,21 @@ export default class Agents extends View {
         .flex_none()
         .items_center()
         .gap(9)
-        .rounded(10)
-        .when(a.focused, (el) => el.bg(balloonOf(a)))
+        .rounded(12)
+        .border(1)
+        .when(a.focused, (el) => el
+          .bg(fill ? withAlpha(fill, "50") : withAlpha(t.raised, "80"))
+          .border_color(fill ? withAlpha(fill, "80") : withAlpha(t.foreground, "40")))
         .when(!a.focused, (el) => el
-          .when(Boolean(fill), (r) => r.bg(fill + "0d"))
-          .hover((s) => s.bg(t.hover)))
+          .when(Boolean(fill), (r) => r
+            .bg(withAlpha(fill, "12"))
+            .border_color(withAlpha(fill, "25")))
+          .when(!fill, (r) => r
+            .bg(withAlpha(t.surface, "20"))
+            .border_color(withAlpha(t.foreground, "15")))
+          .hover((s) => s
+            .bg(fill ? withAlpha(fill, "20") : withAlpha(t.hover, "40"))
+            .border_color(fill ? withAlpha(fill, "40") : withAlpha(t.foreground, "30"))))
         .cursor_pointer()
         .on_hover((on, cx) => {
           // Only a change of which row is hovered needs a redraw; the event also
