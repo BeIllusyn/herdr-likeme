@@ -76,16 +76,19 @@ function fixture({ legacy = false } = {}) {
   return { body, tabs, panes, space, host, commands, timers, cx, view, render, click };
 }
 
-test("Files 和 Changes 在加号前只显示一次，布局不含额外工具 Tab", () => {
+test("Files 和 Changes 固定在标签栏右侧，只显示一次，布局不含额外工具 Tab", () => {
   const f = fixture(), root = f.render();
   assert.equal(f.body.type, "stack");
   assert.deepEqual(f.body.children.map(n => n.id), ["main", "files", "changes"]);
   assert.ok(f.body.children.filter(n => n.id !== "main").every(n => n.content.props.workspace));
   assert.deepEqual(find(root, "tab-scroll").nodes.map(n => n.key), [
-    "tab-one", "tab-two", "panel-files", "panel-changes", "tab-new",
+    "tab-one", "tab-two", "tab-new",
     "start-claude", "start-pi", "start-lazygit", "start-nvim",
   ]);
-  assert.equal(root.nodes.length, 1);
+  // 两个入口不在滚动区内，而是作为标签栏的最后一段固定在最右侧。
+  assert.deepEqual(find(root, "tab-panels").nodes.map(n => n.key), ["panel-files", "panel-changes"]);
+  assert.deepEqual(root.nodes.map(n => n.key), ["tab-scroll", "tab-panels"]);
+  assert.equal(root.nodes.length, 2);
 });
 
 test("连续点击和切换工具只选择工作区视图，不增加或关闭 Tab", () => {
@@ -181,6 +184,112 @@ for (const [mod, name] of [["my-files", "Files"], ["my-changes", "Changes"]]) {
     assert.equal(next.on, "remote");
   });
 }
+
+test("Changes 把连续的新增/删除行归为一个变动块", () => {
+  const { changeStarts } = load("mods/my-changes/main.js", "changeStarts", {});
+  const rows = [
+    { kind: "@" }, { kind: " " }, { kind: "-" }, { kind: "+" },
+    { kind: " " }, { kind: "+" }, { kind: "@" }, { kind: "-" },
+  ];
+  assert.deepEqual(Array.from(changeStarts(rows)), [2, 5, 7]);
+});
+
+test("Changes 用整个文件作为 diff 上下文", async () => {
+  const calls = [];
+  const { Changes } = load("mods/my-changes/main.js", "Changes", {
+    exec: async (_cmd, args) => {
+      calls.push(args);
+      return { code: 0, stderr: "", stdout: "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1,2 +1,2 @@\n-old\n+new\n" };
+    },
+  });
+  const changes = new Changes();
+  Object.assign(changes, {
+    files: [{ path: "a", status: "M", fresh: false, add: 1, del: 1 }],
+    root: "/repo", on: null, hasHead: true, context: "ctx", open: "a", diffWidth: 0,
+  });
+  await changes.load("a", "ctx");
+  assert.ok(calls[0].includes("-U1000000"));
+  assert.deepEqual(Array.from(changes.rows, row => row.kind), ["@", "-", "+"]);
+  assert.deepEqual(Array.from(changes.changes), [1]);
+});
+
+test("Files 把仓库里的绝对路径换算成自己树根下的相对路径", () => {
+  const { relativePath } = load("mods/my-files/main.js", "relativePath", {});
+  assert.equal(relativePath("/repo", "/repo/mods/a.js"), "mods/a.js");
+  assert.equal(relativePath("/repo/", "/repo/a.js"), "a.js");
+  assert.equal(relativePath("/repo/sub", "/repo/mods/a.js"), null);
+  assert.equal(relativePath("C:\\repo", "C:/repo/a.js"), "a.js");
+});
+
+test("Files 把 diff 行配成变更前/后的两栏", () => {
+  const { diffRows, diffPairs } = load("mods/my-files/main.js", "diffRows, diffPairs", {});
+  const rows = diffRows(["@@ -1,3 +1,3 @@", " one", "-two", "+TWO", " three", "+extra"]);
+  const pairs = diffPairs(rows);
+  assert.equal(pairs.length, 4);
+  assert.equal(pairs[0].left.text, "one");
+  assert.equal(pairs[0].left.oldNumber, 1);
+  assert.equal(pairs[0].right.newNumber, 1);
+  assert.equal(pairs[1].left.text, "two");
+  assert.equal(pairs[1].right.text, "TWO");
+  assert.equal(pairs[2].left.text, "three");
+  assert.equal(pairs[2].right.newNumber, 3);
+  assert.equal(pairs[3].left, null);
+  assert.equal(pairs[3].right.text, "extra");
+});
+
+test("Files 的对比模式读取整个文件的 diff", async () => {
+  const calls = [];
+  const { Files } = load("mods/my-files/main.js", "Files", {
+    exec: async (_cmd, args) => {
+      calls.push(args);
+      if (args[0] === "rev-parse") return { code: 0, stdout: "abc", stderr: "" };
+      return { code: 0, stderr: "", stdout: "@@ -1,1 +1,1 @@\n-a\n+b\n" };
+    },
+  });
+  const tasks = [];
+  const cx = { spawn: fn => tasks.push(fn), notify() {}, timer: { after() {}, every() {} } };
+  const files = new Files();
+  Object.assign(files, {
+    root: "/repo", fileRoot: "/repo", file: "a.txt", gitTop: "/repo", on: null,
+    context: "ctx", diffMode: true, marks: { "/repo/a.txt": "M" }, diffSeq: 0,
+  });
+  files.loadDiff(cx);
+  await tasks[0](cx);
+  assert.ok(calls.some(args => args.includes("-U1000000")));
+  assert.equal(files.diffPairs.length, 1);
+  assert.equal(files.diffPairs[0].left.text, "a");
+  assert.equal(files.diffPairs[0].right.text, "b");
+});
+
+test("Files 的并排对比行给删除/新增半边着色", () => {
+  const { Files } = load("mods/my-files/main.js", "Files", { div: element, h_flex: element });
+  const files = new Files();
+  const theme = { ansi1: "#e06c75", ansi2: "#98c379", dim: "#999999", border: "#333333" };
+  const row = files.compareRow({
+    left: { kind: "-", oldNumber: 2, text: "old" },
+    right: { kind: "+", newNumber: 2, text: "new" },
+  }, theme);
+  assert.equal(row.nodes[0].styles.bg, "#e06c7533");
+  assert.equal(row.nodes[2].styles.bg, "#98c37933");
+});
+
+test("Files 收到 Changes 的打开请求时展开父目录；跨目录时按仓库根预览", () => {
+  const { Files } = load("mods/my-files/main.js", "Files", {});
+  const calls = [];
+  const cx = { timer: { after: (_ms, fn) => fn(cx) }, notify() {} };
+  const files = new Files();
+  Object.assign(files, {
+    workspace: true, root: "/repo", folders: new Set(), flat: null,
+    toggle: path => calls.push(["toggle", path]),
+    show: (path, _cx, from) => calls.push(["show", path, from ?? null]),
+  });
+  files.openFrom({ root: "/repo", path: "mods/a/b.js" }, cx);
+  assert.deepEqual(calls, [["toggle", "mods"], ["toggle", "mods/a"], ["show", "mods/a/b.js", null]]);
+  calls.length = 0;
+  files.root = "/repo/sub";
+  files.openFrom({ root: "/repo", path: "mods/a/b.js" }, cx);
+  assert.deepEqual(calls, [["show", "mods/a/b.js", "/repo"]]);
+});
 
 test("切换工作区目录前，把未保存的文件编辑写回旧目录", async () => {
   const writes = [], tasks = [];

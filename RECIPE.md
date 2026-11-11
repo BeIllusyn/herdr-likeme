@@ -76,8 +76,8 @@ space's colour, with the neutral `hover` on the pointer. Program icon 16 px, nam
 truncated; a zoomed tab shows a small `zoom.svg` instead of a trailing `Z`. A tab still
 named by its number shows what it runs: the folder name, or the program name when two
 tabs share a folder (then the number is appended if the programs also collide). The
-普通 Tab 后依次显示固定的 `Files`、`Changes` 和 `+`，三者都在可滚动区域内；
-工具入口不再另外出现在最右侧，也不生成新的普通 Tab。
+普通 Tab 后依次是 `+` 和四个快捷启动，都在可滚动区域内；`Files`、`Changes` 两个固定
+入口不随标签滚动，贴在标签栏最右侧。
 
 **Panes.** Square and edge to edge: no padding, terminal padding, frame border or
 header rule — the terminal and the header meet their neighbours directly, and the
@@ -94,7 +94,7 @@ animation or border — so a space's header colour changes with the space, and l
 dark themes each get their own surface. Inactive headers stay plain. The title is 12.5 px
 `medium`, the folder 11.5 px `muted`, and the working state is the same gold braille
 character as the tabs and agents. Files／Changes 不是侧栏，也不是新建的 Tab，而是
-`work-body` stack 中的固定视图。点击加号前的入口通过 `layout.select` 切换整个工作区，
+`work-body` stack 中的固定视图。点击标签栏最右侧的入口通过 `layout.select` 切换整个工作区，
 目录跟随当前终端。视图内部仍然左右分栏：文件树，或带有提交框的修改列表，使用 `surface`；the
 file preview or the diff on the right, on the terminal's `background`; neither the pane
 nor its sections draw a rule. The open file and the selected change are tinted in the
@@ -137,10 +137,18 @@ round-trip stays read-only. 隐藏的 stack 子视图会保留实例、展开的
   is one (working spinner, "Needs you", done dot); an idle agent shows nothing. Each
   button acts on its own pane (`props().pane`), not the focused one. Working shows the
   same braille character as the tabs and agents.
-- **Files / Changes.** 两个固定入口位于普通 Tab 后、`+` 前。点击切换整个工作区，
+- **Files / Changes.** 两个固定入口位于标签栏最右侧，不随标签滚动。点击切换整个工作区，
   不新建 Tab；选中的入口使用选中态底色，再次点击或选择普通 Tab 就返回终端。
+  Diff 覆盖整个文件（`git diff -U1000000`，未改动的行也作为上下文，最多 20,000 行）；
+  右侧标题行显示文件路径，`↑`／`↓` 在连续的新增/删除块之间跳转，`Files` 把同一个文件
+  交给 Files 视图（`shared("files.open")` 传仓库根和相对路径；终端停在子目录时 Files
+  仍按仓库根预览，不改变自己的树根）。Diff 的新增/删除行用 20% 的 ansi 色铺底，
+  行号右侧再放一个同色的 `+`／`−` 标记：9% 的底色在深色主题下混出来几乎一样，
+  标记也让色觉差异的人不必只靠颜色分辨。
   快捷键、侧栏或新建 Tab 改变当前终端时，也会退出工具视图。
   旧版已存在的单独工具 Tab 从普通列表中隐藏，由固定入口复用，避免丢失编辑和分栏状态。
+  Files 预览标题行的 `Diff` 把编辑器切成“变更前／变更后”两栏：左侧旧文件、右侧工作区
+  文件，删除/新增各占半边并带底色，未跟踪文件整份算新增；再点一次回到编辑器。
 - Everything else (the palette, dialogs and notifications) is unchanged from `main`.
 
 ## Built from
@@ -175,7 +183,7 @@ Herdr 保留隐藏的子视图实例，并保存 stack 的选择。
 | Mod | Role |
 |---|---|
 | `my-sidebar` | One mod, two retained child views (`spaces.js` and `agents.js`) composed in a single scrolling column (`main.js`); `colors.js` holds the shared `MARK` table, `markColor()` and the `mix()` used for the flat tint, and `util.js` the background-tick throttle. It keeps the spaces logic (git lookup via `exec`, `hc machine ls`, `watchFolder`, drag-reorder) and the agents logic (live agent data, pins, groups, sub-agent trees) unchanged. Changed: the two sections share one scroll (no 50/50 split), the Agents header follows the spaces content without a top border, the worktree rows draw a real 1 px tree line, rows are rounded cards with a soft opaque selection and a 4 px gap, and both retain the row/type/active-state changes from the earlier passes. The sort popup mounts a second copy of this mod (`props.sortMenu`) and returns only the agents view. |
-| `my-tabs` | The tab bar. Clone of the shipped `tabs`. Changed: 30 px rounded tabs (8 px radius), `px 10`/`gap 8`, 16 px icons, distinct labels for default-numbered tabs, `Files`／`Changes`／`+` after ordinary tabs, four quick-start icons after the `+` (Claude Code, Pi, Lazygit, Neovim via `tab.new`), close button fades to 0.4 when inactive, a soft opaque active tab in the space's colour, a drag-to-reorder line, zoom glyph, spinner `frames([...], 80)`. Files／Changes 固定在 `+` 前，使用 `layout.select` 切换工作区 stack，不创建额外 Tab；选中的入口使用选中态底色，再次点击返回终端。旧工具 Tab 由固定入口复用，不再重复显示。 |
+| `my-tabs` | The tab bar. Clone of the shipped `tabs`. Changed: 30 px rounded tabs (8 px radius), `px 10`/`gap 8`, 16 px icons, distinct labels for default-numbered tabs, `+` and four quick-start icons after ordinary tabs (Claude Code, Pi, Lazygit, Neovim via `tab.new`), close button fades to 0.4 when inactive, a soft opaque active tab in the space's colour, a drag-to-reorder line, zoom glyph, spinner `frames([...], 80)`. Files／Changes 固定在标签栏最右侧、不随标签滚动，使用 `layout.select` 切换工作区 stack，不创建额外 Tab；选中的入口使用选中态底色，再次点击返回终端。旧工具 Tab 由固定入口复用，不再重复显示。 |
 | `my-pane` | The pane header. Clone of the shipped `pane`. Changed: header surface is the theme's `surface`, 12.5 px title / 11.5 px `muted` folder, a flat space-colour tint on the focused header (16% blend into `surface`, no animation), braille working spinner instead of the rotating SVG, always-visible `muted` buttons, and it keeps the split/zoom/close buttons. |
 
 Herdr functions used: `spaces`, `agents`, `terminals`, `panes`, `focused`, `layout`,
@@ -253,6 +261,16 @@ copies for Windows.
   `v_virtual_list`; a renderer may not register handlers or retain state, so the row
   helpers are pure and the click is the list's `on_item_click` (keyed by path). A
   non-virtualized tree built up to 5,000 elements on every render.
+- **The diff is the whole file.** `git diff -U1000000` makes every unchanged line
+  context, cut at 20,000 rows and 4,000 characters per line. The header's `↑`／`↓`
+  walk the contiguous `+`／`-` blocks (`changeStarts`); `v_virtual_list` is driven by a
+  `VirtualListScrollHandle` created in `init`. The Files button writes
+  `shared("files.open") = { root, path, at }` and selects the `files` stack view;
+  `my-files` accepts the request only in the workspace copy and ignores anything older
+  than 30 s, because `shared.json` survives a restart. Files' own `Diff` toggle runs
+  the same full-context diff against HEAD and pairs the unified rows into a left/right
+  table (`diffPairs`: a run of deletions paired with the following run of additions,
+  context rows on both sides); untracked files are read as all additions.
 - **Saving is optimistic and whole-file.** `writeTextFile(path, text, expected)`
   replaces the file only while it still holds `expected` (the text the copy read or last
   wrote), so a file changed elsewhere says "Save failed" instead of being overwritten;
@@ -302,7 +320,8 @@ copies for Windows.
   is the same flat opaque tint, and the selection changes within 250 ms of the focus
   moving. Priority keeps its section headers visible even when only one section has
   agents; a lone space group in the grouped view has no header.
-- 默认编号的 Tab 显示目录或程序名；普通 Tab 后依次是 Files、Changes 和 `+`。
+- 默认编号的 Tab 显示目录或程序名；普通 Tab 后依次是 `+` 和四个快捷启动，
+  Files、Changes 两个入口固定在标签栏最右侧。
 - Every tab draws an X close button (dimmed when inactive); the active tab is the soft
   opaque tint, the others lie flat, and no top highlight line is drawn.
 - A working agent shows the braille spinner in its agent row, its tab, and the pane
@@ -312,15 +331,19 @@ copies for Windows.
   folder; only the focused header is tinted with the space's colour, inactive ones stay
   plain; in a light theme the header is light too; its always-visible buttons still
   split, zoom and close the pane they belong to.
-- Files／Changes 只在加号前各显示一个固定入口，最右侧不再重复显示；点击只切换工作区，
+- Files／Changes 在标签栏最右侧各显示一个固定入口，不随标签滚动；点击只切换工作区，
   不增加 Tab。再次点击、选择普通 Tab，或通过快捷键和侧栏切换终端，都返回终端视图。
   隐藏视图保留文件树和分栏宽度；旧工具 Tab 仍能通过固定入口访问，且不会被强行关闭。
   两种工具都左右分栏：左侧是文件树或修改列表（以及提交框），右侧是预览或 diff，
-  选中的文件或修改项带底色。
+  选中的文件或修改项带底色。Diff 从文件第一行显示到最后一行（未改动的行也是上下文），
+  标题行的 `↑`／`↓` 一次跳过一个变动块，`Files` 把当前文件交给 Files 视图并定位到它；
+  深色主题下红/绿行靠 20% 底色和行号旁的 `+`／`−` 标记区分。
 - A file opened in Files can be typed into and saves itself after a pause (or on blur,
   a file switch and closing the view); the path row says Saved / Saving… / Save failed,
   and the file on disk changes. A file edited elsewhere rejects the write instead of
   being overwritten, and a truncated (>400,000 characters) preview stays read-only.
+- Files 预览的 `Diff` 开关把编辑器切成左右两栏：左侧旧版本、右侧工作区版本，
+  删除/新增行分别带红/绿底色；未跟踪文件整份显示为新增，没有变化的文件给出提示。
 - Spaces and agents live in one scroll: the Agents header follows the spaces content
   with no 50/50 boundary, and scrolling moves both sections together.
 - A worktree space appears under its checkout with a 1 px tree line; the last child

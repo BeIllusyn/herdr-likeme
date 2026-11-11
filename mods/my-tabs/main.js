@@ -193,7 +193,9 @@ export default class Tabs extends View {
     ];
     return h_flex().size_full().min_w(0).gap(4).pl(left).pr(8).items_center().bg(t.chrome)
       .on_mouse_up("left", () => { this.pressed = null; this.over = null; })
-      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(4).overflow_x_scrollbar().children([...entries.map(item), ...panels, newTab, ...launches]))
+      // 标签和新建入口留在可滚动区域内；Files／Changes 固定在标签栏最右侧。
+      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(4).overflow_x_scrollbar().children([...entries.map(item), newTab, ...launches]))
+      .when(panels.length > 0, el => el.child(h_flex().id("tab-panels").flex_none().h_full().items_center().gap(4).children(panels)))
       .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/my-tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))
         .child(button("maximize", w.platform === "windows" ? svg(`mods/my-tabs/${w.maximized ? "win-restore" : "win-max"}.svg`).size(16) : "□", () => run("window.maximize")))
         .child(button("close-window", w.platform === "windows" ? svg("mods/my-tabs/win-close.svg").size(16) : svg("mods/pane/close.svg").size(13), () => run("window.close"))));

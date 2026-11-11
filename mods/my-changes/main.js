@@ -1,6 +1,6 @@
 import { View, div } from "gpui-kit";
-import { v_flex, h_flex, h_resizable, resizable_panel, InputState, Input, Scrollbar, v_virtual_list } from "gpui-base";
-import { spaces, panes, focused, props, exec, readTextFile, watchFolder, theme, settings } from "herdr";
+import { v_flex, h_flex, h_resizable, resizable_panel, InputState, Input, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
+import { spaces, panes, focused, props, exec, readTextFile, watchFolder, theme, settings, run, setShared } from "herdr";
 
 // 工作区固定视图跟随当前终端目录；旧版独立工具 Tab 保留自己的根目录和选中文件。
 function location(tab, openedAt, workspace = false) {
@@ -43,9 +43,27 @@ function diffRows(lines) {
   });
 }
 
+// 连续的新增/删除行算一个变动块；中间夹着未改动的行就另起一块。
+function changeStarts(rows) {
+  const starts = [];
+  let edited = false;
+  for (let i = 0; i < rows.length; i++) {
+    const here = rows[i].kind === "+" || rows[i].kind === "-";
+    if (here && !edited) starts.push(i);
+    edited = here;
+  }
+  return starts;
+}
+
+// A whole-file diff is the whole file as context; the list is virtualized, but
+// a pathological file should not become an unbounded frame.
+const MAX_ROWS = 20000;
+
 export default class Changes extends View {
   init(_props, cx) {
-    this.files = []; this.rows = []; this.diffWidth = 0; this.message = ""; this.handle = cx.focus_handle();
+    this.files = []; this.rows = []; this.changes = []; this.changeAt = -1; this.diffWidth = 0; this.message = ""; this.handle = cx.focus_handle();
+    // The handle lets the prev/next buttons move the diff list from code.
+    this.scroll = VirtualListScrollHandle.new();
     this.input = InputState.new({ placeholder: "Commit message" });
     this.input.on("change", (_e, cx) => {
       const hadMessage = Boolean(this.message.trim());
@@ -134,12 +152,17 @@ export default class Changes extends View {
         if (this.context !== context) return;
         this.root = root; this.on = on; this.hasHead = head.code === 0; this.files = files; this.limited = entries.length > 1000; this.error = null;
         this.watch(root, cx);
-        if (this.open && !files.some((f) => f.path === this.open)) { this.open = null; this.setLines([]); }
+        let picked = false;
+        if (this.open && !files.some((f) => f.path === this.open)) { this.open = null; this.setLines([]); picked = true; }
         // The first file's diff shows until you pick another.
-        if (!this.open && !this.closed && files.length) this.open = files[0].path;
+        if (!this.open && !this.closed && files.length) { this.open = files[0].path; picked = true; }
+        if (picked) this.changeAt = -1;
         if (this.open) {
           try { await this.load(this.open, context); }
           catch { if (this.context === context) this.setLines(["Cannot preview this diff (too large or unreadable)"]); }
+          // A newly chosen file starts at its first line, not wherever the last
+          // file left the list.
+          if (picked && this.context === context) this.scroll.scroll_to_item(0);
         }
       } catch (e) { if (this.context === context) this.error = String(e); }
       finally { this.loading = false; cx.notify(); }
@@ -156,32 +179,60 @@ export default class Changes extends View {
       else if (text.includes("\0")) lines = ["Binary file · no text diff"];
       else {
         file.add = countLines(text);
-        lines = [`@@ -0,0 +1,${file.add} @@`, ...text.slice(0, 400000).replace(/\n$/, "").split("\n").slice(0, 1500).map(l => `+${l}`)];
+        lines = [`@@ -0,0 +1,${file.add} @@`, ...text.slice(0, 400000).replace(/\n$/, "").split("\n").map(l => `+${l}`)];
+        if (text.length > 400000) lines.push("… file truncated");
       }
     } else {
-      const r = await exec("git", [...READ, "diff", ...(this.hasHead ? ["HEAD"] : []), "--no-ext-diff", "--no-textconv", "--no-color", "--", path], { cwd: root, on });
+      // 让 diff 覆盖整个文件：未改动的行也作为上下文出现，而不是只露出
+      // 每个改动点前后的三行。
+      const r = await exec("git", [...READ, "diff", ...(this.hasHead ? ["HEAD"] : []), "-U1000000", "--no-ext-diff", "--no-textconv", "--no-color", "--", path], { cwd: root, on });
       if (r.code !== 0) throw new Error(r.stderr);
       const all = r.stdout.replace(/\n$/, "").split("\n"), first = all.findIndex((l) => l.startsWith("@@"));
       lines = first < 0 ? [file.binary ? "Binary file changed" : "No text diff available"] : all.slice(first);
     }
-    if (this.context === context && this.open === path) this.setLines(lines.slice(0, 1500).map(line => line.length > 4000 ? line.slice(0, 4000) + "… (line truncated)" : line));
+    if (this.context !== context || this.open !== path) return;
+    const shown = lines.slice(0, MAX_ROWS).map(line => line.length > 4000 ? line.slice(0, 4000) + "… (line truncated)" : line);
+    if (lines.length > MAX_ROWS) shown.push(`… diff truncated at ${MAX_ROWS} lines`);
+    this.setLines(shown);
   }
 
   setLines(lines) {
     this.rows = diffRows(lines);
+    this.changes = changeStarts(this.rows);
     this.diffWidth = Math.max(300, ...lines.map(line => line.length * 7 + 50));
   }
 
   pick(path, cx) {
     this.open = this.open === path ? null : path; this.setLines([]); this.note = null;
     this.closed = !this.open;
+    this.changeAt = -1;
     const context = this.context;
     if (this.open) cx.spawn(async (cx) => {
       try { await this.load(path, context); }
       catch (e) { if (this.context === context && this.open === path) this.note = `Cannot preview this diff (too large or unreadable): ${e}`; }
+      if (this.context === context && this.open === path) this.scroll.scroll_to_item(0);
       cx.notify();
     });
     cx.notify();
+  }
+
+  // 在变动块之间移动：首尾相接，指针从文件顶部开始时下一步落在第一块。
+  step(delta, cx) {
+    const count = this.changes.length;
+    if (!count) return;
+    const from = this.changeAt >= 0 && this.changeAt < count ? this.changeAt : -1;
+    const at = from < 0 ? (delta > 0 ? 0 : count - 1) : (from + delta + count) % count;
+    this.changeAt = at;
+    this.scroll.scroll_to_item(this.changes[at], "center");
+    cx.notify();
+  }
+
+  // 在 Files 中打开当前文件。shared 里放仓库根和文件相对路径，Files 自己
+  // 换算到它的树根；终端停在仓库子目录时也能预览。
+  openInFiles(_cx) {
+    if (!this.open || !this.root) return;
+    setShared("files.open", { root: this.root, path: this.open, at: Date.now() });
+    run("layout.select", { stack: "work-body", child: "files" });
   }
 
   commit(cx) {
@@ -215,8 +266,13 @@ export default class Changes extends View {
 
   diffRow({ kind, number, text }, t) {
     if (kind === "@") return div().w_full().px(12).h(20).flex_none().truncate().bg(t.raised).text_color(t.dim).child(text);
-    return h_flex().w_full().h(20).flex_none().gap(10).when(kind === "+", (e) => e.bg(t.ansi2 + "18")).when(kind === "-", (e) => e.bg(t.ansi1 + "18"))
+    const add = kind === "+", del = kind === "-";
+    // 9% 的整行底色在深色主题下混出来几乎一样；加深到 20%，并给每行一个
+    // 带色的 +/− 标记，不靠颜色也能一眼分清新增和删除。
+    return h_flex().w_full().h(20).flex_none().gap(8)
+      .when(add, (e) => e.bg(t.ansi2 + "33")).when(del, (e) => e.bg(t.ansi1 + "33"))
       .child(div().w(30).flex_none().text_right().text_color(t.dim).child(number === undefined ? "" : String(number)))
+      .child(div().w(10).flex_none().text_color(add ? t.ansi2 : del ? t.ansi1 : t.dim).child(add ? "+" : del ? "−" : ""))
       .child(div().flex_1().min_w(0).truncate().child(text));
   }
 
@@ -242,6 +298,13 @@ export default class Changes extends View {
     const t = theme(), add = this.files.reduce((n, f) => n + f.add, 0), del = this.files.reduce((n, f) => n + f.del, 0);
     const enabled = Boolean(this.message.trim() && this.root && !this.busy && !this.loading);
     const filesId = `changes-files-${this.uid}`, diffId = `changes-diff-${this.uid}`;
+    // 变动导航和“在 Files 打开”共用的小工具按钮。
+    const diffButton = (id, label, tip, on, action) => h_flex().id(`changes-${id}-${this.uid}`).h(22).flex_none().px(6).rounded(6).items_center()
+      .text_color(on ? t.muted : t.dim).opacity(on ? 1 : 0.4)
+      .when(on, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground)))
+      .tooltip(tip)
+      .on_click((_e, cx) => { if (on) action(cx); })
+      .child(label);
     return v_flex().id(`changes-${this.uid}`).size_full().min_w(0).min_h(0).overflow_hidden().bg(t.surface).text_color(t.foreground).text_size(13).track_focus(this.handle)
       .on_key_down((e, cx) => {
         if (e.key === "escape" && this.typing) { this.typing = false; this.handle.focus(); cx.stop_propagation(); cx.notify(); }
@@ -268,12 +331,19 @@ export default class Changes extends View {
           .child(v_flex().flex_none().p(8).gap(6)
             .child(div().id(`commit-message-${this.uid}`).w_full().h(32).px(10).flex().items_center().rounded(8).border_1().border_color(this.typing ? t.accent : t.border).cursor_text().on_mouse_down("left", (_e, cx) => cx.stop_propagation()).child(Input.new(this.input).h_full().text_size(12).text_color(t.foreground)))
             .child(div().id(`commit-${this.uid}`).w_full().h(32).flex().items_center().justify_center().rounded(8).bg(enabled ? t.solid : t.raised).text_color(enabled ? t.solid_foreground : t.dim).text_size(12).when(enabled, (e) => e.cursor_pointer()).on_click((_e, cx) => this.commit(cx)).child(this.busy ? "Committing…" : "Commit")))))
-        // Right: the diff on the terminal's background.
-        .child(resizable_panel().size_range(240).child(div().size_full().min_w(0).min_h(0).relative().bg(t.background).font_family(settings().font_family ?? "JetBrains Mono").text_size(11)
-          .child(div().id(`changes-diff-x-${this.uid}`).size_full().overflow_x_scrollbar()
-            .child(div().w_full().min_w(this.diffWidth).h_full().child(v_virtual_list(diffId, this.rows.length, 20, (i) => String(i),
-              (range) => this.rows.slice(range.start, range.end).map((row) => this.diffRow(row, t))).size_full())))
-          .child(Scrollbar.vertical(diffId).viewport_from_layout().absolute().inset_0())
-          .when(!this.open && this.files.length > 0, (e) => e.child(div().absolute().top(6).px(12).text_color(t.dim).child("Select a file to view its changes"))))));
+        // Right: the diff on the terminal's background, with the file path and
+        // change navigation above it.
+        .child(resizable_panel().size_range(240).child(v_flex().size_full().min_w(0).min_h(0).bg(t.background)
+          .when(Boolean(this.open), (el) => el.child(h_flex().h(30).flex_none().px(10).gap(6).items_center().text_size(11)
+            .child(div().flex_1().min_w(0).truncate().text_color(t.dim).tooltip(this.open).child(this.open))
+            .child(diffButton("prev", "↑", "Previous change", this.changes.length > 0, () => this.step(-1, cx)))
+            .child(diffButton("next", "↓", "Next change", this.changes.length > 0, () => this.step(1, cx)))
+            .child(diffButton("files", "Files", "Open this file in Files", Boolean(this.root), () => this.openInFiles(cx)))))
+          .child(div().flex_1().min_w(0).min_h(0).relative().font_family(settings().font_family ?? "JetBrains Mono").text_size(11)
+            .child(div().id(`changes-diff-x-${this.uid}`).size_full().overflow_x_scrollbar()
+              .child(div().w_full().min_w(this.diffWidth).h_full().child(v_virtual_list(diffId, this.rows.length, 20, (i) => String(i),
+                (range) => this.rows.slice(range.start, range.end).map((row) => this.diffRow(row, t))).track_scroll(this.scroll).size_full())))
+            .child(Scrollbar.vertical(diffId).viewport_from_layout().absolute().inset_0())
+            .when(!this.open && this.files.length > 0, (e) => e.child(div().absolute().top(6).px(12).text_color(t.dim).child("Select a file to view its changes")))))));
   }
 }
