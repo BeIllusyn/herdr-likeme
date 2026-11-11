@@ -16,22 +16,27 @@ the rounded card selection, the tab close buttons and the spinner are the real U
 
 The window is Herdr's `main` layout with six mods replaced. No system title bar
 (`"titlebar": "none"`); on macOS the traffic lights sit at `[12, 16]`. Background is
-the theme's `canvas`; the sidebar and the tab bar share the theme's `chrome`, and regions
-meet with no dividers or separator borders: their backgrounds do the separating.
+the theme's `canvas`; the sidebar sits on the theme's `chrome`, and the tab bar is the
+same `chrome` at 75 % over the root `canvas` — the frosted layer the glass cards float
+on. Regions meet with no dividers or separator borders: their backgrounds do the
+separating.
 
 **Sidebar (268 px, min 222, max 480, not resizable).** A 46 px empty brand block
 (`my-brand`, an empty window-drag surface), then one `sidebar-list` block (`my-sidebar`, `weight: 1`,
 `min: 90`), then a 69 px footer (`my-brand` with `props.footer`, no top border). The block is
 one scrolling column: Spaces header → space rows → "New space" hint → Agents header →
-agent rows. The Agents header follows the spaces content (10 px top padding, no top
+agent rows, with a scrollbar that shows itself only while the pointer is over it. The
+Agents header follows the spaces content (10 px top padding, no top
 border), so the two sections no longer split the sidebar in half.
 
 **Spaces.** A 31 px header ("Spaces", 14 px medium, `muted`, + button 26 px). Rows are
-44 px (42 px for worktree children), each its own 10 px-radius card inset 6 px from the
-sidebar's edges and separated by a 4 px gap. A resting card lies flat under a whisper of
-its space's colour (5 %); the active space is a soft opaque tint mixed from `raised` and
-its colour (32 %), with no border or shadow, so the selection reads without a left
-accent bar. Hover on a resting card is the neutral `hover`, never a stronger colour.
+44 px (42 px for worktree children), each its own 12 px-radius glass card inset 6 px from
+the sidebar's edges and separated by a 4 px gap. A resting card lies flat under a whisper
+of its space's colour (`GLASS.rest`, ~7 %) with a soft edge (`GLASS.restEdge`, ~15 %);
+the active space fills with the same colour (`GLASS.active`, ~30 %) and brightens its
+edge, so the selection reads without a left accent bar. The pointer lifts a resting card
+one step in the same colour (`GLASS.hover`). Every card in the layout — agent rows,
+tabs, panel buttons — lifts and glows by this one scale, kept in `colors.js`.
 Each row:
 
 - left: a 20 px rounded tile filled with the space's first letter in a dark ink
@@ -43,17 +48,17 @@ Each row:
   `foreground`, and below it the current git branch at 11 px (`line-height` 14 px) in
   `muted`. `detached` when the branch is unknown; `↑n` in `ansi2` / `↓n` in `ansi1`
   for ahead/behind. Spaces that are not a git repo show only the name.
-- with fewer than three spaces, a muted 38 px "New space" card ends the list.
+- with fewer than three spaces, a muted 38 px "New space" glass card ends the list.
 
-A machine header (28 px, its own 7 px-radius card) appears once more than one machine
+A machine header (28 px, its own 8 px-radius card) appears once more than one machine
 is known. The sidebar stays at its expanded width: there is no compact rail.
 
 **Agents.** A 41 px header ("Agents", 14 px medium `muted`, up/down sort icon). It
 follows the spaces content instead of a fixed half; group headers are 28 px. In the
 Priority view the section headers (Needs you / Done / Working / Idle) always show, so
 an all-idle list still says "Idle"; in the grouped view a lone space group hides its
-redundant header. Agent rows are 44 px 10 px-radius cards with the same 6 px inset and
-4 px gap as the spaces:
+redundant header. Agent rows are 44 px 12 px-radius glass cards with the same 6 px inset
+and 4 px gap as the spaces:
 
 - 16 px program icon (agent's own report, else the program), clickable to fold
   sub-agents;
@@ -63,37 +68,44 @@ redundant header. Agent rows are 44 px 10 px-radius cards with the same 6 px ins
   below. An automatic tab number is suppressed, so a row says nothing rather than "1";
 - end of row: sub-agent fold chevron, a fixed 32 px slot for the pin (hover) or the
   elapsed time (11 px, `muted`), and the status glyph. The fixed slot means hovering
-  never reflows the row. Sub-agent rows are 26 px cards with tree lines;
-- every agent card carries a 5 % wash of its space's colour (the same colour its space
-  row uses), so a row keeps its space's identity even in Priority view; the focused
-  agent is the same soft opaque tint as the active space, with no border or shadow.
+  never reflows the row. Sub-agent rows are 26 px cards with tree lines, sitting one
+  glass step quieter than their parent: a fainter wash of the same colour
+  (`GLASS.wash`, ~4 %) with no edge of their own;
+- every agent card carries a whisper of its space's colour (`GLASS.rest`, the same
+  colour its space row uses), so a row keeps its space's identity even in Priority
+  view; the focused agent takes the same active glass fill as the active space.
   No left accent bar.
 
-**Tabs.** 30 px rounded cards (8 px radius, `px 10`, `gap 8`) with a 4 px gap, centred in
-the 42 px bar with 8 px side padding. Every tab keeps a 16 px close button; the close
-fades to 0.4 on inactive tabs and returns on hover. The active tab is the same soft
-opaque tint as a selected sidebar row: an opaque card mixed from `raised` and the space's
-colour (30 %), with no border or shadow. The others lie flat under a 5 % tint of the
-space's colour, with the neutral `hover` on the pointer. Program icon 16 px, name up to 170 px
+**Tabs.** 30 px rounded glass cards (10 px radius, `px 10`, `gap 8`) with a 4 px gap,
+centred in the 42 px bar with 8 px side padding. Every tab keeps a 16 px close button;
+the close fades to 0.4 on inactive tabs and returns on hover. The active tab fills with
+the space's colour at the same active glass step as a selected sidebar row
+(`GLASS.active`, ~30 %, with its `GLASS.activeEdge` edge). The others lie flat under a
+whisper of it (`GLASS.rest`), and the pointer lifts them one step in the same colour. The
+`+` and the four quick starts are the same card language on the theme's own colours
+(neutral glass), each with a tooltip. Program icon 16 px, name up to 170 px
 truncated; a zoomed tab shows a small `zoom.svg` instead of a trailing `Z`. A tab still
 named by its number shows what it runs: the folder name, or the program name when two
 tabs share a folder (then the number is appended if the programs also collide). The
 普通 Tab 后依次是 `+` 和四个快捷启动，都在可滚动区域内；`Files`、`Changes` 两个固定
 入口不随标签滚动，贴在标签栏最右侧。
 
-**Panes.** Square and edge to edge: no padding, terminal padding, frame border or
-header rule — the terminal and the header meet their neighbours directly, and the
-backgrounds tell the regions apart. Split panes keep a 1 px `gap`, so the layout's
+**Panes.** Square and edge to edge: no padding, terminal padding or frame border —
+the terminal and the header meet their neighbours directly, and the faint hairline
+under the header is the only line anywhere; otherwise the backgrounds tell the
+regions apart. Split panes keep a 1 px `gap`, so the layout's
 `canvas` shows between them instead of a drawn border; a lone pane fills its tab edge
 to edge. The pane background is the theme's `surface`; the
 30 px header from the cloned `my-pane` mod (`reveal: always`) is painted on that same
-`surface` with no bottom border. The focused header carries the focus mark: the space's
-colour as an opaque 16% blend into `surface` (the theme's `raised` when the space has
-no colour), the same
-colour language as the active tab and the selected sidebar row, at a lower strength
-because a header is much larger than a tab. It is a flat solid fill — no gradient,
-animation or border — so a space's header colour changes with the space, and light and
-dark themes each get their own surface. Inactive headers stay plain. The title is 12.5 px
+`surface`. The focused header carries the focus mark: the space's
+colour at the quieter `GLASS.header` strength (~20 %) over `surface` (the theme's
+`raised` when the space has no colour), with a matching edge along the header's bottom
+hairline, the same
+colour language as the active tab and the selected sidebar row, a step quieter
+because a header is much larger than a tab. It is a flat fill — no gradient or
+animation — so a space's header colour changes with the space, and light and
+dark themes each get their own surface. Inactive headers stay plain `surface` with a
+faint hairline under them. The title is 12.5 px
 `medium`, the folder 11.5 px `muted`, and the working state is the same gold braille
 character as the tabs and agents. Files／Changes 不是侧栏，也不是新建的 Tab，而是
 `work-body` stack 中的固定视图。点击标签栏最右侧的入口通过 `layout.select` 切换整个工作区，
@@ -184,9 +196,9 @@ Herdr 保留隐藏的子视图实例，并保存 stack 的选择。
 
 | Mod | Role |
 |---|---|
-| `my-sidebar` | One mod, two retained child views (`spaces.js` and `agents.js`) composed in a single scrolling column (`main.js`); `colors.js` holds the shared `MARK` table, `markColor()` and the `mix()` used for the flat tint, and `util.js` the background-tick throttle. It keeps the spaces logic (git lookup via `exec`, `hc machine ls`, `watchFolder`, drag-reorder) and the agents logic (live agent data, pins, groups, sub-agent trees) unchanged. Changed: the two sections share one scroll (no 50/50 split), the Agents header follows the spaces content without a top border, the worktree rows draw a real 1 px tree line, rows are rounded cards with a soft opaque selection and a 4 px gap, and both retain the row/type/active-state changes from the earlier passes. The sort popup mounts a second copy of this mod (`props.sortMenu`) and returns only the agents view. |
-| `my-tabs` | The tab bar. Clone of the shipped `tabs`. Changed: 30 px rounded tabs (8 px radius), `px 10`/`gap 8`, 16 px icons, distinct labels for default-numbered tabs, `+` and four quick-start icons after ordinary tabs (Claude Code, Pi, Lazygit, Neovim via `tab.new`), close button fades to 0.4 when inactive, a soft opaque active tab in the space's colour, a drag-to-reorder line, zoom glyph, spinner `frames([...], 80)`. Files／Changes 固定在标签栏最右侧、不随标签滚动，使用 `layout.select` 切换工作区 stack，不创建额外 Tab；选中的入口使用选中态底色，再次点击返回终端。旧工具 Tab 由固定入口复用，不再重复显示。 |
-| `my-pane` | The pane header. Clone of the shipped `pane`. Changed: header surface is the theme's `surface`, 12.5 px title / 11.5 px `muted` folder, a flat space-colour tint on the focused header (16% blend into `surface`, no animation), braille working spinner instead of the rotating SVG, always-visible `muted` buttons, and it keeps the split/zoom/close buttons. |
+| `my-sidebar` | One mod, two retained child views (`spaces.js` and `agents.js`) composed in a single hover-scrollbar column (`main.js`); `colors.js` holds the shared `MARK` table, `markColor()`, `withAlpha()` and the `GLASS` scale every card lifts and glows by, and `util.js` the background-tick throttle. It keeps the spaces logic (git lookup via `exec`, `hc machine ls`, `watchFolder`, drag-reorder) and the agents logic (live agent data, pins, groups, sub-agent trees) unchanged. Changed: the two sections share one scroll (no 50/50 split), the Agents header follows the spaces content without a top border, the worktree rows draw a real 1 px tree line, rows are rounded cards with a soft opaque selection and a 4 px gap, and both retain the row/type/active-state changes from the earlier passes. The sort popup mounts a second copy of this mod (`props.sortMenu`) and returns only the agents view. |
+| `my-tabs` | The tab bar. Clone of the shipped `tabs`. Changed: 30 px rounded glass tabs (10 px radius), `px 10`/`gap 8`, 16 px icons, distinct labels for default-numbered tabs, `+` and four quick-start icons after ordinary tabs (Claude Code, Pi, Lazygit, Neovim via `tab.new`), close button fades to 0.4 when inactive, the active tab at the shared active glass step in the space's colour, a drag-to-reorder line, zoom glyph, spinner `frames([...], 80)`. Files／Changes 固定在标签栏最右侧、不随标签滚动，使用 `layout.select` 切换工作区 stack，不创建额外 Tab；选中的入口使用选中态底色，再次点击返回终端。旧工具 Tab 由固定入口复用，不再重复显示。 |
+| `my-pane` | The pane header. Clone of the shipped `pane`. Changed: header surface is the theme's `surface`, 12.5 px title / 11.5 px `muted` folder, a flat space-colour tint on the focused header (`GLASS.header` over `surface`, no animation), braille working spinner instead of the rotating SVG, always-visible `muted` buttons, and it keeps the split/zoom/close buttons. |
 
 Herdr functions used: `spaces`, `agents`, `terminals`, `panes`, `focused`, `layout`,
 `theme`, `window`, `settings`, `keys`, `home`, `shared` / `setShared`, `setAgentOrder`,
@@ -237,9 +249,10 @@ copies for Windows.
 - The mods read shipped assets by path (`mods/workspace-chrome/...`,
   `mods/pane/close.svg` in `my-tabs`). If Herdr renames them, update the paths.
   `my-pane` uses its own `mods/my-pane/*.svg` copies instead.
-- The focused header's tint is a plain `.bg()` colour:
-  `mix(t.surface, markColor(...), 0.16)`. `markColor`/`mix` are copies of the
-  sidebar/tab helpers (`MARK`, opaque blends), so keep the three copies in sync. The
+- The focused header's tint is `withAlpha(fill, GLASS.header)` over the theme's
+  `surface`, drawn by the mod on its own header surface. `colors.js` (the shared
+  `MARK`, `markColor`, `withAlpha` and `GLASS` scale) is one file copied into
+  `my-sidebar`, `my-tabs` and `my-pane`; `check.sh` fails when they drift. The
   colour comes from `shared("space.colors")[space.id]` for the active space; a space
   with no colour falls back to the theme's `raised`. It is a solid fill because Herdr's pane frame
   exposes only a solid `border`/`focus` colour and `pane.background` ignores `gradient`
@@ -283,8 +296,9 @@ copies for Windows.
   listener out of the keystroke path.
 - Heights are fixed: 44 px agent/space rows, 42 px worktree rows, 26 px sub-agent rows,
   30 px tabs in a 42 px bar. A larger font will clip rather than grow.
-- The selected row and tab are an opaque blend, not an alpha layer, so they look the
-  same over chrome, hover and the pane behind them. The tab status slot is always
+- The glass cards are alpha layers (`withAlpha`), not opaque blends: every one of
+  them sits on the same surface (the sidebar's `chrome`, the bar's frosted `chrome`),
+  so the steps read identically wherever a card lands. The tab status slot is always
   18 px, so a state turn never changes a tab's width.
 - The spinner is `frames([...], 80)`, not `spin()`: a native SVG rotation runs at
   about 30 fps and reads as steppy at 12–16 px. `frames` swaps text natively on one
@@ -315,17 +329,19 @@ copies for Windows.
   status` reports no errors.
 - Each space row shows a 20 px tinted monogram, a 13 px name and an 11 px muted branch,
   under a whisper of its space's colour.
-- The active space is a soft opaque tint clearly apart from the flat cards and their
-  neutral hover; rows are 10 px-radius cards with a 6 px inset and a 4 px gap; a list
-  shorter than three spaces ends with a muted "New space" card.
+- The active space is the active glass fill, clearly apart from the resting washes and
+  their hover lift; rows are 12 px-radius glass cards with a 6 px inset and a 4 px gap; a
+  list shorter than three spaces ends with a muted glass "New space" card.
 - Each agent row shows two lines on a whisper of its space's colour; the focused agent
-  is the same flat opaque tint, and the selection changes within 250 ms of the focus
+  takes the same active glass fill, sub-agent rows sit on a fainter wash of it, and the
+  selection changes within 250 ms of the focus
   moving. Priority keeps its section headers visible even when only one section has
   agents; a lone space group in the grouped view has no header.
 - 默认编号的 Tab 显示目录或程序名；普通 Tab 后依次是 `+` 和四个快捷启动，
   Files、Changes 两个入口固定在标签栏最右侧。
-- Every tab draws an X close button (dimmed when inactive); the active tab is the soft
-  opaque tint, the others lie flat, and no top highlight line is drawn.
+- Every tab draws an X close button (dimmed when inactive); the active tab is the
+  active glass fill, the others lie flat on their whisper, and no top highlight line is
+  drawn.
 - A working agent shows the braille spinner in its agent row, its tab, and the pane
   header; an idle agent keeps a faint ring in its agent row, so every row shows where
   its agent stands.

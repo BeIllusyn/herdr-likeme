@@ -4,11 +4,7 @@
 import { View, div, image, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay } from "herdr";
-import { markColor, mix } from "./colors.js";
-
-// Helper: ensure 6-digit hex before appending alpha
-const hex6 = (c) => c && /^#[0-9a-f]{8}$/i.test(c) ? c.slice(0, 7) : c;
-const withAlpha = (c, a) => { const h = hex6(c); return h ? h + a : c; };
+import { markColor, withAlpha, GLASS } from "./colors.js";
 import { backgroundTick } from "./util.js";
 
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
@@ -243,7 +239,9 @@ export default class Agents extends View {
     return { subsOf, urgency: (addr) => urgency.get(addr) ?? 0 };
   }
 
-  subRow(t, s, shown, compact) {
+  // A sub-agent sits one glass step below its parent: a fainter wash of the same
+  // space colour, no edge of its own, and the parent's active fill when focused.
+  subRow(t, s, shown, compact, fill) {
     const k = s.t;
     const st = kidStatus(k, this.listed);
     const pic = icon(k.program, 20, t.foreground);
@@ -258,8 +256,11 @@ export default class Agents extends View {
       .items_center()
       .rounded(8)
       .text_size(12.5)
-      .when(on, (el) => el.bg(t.raised))
-      .hover((s) => s.bg(t.hover))
+      .when(on, (el) => el.bg(fill ? withAlpha(fill, GLASS.active) : t.raised))
+      .when(!on && Boolean(fill), (el) => el
+        .bg(withAlpha(fill, GLASS.wash))
+        .hover((s) => s.bg(withAlpha(fill, GLASS.hover))))
+      .when(!on && !fill, (el) => el.hover((s) => s.bg(t.hover)))
       .on_click(() => this.peek(k.address))
       .children(s.lines.map(l => div().self_start().mt(-4).w(9).h(17).mr(4).flex_none()
         .when(Boolean(l), el => el.border_l(1.5).border_color(t.input))
@@ -274,8 +275,8 @@ export default class Agents extends View {
     const color = t[a.status] ?? t.dim;
     if (a.status === "working") return div().w(18).h_full().flex_none().flex().items_center().justify_center()
       .child(div().text_size(16).line_height("16px").text_color(t.working).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 80));
-    if (a.status === "blocked" && compact) return div().size(14).flex_none().rounded(4).bg(t.blocked + "26").text_size(10.5).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!");
-    if (a.status === "blocked") return div().flex_none().px(6).h(18).rounded(5).bg(t.blocked + "26").text_size(10.5).font_semibold().text_color(t.blocked).flex().items_center().child("Needs you");
+    if (a.status === "blocked" && compact) return div().size(14).flex_none().rounded(4).border(1).border_color(withAlpha(t.blocked, "40")).bg(withAlpha(t.blocked, "26")).text_size(10.5).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!");
+    if (a.status === "blocked") return div().flex_none().px(6).h(18).rounded(5).border(1).border_color(withAlpha(t.blocked, "40")).bg(withAlpha(t.blocked, "26")).text_size(10.5).font_semibold().text_color(t.blocked).flex().items_center().child("Needs you");
     // Idle keeps a faint ring: every row shows where its agent stands, and a
     // quiet one reads as quiet rather than as a row with no state at all.
     if (a.status === "idle") return div().size(7).mx(3).flex_none().rounded(4).border(1).border_color(t.dim + "80");
@@ -320,7 +321,7 @@ export default class Agents extends View {
       const subs = trees.subsOf.get(a.address) ?? [];
       const r = row(a, subs);
       if (this.folded.has(a.address)) return [r];
-      return [r, ...subs.map((s) => this.subRow(t, s, shown, byPriority))];
+      return [r, ...subs.map((s) => this.subRow(t, s, shown, byPriority, fillOf(a)))];
     };
 
     // The fold chevron; folded, the count too, colored by the most urgent one.
@@ -359,8 +360,8 @@ export default class Agents extends View {
     if (list.length) for (const s of spaces()) for (const tab of s.tabs) tabTitle.set(tab.id, title(tab, leads.get(tab.id)));
     const labelOf = (a) => tabTitle.get(a.tab) ?? (a.title || a.program?.name || "");
     // Every agent row is washed with its space's colour, faint when idle; the
-    // focused one is a flat opaque tint, square and full-bleed, flush with its
-    // neighbours. Cache per space so a list of twenty does not repeat the same
+    // focused one takes the same active glass steps as the selected space row.
+    // Cache per space so a list of twenty does not repeat the same
     // regex and blend twenty times.
     const colors = shared("space.colors") ?? {};
     const fills = new Map();
@@ -372,16 +373,6 @@ export default class Agents extends View {
         fills.set(a.space, fill);
       }
       return fill;
-    };
-    const balloons = new Map();
-    const balloonOf = (a) => {
-      let balloon = balloons.get(a.space);
-      if (balloon === undefined) {
-        const fill = fillOf(a);
-        balloon = fill ? mix(t.raised, fill, 0.32) : t.raised;
-        balloons.set(a.space, balloon);
-      }
-      return balloon;
     };
 
     const row = (a, subs = []) => {
@@ -427,18 +418,18 @@ export default class Agents extends View {
         .rounded(12)
         .border(1)
         .when(a.focused, (el) => el
-          .bg(fill ? withAlpha(fill, "50") : withAlpha(t.raised, "80"))
-          .border_color(fill ? withAlpha(fill, "80") : withAlpha(t.foreground, "40")))
+          .bg(fill ? withAlpha(fill, GLASS.active) : withAlpha(t.raised, "90"))
+          .border_color(fill ? withAlpha(fill, GLASS.activeEdge) : withAlpha(t.foreground, "3d")))
         .when(!a.focused, (el) => el
           .when(Boolean(fill), (r) => r
-            .bg(withAlpha(fill, "12"))
-            .border_color(withAlpha(fill, "25")))
+            .bg(withAlpha(fill, GLASS.rest))
+            .border_color(withAlpha(fill, GLASS.restEdge)))
           .when(!fill, (r) => r
-            .bg(withAlpha(t.surface, "20"))
-            .border_color(withAlpha(t.foreground, "15")))
+            .bg(withAlpha(t.surface, "1f"))
+            .border_color(withAlpha(t.foreground, "1a")))
           .hover((s) => s
-            .bg(fill ? withAlpha(fill, "20") : withAlpha(t.hover, "40"))
-            .border_color(fill ? withAlpha(fill, "40") : withAlpha(t.foreground, "30"))))
+            .bg(fill ? withAlpha(fill, GLASS.hover) : withAlpha(t.hover, "40"))
+            .border_color(fill ? withAlpha(fill, GLASS.hoverEdge) : withAlpha(t.foreground, "2b"))))
         .cursor_pointer()
         .on_hover((on, cx) => {
           // Only a change of which row is hovered needs a redraw; the event also
@@ -503,11 +494,11 @@ export default class Agents extends View {
         .flex_none()
         .gap(6)
         .items_center()
-        .rounded(7)
+        .rounded(8)
         .text_size(11)
         .font_medium()
         .cursor_pointer()
-        .hover((s) => s.text_color(t.foreground))
+        .hover((s) => s.bg(t.hover).text_color(t.foreground))
         .on_click((_e, cx) => {
           open ? this.folded.add(g.id) : this.folded.delete(g.id);
           cx.notify();
@@ -527,12 +518,20 @@ export default class Agents extends View {
       ? [header(g), ...(this.folded.has(g.id) ? [] : g.members.flatMap(withKids))]
       : g.members.flatMap(withKids));
     const empty = list.length === 0;
+    // The empty list gets the same glass card as a row, so it reads as a place
+    // waiting for content rather than as nothing.
     const emptyState = v_flex()
       .w_full()
+      .flex_none()
+      .mt(6)
       .items_center()
       .gap(8)
       .px(16)
       .py(24)
+      .rounded(12)
+      .border(1)
+      .bg(withAlpha(t.surface, "14"))
+      .border_color(withAlpha(t.foreground, GLASS.restEdge))
       .child(svg("mods/workspace-chrome/layers.svg").size(22).text_color(t.muted))
       .child(div().text_size(12.5).text_color(t.muted).child("No agents yet"))
       .child(div().w_full().text_center().text_size(11).line_height("15px").text_color(t.muted).child("Agents appear here when they report their status."));
@@ -563,7 +562,7 @@ export default class Agents extends View {
           ),
       )
       .child(v_flex().id("ag-list").px(6).gap(4)
-        .when(!embedded, el => el.flex_1().min_h(0).overflow_y_scrollbar().mode("always"))
+        .when(!embedded, el => el.flex_1().min_h(0).overflow_y_scrollbar().mode("hover"))
         .when(empty && !embedded, el => el.items_center().justify_center())
         .children(empty ? [emptyState] : rows));
   }

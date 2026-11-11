@@ -1,11 +1,7 @@
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, panes, focused, run, openOverlay, theme, window, shared, layout, settings } from "herdr";
-import { markColor, mix } from "./colors.js";
-
-// Helper: ensure 6-digit hex before appending alpha
-const hex6 = (c) => c && /^#[0-9a-f]{8}$/i.test(c) ? c.slice(0, 7) : c;
-const withAlpha = (c, a) => { const h = hex6(c); return h ? h + a : c; };
+import { markColor, withAlpha, GLASS } from "./colors.js";
 
 // The bar reads the sidebar node out of `layout()` (the whole layout document);
 // the traffic lights and window facts come from the root and `window()`.
@@ -89,31 +85,30 @@ export default class Tabs extends View {
       if (programUse.get(p) === 1) return [e.c.id, p];
       return [e.c.id, `${p} ${e.i + 1}`];
     }));
-    // The active tab is the same flat tint as a selected sidebar row: an opaque
-    // square mixed from `raised` and the space's colour, filling the bar's height
-    // and sitting flush against the tabs beside it.
+    // Every card on the bar speaks the GLASS scale shared with the sidebar
+    // rows: resting and hover for the quiet tabs, the active fill for the
+    // selected one, in this space's colour.
     const fillRaw = markColor((shared("space.colors") ?? {})[space?.id], t);
     const fill = fillRaw ? fillRaw.slice(0, 7) : null; // Ensure 6-digit hex
-    const balloon = fill ? mix(t.raised, fill, 0.30) : t.raised;
     const item = ({ c, i, program }) => {
       const name = labels.get(c.id), active = c.active && !panelOpen;
       return h_flex().id(`tab-${c.id}`).relative().h(30).rounded(10).px(10).gap(8).items_center().flex_none().text_size(13)
         .border(1)
         .when(active, el => el
-          .bg(fill ? withAlpha(fill, "50") : withAlpha(t.raised, "90"))
-          .border_color(fill ? withAlpha(fill, "80") : withAlpha(t.foreground, "40"))
+          .bg(fill ? withAlpha(fill, GLASS.active) : withAlpha(t.raised, "90"))
+          .border_color(fill ? withAlpha(fill, GLASS.activeEdge) : withAlpha(t.foreground, "3d"))
           .text_color(t.foreground))
         .when(!active, el => el
           .when(Boolean(fill), r => r
-            .bg(withAlpha(fill, "12"))
-            .border_color(withAlpha(fill, "25")))
+            .bg(withAlpha(fill, GLASS.rest))
+            .border_color(withAlpha(fill, GLASS.restEdge)))
           .when(!fill, r => r
-            .bg(withAlpha(t.surface, "20"))
-            .border_color(withAlpha(t.foreground, "15")))
+            .bg(withAlpha(t.surface, "1f"))
+            .border_color(withAlpha(t.foreground, "1a")))
           .text_color(t.muted)
           .hover(s => s
-            .bg(fill ? withAlpha(fill, "20") : withAlpha(t.hover, "40"))
-            .border_color(fill ? withAlpha(fill, "40") : withAlpha(t.foreground, "30"))))
+            .bg(fill ? withAlpha(fill, GLASS.hover) : withAlpha(t.hover, "40"))
+            .border_color(fill ? withAlpha(fill, GLASS.hoverEdge) : withAlpha(t.foreground, "2b"))))
         .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.pressed = i; this.over = i; if (e.click_count === 2) run("tab.rename", { id: c.id }); })
         .on_mouse_move((_e, cx) => {
           if (this.pressed === null || this.over === i) return;
@@ -162,12 +157,12 @@ export default class Tabs extends View {
       const on = body?.active === id || (!panelOpen && Boolean(own?.active));
       return h_flex().id(`panel-${id}`).h(30).rounded(10).px(10).gap(5).flex_none().items_center()
         .text_size(12).border(1)
-        .bg(on ? (fill ? withAlpha(fill, "50") : withAlpha(t.raised, "90")) : (fill ? withAlpha(fill, "12") : withAlpha(t.surface, "20")))
-        .border_color(on ? (fill ? withAlpha(fill, "80") : withAlpha(t.foreground, "40")) : (fill ? withAlpha(fill, "25") : withAlpha(t.foreground, "15")))
+        .bg(on ? (fill ? withAlpha(fill, GLASS.active) : withAlpha(t.raised, "90")) : (fill ? withAlpha(fill, GLASS.rest) : withAlpha(t.surface, "1f")))
+        .border_color(on ? (fill ? withAlpha(fill, GLASS.activeEdge) : withAlpha(t.foreground, "3d")) : (fill ? withAlpha(fill, GLASS.restEdge) : withAlpha(t.foreground, "1a")))
         .text_color(on ? t.foreground : t.muted)
         .when(!on, el => el.hover(s => s
-          .bg(fill ? withAlpha(fill, "20") : withAlpha(t.hover, "40"))
-          .border_color(fill ? withAlpha(fill, "40") : withAlpha(t.foreground, "30")))).on_mouse_down("left", stop)
+          .bg(fill ? withAlpha(fill, GLASS.hover) : withAlpha(t.hover, "40"))
+          .border_color(fill ? withAlpha(fill, GLASS.hoverEdge) : withAlpha(t.foreground, "2b")))).on_mouse_down("left", stop)
         .on_click(() => {
           // 点击时重读布局，连续点击也只切换视图，不创建或关闭 Tab。
           const current = findMany(layout(), ["work-body"])["work-body"];
@@ -196,18 +191,19 @@ export default class Tabs extends View {
     const panels = [];
     if (enabled.includes("files")) panels.push(panelButton("files", "Files", "mods/my-files/file.svg"));
     if (enabled.includes("changes")) panels.push(panelButton("changes", "Changes", "mods/my-changes/changes.svg"));
-    const newTab = div().id("tab-new").h(30).w(30).rounded(10).flex_none().flex().items_center().justify_center().text_color(t.muted)
-      .border(1).border_color(withAlpha(t.foreground, "15")).bg(withAlpha(t.surface, "20"))
-      .hover(s => s.bg(withAlpha(t.hover, "40")).border_color(withAlpha(t.foreground, "30")).text_color(t.foreground)).on_mouse_down("left", stop)
-      .on_click(() => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 })).child("+");
+    // The + and the quick starts are buttons, not tabs, so they take the same
+    // card language on the theme's own colours instead of the space's, each
+    // with a tooltip saying what it does.
+    const glassAction = (id, tip, child, action) => div().id(id).h(30).w(30).rounded(10).flex_none().flex().items_center().justify_center()
+      .text_color(t.muted).tooltip(tip)
+      .border(1).border_color(withAlpha(t.foreground, "1a")).bg(withAlpha(t.surface, "1f"))
+      .hover(s => s.bg(withAlpha(t.hover, "40")).border_color(withAlpha(t.foreground, "2b")).text_color(t.foreground)).on_mouse_down("left", stop)
+      .on_click(action)
+      .child(child);
+    const newTab = glassAction("tab-new", "New tab", "+", () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }));
     // One-click starts beside the +, using the program table's own icons: the
     // shipped tinted glyphs inherit the button's colour, Claude's stays orange.
-    const launch = (id, label, icon, tint, argv) => div().id(id).h(30).w(30).rounded(10).flex_none().flex().items_center().justify_center()
-      .text_color(t.muted).tooltip(label)
-      .border(1).border_color(withAlpha(t.foreground, "15")).bg(withAlpha(t.surface, "20"))
-      .hover(s => s.bg(withAlpha(t.hover, "40")).border_color(withAlpha(t.foreground, "30")).text_color(t.foreground)).on_mouse_down("left", stop)
-      .on_click(() => { showMain(); run("tab.new", { space: space?.id, argv }); })
-      .child(tint ? svg(icon).size(15) : image(icon).size(15));
+    const launch = (id, label, icon, tint, argv) => glassAction(id, label, tint ? svg(icon).size(15) : image(icon).size(15), () => { showMain(); run("tab.new", { space: space?.id, argv }); });
     const launches = [
       launch("start-claude", "Claude Code", "icons/claude.svg", false, ["claude", "--dangerously-skip-permissions"]),
       launch("start-pi", "Pi", "icons/pi.svg", true, ["pi"]),
@@ -215,8 +211,8 @@ export default class Tabs extends View {
       launch("start-nvim", "Neovim", "icons/nvim.svg", true, ["nvim"]),
     ];
     return h_flex().size_full().min_w(0).gap(4).pl(left).pr(8).items_center()
-      .bg(t.chrome + "c0")
-      .border_b(1).border_color(t.foreground + "10")
+      .bg(withAlpha(t.chrome, "c0"))
+      .border_b(1).border_color(withAlpha(t.foreground, "14"))
       .on_mouse_up("left", () => { this.pressed = null; this.over = null; })
       // 标签和新建入口留在可滚动区域内；Files／Changes 固定在标签栏最右侧。
       .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(4).overflow_x_scrollbar().children([...entries.map(item), newTab, ...launches]))

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
+import { markColor, withAlpha, GLASS } from "../mods/my-sidebar/colors.js";
 
 const read = file => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 
@@ -60,7 +61,10 @@ function fixture({ legacy = false } = {}) {
     },
     theme: () => ({ raised: "#222222", muted: "#999999", foreground: "#ffffff", chrome: "#111111" }),
     window: () => ({ platform: "macos", titlebar: "none" }),
-    settings: () => ({ zoom: 1 }), shared: () => undefined, markColor: () => null,
+    settings: () => ({ zoom: 1 }), shared: () => undefined,
+    // The tab bar imports these from colors.js; the loader strips imports, so
+    // the fixture hands the mod the real ones, tokens and all.
+    markColor, withAlpha, GLASS,
     openOverlay: spec => commands.push({ name: "overlay", args: spec }),
     run(name, args) {
       commands.push({ name, args: JSON.parse(JSON.stringify(args)) });

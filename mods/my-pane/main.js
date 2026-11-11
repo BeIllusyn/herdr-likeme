@@ -9,11 +9,7 @@
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { panes, props, run, theme, home, focused, shared } from "herdr";
-import { markColor, mix } from "./colors.js";
-
-// Helper: ensure 6-digit hex before appending alpha
-const hex6 = (c) => c && /^#[0-9a-f]{8}$/i.test(c) ? c.slice(0, 7) : c;
-const withAlpha = (c, a) => { const h = hex6(c); return h ? h + a : c; };
+import { markColor, withAlpha, GLASS } from "./colors.js";
 
 const HOME = home();
 // A mod pane carries its folder name as `title`; the helper panes read better.
@@ -56,12 +52,13 @@ export default class Pane extends View {
     const pic = icon(p.program, 14, t.muted);
     const st = p.status;
     const pane = p.pane;
-    // The active tab and selected sidebar row use a 30% blend; a whole header
-    // is much larger, so it takes the same colour at a quieter 16%. Only the
+    // A row or a tab fills with the space's colour at GLASS.active; a whole
+    // header is much larger, so it takes the same colour at the quieter
+    // GLASS.header strength, with its edge in GLASS.headerEdge. Only the
     // focused header wears it, so only that one does the lookup and blend.
     // The surface is the theme's, so light and dark themes each get their own.
-    let bg = withAlpha(t.surface, "cc");
-    let borderColor = withAlpha(t.foreground, "10");
+    let bg = t.surface;
+    let borderColor = withAlpha(t.foreground, "14");
     // A mod pane holds the keyboard; `focused` on the panes list is not always
     // cleared for the terminal beside it, so trust the live focus when there is
     // one. A layout terminal block (no model pane focused) keeps `focused`.
@@ -69,8 +66,8 @@ export default class Pane extends View {
     if (liveFocus ? liveFocus === p.pane : p.focused) {
       const fillRaw = markColor((shared("space.colors") ?? {})[focused()?.space], t);
       const fill = fillRaw ? fillRaw.slice(0, 7) : null;
-      bg = fill ? withAlpha(fill, "40") : withAlpha(t.raised, "cc");
-      borderColor = fill ? withAlpha(fill, "60") : withAlpha(t.foreground, "30");
+      bg = fill ? withAlpha(fill, GLASS.header) : t.raised;
+      borderColor = fill ? withAlpha(fill, GLASS.headerEdge) : withAlpha(t.foreground, "30");
     }
     return h_flex()
       .id(`pane-head-${pane}`)
@@ -93,7 +90,7 @@ export default class Pane extends View {
       .child(div().w(64).h_full().flex_none().flex().items_center().justify_end()
         .when(st === "working", el => el.child(div().w(18).h_full().flex_none().flex().items_center().justify_center()
           .child(div().text_size(16).line_height("16px").text_color(t.working).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 80))))
-        .when(st === "blocked", el => el.child(div().flex_none().px(6).h(18).flex().items_center().rounded(5).bg(t.blocked + "26").text_size(10.5).font_semibold().text_color(t.blocked).child("Needs you")))
+        .when(st === "blocked", el => el.child(div().flex_none().px(6).h(18).flex().items_center().rounded(5).border(1).border_color(withAlpha(t.blocked, "40")).bg(withAlpha(t.blocked, "26")).text_size(10.5).font_semibold().text_color(t.blocked).child("Needs you")))
         .when(st === "done", el => el.child(div().size(7).flex_none().rounded(4).bg(t.done))))
       .child(this.button(t, `ph-r-${pane}`, "split-right", "pane.split", { direction: "right", pane }))
       .child(this.button(t, `ph-d-${pane}`, "split-down", "pane.split", { direction: "down", pane }))

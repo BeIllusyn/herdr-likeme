@@ -13,9 +13,8 @@ export function markColor(color, t) {
   return /^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(c ?? "") ? c.slice(0, 7) : null;
 }
 
-// `k` of `b` over `a`: an opaque blend. A selected row's balloon is mixed against
-// `raised` rather than laid on as alpha, so it stays the same pill over chrome,
-// hover and the cards behind it.
+// `k` of `b` over `a`: an opaque blend, for a tint that must not depend on what
+// sits behind it.
 export function mix(a, b, k) {
   if (!/^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(a ?? "") || !/^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(b ?? "")) return a || b;
   const rgb = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
@@ -23,42 +22,28 @@ export function mix(a, b, k) {
   return "#" + x.map((v, i) => Math.round(v * (1 - k) + y[i] * k).toString(16).padStart(2, "0")).join("");
 }
 
-// === Glassmorphism helpers ===
-
-// Convert hex + alpha to #rrggbbaa format
-export function alpha(hex, alphaHex) {
-  if (!hex || !/^#[0-9a-f]{6}$/i.test(hex)) return hex;
-  return hex + alphaHex;
+// A colour as a 6-digit hex, before anything is appended to it.
+export function hex6(c) {
+  return c && /^#[0-9a-f]{8}$/i.test(c) ? c.slice(0, 7) : c;
 }
 
-// Glass surface for panels (sidebar, tab bar) - semi-transparent
-export function glassSurface(t) {
-  return t.chrome + "c0"; // 75% opacity
+// `c` at `a` (two hex digits): the alpha layer of a glass card.
+export function withAlpha(c, a) {
+  const h = hex6(c);
+  return h ? h + a : c;
 }
 
-// Glass card background with border
-export function glassCard(t, tint = null, active = false) {
-  const base = tint || t.surface;
-  const alphaHex = active ? "59" : "26"; // 35% or 15%
-  const borderAlpha = active ? "66" : "26"; // 40% or 15%
-  return {
-    bg: base + alphaHex,
-    borderColor: t.foreground + borderAlpha,
-  };
-}
-
-// Active glass: brighter, more opaque
-export function glassActive(t, tint) {
-  return {
-    bg: (tint || t.raised) + "66", // 40%
-    borderColor: (tint || t.foreground) + "80", // 50%
-  };
-}
-
-// Hover glass: slightly brighter
-export function glassHover(t, tint) {
-  return {
-    bg: (tint || t.hover) + "40", // 25%
-    borderColor: t.foreground + "40", // 25%
-  };
-}
+// The glass scale every card shares, so the sidebar rows, the tabs, the panel
+// buttons and the focused header lift and glow by the same steps. A resting
+// card is a whisper of its space's colour with a soft edge; the pointer lifts
+// it a step; selection fills it with the space's colour at a strength that
+// reads as the same glow on every surface. `wash` is the fainter step for
+// sub-agent rows under their parent's card, and `header` the quieter pair a
+// whole pane header takes, being much larger than a row or a tab.
+export const GLASS = {
+  rest: "12", restEdge: "26",
+  hover: "1f", hoverEdge: "40",
+  active: "50", activeEdge: "82",
+  wash: "0a",
+  header: "33", headerEdge: "59",
+};

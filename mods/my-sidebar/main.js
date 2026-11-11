@@ -3,7 +3,7 @@
 // content instead of a fixed half of the sidebar.
 import { View } from "gpui-kit";
 import { v_flex } from "gpui-base";
-import { props, theme } from "herdr";
+import { props } from "herdr";
 import Spaces from "./spaces.js";
 import Agents from "./agents.js";
 
@@ -17,10 +17,10 @@ export default class Sidebar extends View {
 
   render() {
     if (props()?.sortMenu) return this.agents;
-    const t = theme();
+    // The bar shows itself when the pointer is over the list instead of sitting
+    // there always: the column reads cleaner when nothing is scrolling.
     return v_flex().size_full().min_h(0)
-      .bg(t.chrome + "c0")
-      .overflow_y_scrollbar().mode("always")
+      .overflow_y_scrollbar().mode("hover")
       .child(this.spaces)
       .child(this.agents);
   }
