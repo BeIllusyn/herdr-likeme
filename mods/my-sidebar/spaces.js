@@ -6,7 +6,7 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window } from "herdr";
-import { markColor, withAlpha, GLASS } from "./colors.js";
+import { markColor, withAlpha, UI, TYPE } from "./colors.js";
 import { backgroundTick } from "./util.js";
 
 // A place key is machine + NUL + folder: neither part can contain NUL, so the
@@ -25,7 +25,7 @@ function place(s, ps) {
   const tabs = new Set((s.tabs ?? []).map((c) => c.id));
   return ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
 }
-const rowHeight = ({ tree }) => (tree ? 42 : 44);
+const rowHeight = ({ tree }) => (tree ? 38 : 40);
 const where = (s, ps) => keyOf(s.machine ?? null, place(s, ps));
 const base = (path) => path.replace(/\/+$/, "").split("/").pop();
 // Changes made outside Herdr (an editor's save, a commit in another app): looked
@@ -357,7 +357,9 @@ export default class Spaces extends View {
       return layout === "loading" || (!layout && this.machines.some(k => k.name === m && k.state === "connected"))
         || sp.some(s => (s.machine ?? null) === m && !this.shown.has(s.id));
     };
-    const loadingRow = m => div().id(`machine-loading-${m ?? "local"}`).h(32).flex_none().px(10).text_size(12).text_color(t.dim).child("Loading…");
+    const loadingRow = m => h_flex().id(`machine-loading-${m ?? "local"}`).h(30).flex_none().px(8).gap(7).items_center().text_size(TYPE.small).text_color(t.dim)
+      .child(div().text_size(12).text_color(t.muted).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 80))
+      .child("Loading…");
     if (!remote.length) return loading(null) && !rows.length ? [loadingRow(null)] : rows.map(draw);
     const machineNames = [null, ...remote];
     return machineNames.flatMap((m) => {
@@ -367,16 +369,16 @@ export default class Spaces extends View {
       const connected = !m || machine?.state === "connected";
       const rebuilt = this.rebuilt(machine) || !!repair;
       const folded = this.folded.has(m);
-      const head = h_flex().id(`machine-${m ?? "local"}`).h(28).flex_none().px(10).gap(7).items_center().rounded(8).text_size(11).text_color(t.dim)
-        .cursor_pointer().hover(s => s.bg(t.hover))
+      const head = h_flex().id(`machine-${m ?? "local"}`).h(26).flex_none().px(8).gap(6).items_center().rounded(5).text_size(TYPE.label).font_semibold().text_color(t.muted)
+        .cursor_pointer().hover(s => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.muted))
         .on_click((_e, cx) => {
           folded ? this.folded.delete(m) : this.folded.add(m);
           localStorage.setItem("likeme.machines.folded", JSON.stringify([...this.folded]));
           cx.notify();
         })
-        .child(svg(`mods/workspace-chrome/${m ? "server" : "monitor"}.svg`).size(13).flex_none())
-        .child(div().flex_1().truncate().child(m ?? "This computer")
-          .when(!connected && !rebuilt, el => el.child(div().flex_none().child((machine?.state ?? "asleep").replace(/_/g, " "))))
+        .child(svg(`mods/workspace-chrome/${m ? "server" : "monitor"}.svg`).size(11).flex_none())
+        .child(div().flex_1().truncate().child((m ?? "This computer").toUpperCase())
+          .when(!connected && !rebuilt, el => el.child(div().flex_none().text_color(t.dim).child((machine?.state ?? "asleep").replace(/_/g, " "))))
           .when(rebuilt, el => el.child(h_flex().flex_none().gap(3).items_center()
             .child(div().max_w(140).truncate().child(repair?.error || "rebuilt ·"))
             .child(div().id(`machine-connect-${m}`).text_color(repair?.error ? t.blocked : t.muted)
@@ -384,14 +386,15 @@ export default class Spaces extends View {
               .tooltip(repair?.error || "This machine was rebuilt or replaced. Click to connect to the new one.")
               .on_click((_e, cx) => { cx.stop_propagation(); this.reconnect(machine, cx); })
               .child(repair?.busy ? "Connecting…" : "Connect"))))
-          .when(connected, el => el.child(div().id(`machine-add-${m ?? "local"}`).flex_none().px(4).rounded(4).hover(s => s.bg(t.hover).text_color(t.foreground))
+          .when(connected, el => el.child(div().id(`machine-add-${m ?? "local"}`).flex_none().px(3).rounded(3).hover(s => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground))
             .on_click((_e, cx) => { cx.stop_propagation(); run("space.new", { machine: m ?? "" }); }).child("+")))
-          .child(div().size(6).rounded(3).flex_none().bg(connected ? t.ansi2 : t.dim))
-          .child(svg(`mods/workspace-chrome/chevron-${folded ? "right" : "down"}.svg`).size(11).flex_none()));
-      const empty = h_flex().id(`machine-new-${m ?? "local"}`).h(32).flex_none().px(10).gap(7).items_center().rounded(8)
-        .text_size(12).text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground))
+          .child(div().size(5).rounded_full().flex_none().bg(connected ? t.ansi2 : t.dim))
+          .child(svg(`mods/workspace-chrome/chevron-${folded ? "right" : "down"}.svg`).size(10).flex_none()));
+      const empty = h_flex().id(`machine-new-${m ?? "local"}`).h(32).flex_none().px(8).gap(7).items_center().rounded(6)
+        .text_size(TYPE.small).text_color(t.dim).hover(s => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground))
         .on_click(() => run("space.new", { machine: m ?? "" }))
-        .child(svg("mods/workspace-chrome/plus.svg").size(12)).child("New space there");
+        .child(div().w(24).flex_none().flex().items_center().justify_center().child(svg("mods/workspace-chrome/plus.svg").size(11)))
+        .child("New space there");
       if (rebuilt) return [head];
       return [head, ...(folded ? [] : mine.length ? mine.map(draw) : [loading(m) ? loadingRow(m) : empty])];
     });
@@ -400,28 +403,22 @@ export default class Spaces extends View {
   row({ w, i, g, tree }, t, fillOf) {
     const on = w.active;
     const fill = fillOf(w.id);
-    // Resting cards lie flat under a whisper of their space's colour with a soft
-    // edge; the active one fills with the same colour and brightens its edge —
-    // the GLASS steps the tabs and agent rows share.
+    // A flat row on the graphite: selection is a slightly stronger neutral
+    // fill, and the space's own mark wakes up — its monogram turns solid and
+    // its branch glyph takes the colour. Resting rows keep the colour only in
+    // an outlined monogram, so the sidebar stays quiet while every space keeps
+    // an identity that survives its tab being closed.
     return v_flex()
       .relative()
       .id(`space-${w.id}`)
-      .px(10)
+      .px(8)
       .h(rowHeight({ tree }))
       .flex_none()
       .justify_center()
-      .rounded(12)
-      .border(1)
-      .when(on, (el) => el
-        .bg(withAlpha(fill, GLASS.active))
-        .border_color(withAlpha(fill, GLASS.activeEdge)))
-      .when(!on, (el) => el
-        .bg(withAlpha(fill, GLASS.rest))
-        .border_color(withAlpha(fill, GLASS.restEdge))
-        .hover((s) => s
-          .bg(withAlpha(fill, GLASS.hover))
-          .border_color(withAlpha(fill, GLASS.hoverEdge))))
-      .when(this.pressed === i && this.over !== i, (el) => el.opacity(0.5))
+      .rounded(6)
+      .when(on, (el) => el.bg(withAlpha(t.foreground, UI.active)))
+      .when(!on, (el) => el.hover((s) => s.bg(withAlpha(t.foreground, UI.hover))))
+      .when(this.pressed === i && this.over !== i, (el) => el.opacity(0.45))
       .when(this.pressed !== null && this.over === i && this.pressed !== i, (el) => el.child(
         div().absolute().left(4).right(4).h(2).rounded(1).bg(t.accent)
           .when(this.pressed < i, line => line.bottom(0))
@@ -452,31 +449,39 @@ export default class Spaces extends View {
       .on_mouse_down("right", () => this.menu(w))
       .child(
         h_flex()
-          .gap(9)
+          .gap(8)
           .items_center()
           .size_full()
-          .when(Boolean(tree), el => el.child(
-            // A real tree: the vertical line runs under the checkout's avatar,
-            // the last worktree turns into the row instead of continuing down.
-            div().ml(10).w(6).flex_none().border_l(1).border_color(t.input)
-              .when(tree === "└─", d => d.h(21).self_start().border_b(1).rounded_bl(6))
-              .when(tree !== "└─", d => d.self_stretch()),
-          ).child(svg("mods/workspace-chrome/branch.svg").size(20).text_color(t.muted)))
-          .when(!tree, el => el.child(h_flex().size(32).flex_none().rounded(10).bg(fill).items_center().justify_center().text_size(15).font_semibold().text_color("#101114").child([...w.name][0]?.toUpperCase() ?? "?")))
-          // Left: the icon. Right: the project name over its branch.
+          .when(Boolean(tree), el => el
+            .child(
+              // A real tree: the vertical line runs under the checkout's
+              // monogram, the last worktree turns into the row.
+              div().ml(2).w(8).flex_none().border_l(1).border_color(withAlpha(t.foreground, "1c"))
+                .when(tree === "└─", d => d.h(19).self_start().border_b(1).rounded_bl(5))
+                .when(tree !== "└─", d => d.self_stretch()),
+            )
+            .child(svg("mods/workspace-chrome/branch.svg").size(14).text_color(on ? fill : t.muted)))
+          .when(!tree, el => el.child(h_flex().size(24).flex_none().rounded(6).border(1)
+            .bg(on ? fill : withAlpha(fill, UI.tint))
+            .border_color(on ? fill : withAlpha(fill, UI.tintEdge))
+            .items_center().justify_center().text_size(11).font_semibold()
+            .text_color(on ? "#101114" : fill)
+            .child([...w.name][0]?.toUpperCase() ?? "?")))
+          // Left: the mark. Right: the project name over its branch.
           .child(
             v_flex()
               .flex_1()
               .min_w(0)
-              .gap(2)
-              .child(div().min_w(0).truncate().text_size(13).line_height("16px").text_color(t.foreground).child(w.name))
+              .gap(1)
+              .child(div().min_w(0).truncate().text_size(TYPE.body).line_height("15px")
+                .font_weight(on ? 600 : 500).text_color(t.foreground).child(w.name))
               .when(Boolean(g), el => el.child(
                 h_flex()
                   .min_w(0)
                   .items_center()
                   .gap(4)
-                  .text_size(11)
-                  .line_height("14px")
+                  .text_size(TYPE.meta)
+                  .line_height("13px")
                   .text_color(t.muted)
                   .child(div().min_w(0).truncate().child(g.branch ?? "detached"))
                   .when(g.ahead > 0, el => el.child(div().flex_none().text_color(t.ansi2).child(`↑${g.ahead}`)))
@@ -486,15 +491,14 @@ export default class Spaces extends View {
       );
   }
 
-  // Always keep a place to make the next space at the end of the list: the
-  // same neutral glass resting step as the tab bar's action buttons.
+  // A quiet action at the end of the list, not a card: it reads as the next
+  // thing to do rather than as another space.
   ghost(t) {
-    return h_flex().id("space-new-hint").h(38).flex_none().px(10).gap(8).rounded(10)
-      .border(1).border_color(withAlpha(t.foreground, GLASS.restEdge)).bg(withAlpha(t.surface, "14"))
-      .text_size(12).text_color(t.muted).items_center().cursor_pointer()
-      .hover(s => s.bg(withAlpha(t.hover, "40")).border_color(withAlpha(t.foreground, "2b")).text_color(t.foreground))
+    return h_flex().id("space-new-hint").h(32).flex_none().px(8).gap(8).rounded(6)
+      .text_size(TYPE.small).text_color(t.muted).items_center().cursor_pointer()
+      .hover(s => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground))
       .on_click(() => run("space.new"))
-      .child(svg("mods/workspace-chrome/plus.svg").size(12))
+      .child(h_flex().size(24).flex_none().items_center().justify_center().child(svg("mods/workspace-chrome/plus.svg").size(11)))
       .child("New space");
   }
 
@@ -522,11 +526,14 @@ export default class Spaces extends View {
     return v_flex().text_size(13)
       .when(!embedded, el => el.size_full().min_h(0).bg(t.chrome))
       .when(embedded, el => el.w_full().flex_none())
-      .child(h_flex().h(31).pl(16).pr(10).items_center().justify_between().text_size(14).font_medium().text_color(t.muted)
-        .child("Spaces")
-        .child(div().id("space-new").size(26).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(t.hover).text_color(t.foreground))
-          .on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(14))))
-      .child(v_flex().px(6).pb(embedded ? 8 : 14).gap(4)
+      .child(h_flex().h(30).pl(16).pr(10).items_center().justify_between()
+        .child(h_flex().gap(6).items_center()
+          .child(div().text_size(TYPE.label).font_semibold().text_color(t.muted).child("SPACES"))
+          .child(div().text_size(TYPE.label).text_color(t.dim).child(String(sp.length))))
+        .child(div().id("space-new").size(22).flex_none().flex().items_center().justify_center().rounded(5)
+          .text_color(t.muted).hover(s => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground))
+          .on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(12))))
+      .child(v_flex().px(8).pb(embedded ? 6 : 16).gap(2)
         .when(!embedded, el => el.flex_1().min_h(0).overflow_y_scrollbar().mode("hover"))
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
         .children([...this.grouped(t, sp, ps, ms, fillOf), this.ghost(t)]));

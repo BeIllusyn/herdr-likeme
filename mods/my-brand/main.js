@@ -7,14 +7,17 @@ import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme, run, props, updates } from "herdr";
 
+const alpha = (c, a) => (c && /^#[0-9a-f]{6}$/i.test(c) ? c + a : c);
+
 export default class Brand extends View {
   footer(t) {
-    const row = (id, icon, label, dim, action) => h_flex().id(id).h(28).px(8).gap(9).items_center().rounded(8)
-      .text_color(dim ? t.dim : t.muted).hover(s => s.bg(t.hover).text_color(t.foreground)).cursor_pointer()
-      .on_click(action).child(svg(`mods/workspace-chrome/${icon}.svg`).size(14))
+    const row = (id, icon, label, dim, action) => h_flex().id(id).h(26).px(7).gap(8).items_center().rounded(5)
+      .text_color(dim ? t.dim : t.muted).hover(s => s.bg(alpha(t.foreground, "08")).text_color(t.foreground)).cursor_pointer()
+      .on_click(action).child(svg(`mods/workspace-chrome/${icon}.svg`).size(13))
       .child(label);
-    const ready = div().size(6).rounded_full().bg(t.accent);
-    return v_flex().size_full().px(8).pt(4).pb(8).text_size(13)
+    const ready = div().size(5).rounded_full().bg(t.accent);
+    return v_flex().size_full().px(8).pt(6).pb(7).text_size(11.5)
+      .border_t(1).border_color(alpha(t.foreground, "0a"))
       .child(row("settings", "settings", "Settings", false, () => run("app.settings"))
         .when(Boolean(updates().app.ready), el => el.child(ready)))
       .child(row("machine", "plus", "Add machine", true, () => run("mod.open", { name: "machine-add" })));

@@ -2,9 +2,7 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, h_resizable, resizable_panel, Editor, EditorState, Scrollbar, v_virtual_list } from "gpui-base";
 import { spaces, panes, focused, props, exec, readTextFile, writeTextFile, watchFolder, theme, settings, window, shared } from "herdr";
-// Helper: ensure 6-digit hex before appending alpha
-const hex6 = (c) => c && /^#[0-9a-f]{8}$/i.test(c) ? c.slice(0, 7) : c;
-const withAlpha = (c, a) => { const h = hex6(c); return h ? h + a : c; };
+import { markColor, withAlpha, UI, TYPE } from "./colors.js";
 
 
 // 工作区固定视图跟随当前终端目录；旧版独立工具 Tab 保留自己的根目录和展开状态。
@@ -368,13 +366,17 @@ export default class Files extends View {
     if (pair.note) return div().w_full().h(20).flex_none().px(12).truncate().text_color(t.dim).child(pair.note);
     const cell = (row, tint, number) => h_flex().flex_1().min_w(0).h_full().gap(6).items_center().px(6)
       .when(Boolean(row) && Boolean(tint), (e) => e.bg(tint))
-      .child(div().w(28).flex_none().text_right().text_size(10).text_color(t.dim).child(row && number !== undefined ? String(number) : ""))
+      .child(div().w(26).flex_none().text_right().text_size(10).text_color(t.dim).child(row && number !== undefined ? String(number) : ""))
       .child(div().w(8).flex_none().text_size(10).text_color(t.dim).child(row?.kind === "-" ? "−" : row?.kind === "+" ? "+" : ""))
       .child(div().flex_1().min_w(0).truncate().child(row?.text ?? ""));
     return h_flex().w_full().h(20).flex_none()
-      .child(cell(pair.left, pair.left?.kind === "-" ? t.ansi1 + "33" : null, pair.left?.oldNumber))
-      .child(div().w(1).flex_none().bg(t.border))
-      .child(cell(pair.right, pair.right?.kind === "+" ? t.ansi2 + "33" : null, pair.right?.newNumber));
+      .child(pair.left?.kind === "-"
+        ? cell(pair.left, withAlpha(t.ansi1, "33"), pair.left.oldNumber)
+        : cell(pair.left, null, pair.left?.oldNumber))
+      .child(div().w(1).flex_none().bg(withAlpha(t.foreground, "0f")))
+      .child(pair.right?.kind === "+"
+        ? cell(pair.right, withAlpha(t.ansi2, "33"), pair.right.newNumber)
+        : cell(pair.right, null, pair.right?.newNumber));
   }
 
   // Changes 把要打开的文件放进 shared：只有工作区固定视图响应，旧版工具 Tab
@@ -441,14 +443,17 @@ export default class Files extends View {
 
   // A row inside the virtual renderer: no handlers here (the list owns the
   // click), and it is rebuilt only while its row is on screen.
-  fileRow(r, t) {
-    return h_flex().h(28).flex_none().pl(8 + r.depth * 18).pr(8).gap(7).items_center().rounded(6).cursor_pointer()
-      .when(this.file === r.path && !r.dir, el => el.bg(t.selected))
-      .hover(s => s.bg(t.hover))
-      .child(r.dir ? svg(`mods/my-files/chevron-${r.open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
-      .child(svg(`mods/my-files/${r.dir ? "folder" : "file"}.svg`).size(14).flex_none().text_color(t.muted))
-      .child(div().flex_1().min_w(0).truncate().child(r.name))
-      .when(Boolean(r.mark), el => el.child(div().text_size(11).text_color(r.mark === "A" ? t.ansi2 : r.mark === "D" || r.mark === "U" ? t.ansi1 : t.blocked).child(r.mark)));
+  fileRow(r, t, accent) {
+    const selected = this.file === r.path && !r.dir;
+    const markTint = r.mark === "A" ? t.ansi2 : r.mark === "D" || r.mark === "U" ? t.ansi1 : t.ansi3;
+    return h_flex().h(26).flex_none().pl(6 + r.depth * 14).pr(6).gap(6).items_center().rounded(6).cursor_pointer()
+      .when(selected, el => el.bg(withAlpha(t.foreground, UI.active)))
+      .when(!selected, el => el.hover(s => s.bg(withAlpha(t.foreground, "06"))))
+      .child(r.dir ? svg(`mods/my-files/chevron-${r.open ? "down" : "right"}.svg`).size(10).flex_none().text_color(t.dim) : div().w(10).flex_none())
+      .child(svg(`mods/my-files/${r.dir ? "folder" : "file"}.svg`).size(13).flex_none().text_color(selected ? accent : t.muted))
+      .child(div().flex_1().min_w(0).truncate().text_size(TYPE.small).font_weight(selected ? 500 : 400)
+        .text_color(selected ? t.foreground : t.muted).child(r.name))
+      .when(Boolean(r.mark), el => el.child(div().w(10).flex_none().text_size(9).font_weight(600).text_color(markTint).child(r.mark)));
   }
 
   render(cx) {
@@ -474,66 +479,102 @@ export default class Files extends View {
     const message = this.error || (this.loading ? "Loading files…" : this.root ? "No files" : "No folder");
     const listId = `files-tree-${this.uid}`, compareId = `files-compare-${this.uid}-${this.diffSeq}`;
     const repo = this.repoPath();
+    // The active space's colour runs through the selected file's icon, the
+    // same "selection by mark" language as the sidebar rows and tabs (the
+    // location already knows the space, so no second spaces() copy is needed).
+    const accentRaw = markColor((shared("space.colors") ?? {})[loc?.space], t);
+    const accent = accentRaw ? accentRaw.slice(0, 7) : (t.accent ?? t.muted);
+    // The file's path as a quiet directory and a strong file name.
+    const parts = this.file ? this.file.split("/") : [];
+    const leaf = parts.pop() ?? "";
+    const dir = parts.length ? parts.join("/") + "/" : "";
+    const segment = (id, label, on, enabled, tip, action) => h_flex().id(id).h(20).flex_none().px(6).rounded(4).items_center()
+      .text_size(9.5).font_weight(600)
+      .when(on, (el) => el.bg(withAlpha(t.foreground, "0e")).text_color(t.foreground))
+      .when(!on, (el) => el.text_color(enabled ? t.muted : t.dim))
+      .when(enabled && !on, (el) => el.cursor_pointer().hover((s) => s.text_color(t.foreground)))
+      .when(enabled, (el) => el.tooltip(tip).on_click(action))
+      .child(label);
+
+    const treePanel = resizable_panel().size(220).size_range(160).child(
+      v_flex().size_full().min_w(0).min_h(0)
+        .child(h_flex().h(34).flex_none().px(12).gap(6).items_center()
+          .child(svg("mods/my-files/folder.svg").size(12).flex_none().text_color(t.dim))
+          .child(div().flex_1().min_w(0).truncate().text_size(TYPE.meta).font_weight(600).text_color(t.muted)
+            .child(this.root?.split(/[\\/]/).pop() ?? "")))
+        .child(v_flex().id(`files-tree-${this.uid}`).p(6).gap(1).flex_1().min_w(0).min_h(0)
+          .when(rows.length > 0, (tree) => tree.child(v_flex().relative().flex_1().min_h(0)
+            .child(v_virtual_list(listId, rows.length, 26, (i) => rows[i].path,
+              (range) => rows.slice(range.start, range.end).map((r) => this.fileRow(r, t, accent)))
+              .on_item_click((path, cx) => {
+                const row = rows.find((r) => r.path === path);
+                if (!row) return;
+                if (row.dir) this.toggle(path, cx);
+                // A second click on the open file goes back to the empty preview.
+                else if (this.file === path) { this.show(null, cx); cx.notify(); }
+                else this.show(path, cx);
+              })
+              .size_full())
+            .child(Scrollbar.vertical(listId).absolute().inset_0())))
+          .when(Boolean(this.error) || !this.entries.get("")?.length, (el) => el.child(
+            div().px(8).py(10).text_size(TYPE.meta).line_height("15px").text_color(t.dim).child(message)))
+          .when(this.limited, (el) => el.child(
+            div().flex_none().px(8).py(8).text_size(TYPE.label).line_height("13px").text_color(t.dim).child("Limit: 500 per folder · 5,000 total"))))
+    );
+
+    const previewHeader = h_flex().h(34).flex_none().px(12).gap(8).items_center()
+      .border_b(1).border_color(withAlpha(t.foreground, "0a"))
+      .child(h_flex().flex_1().min_w(0).items_center()
+        .when(Boolean(dir), (el) => el.child(div().min_w(0).truncate().text_size(TYPE.meta).text_color(t.dim).child(dir)))
+        .child(div().flex_none().max_w(220).truncate().text_size(TYPE.small).font_weight(600).text_color(t.foreground).child(leaf)))
+      .child(h_flex().h(22).flex_none().p(1).gap(1).rounded(5).items_center().bg(withAlpha(t.foreground, "05"))
+        .child(segment(`files-edit-${this.uid}`, "Edit", !this.diffMode, true, "Edit the file", (_e, cx) => { if (this.diffMode) this.toggleDiff(cx); }))
+        .child(segment(`files-diff-${this.uid}`, "Diff", this.diffMode, Boolean(repo || this.diffMode), repo ? "Compare with the last commit" : "Not in a git repository", (_e, cx) => { if (repo) this.toggleDiff(cx); })))
+      // The file saves itself after a pause; this says where a write stands
+      // and saves at once when pressed.
+      .when(!this.editable, (el) => el.child(div().text_size(TYPE.meta).text_color(t.dim).child("Read-only")))
+      .when(this.editable, (el) => el.child(div().text_size(TYPE.meta)
+        .text_color(this.saveError ? t.ansi1 : this.dirty || this.saving ? t.muted : t.dim)
+        .when(this.dirty, (e) => e.cursor_pointer().hover((s) => s.text_color(t.foreground)))
+        .when(Boolean(this.saveError), (e) => e.tooltip(this.saveError))
+        .on_click((_e, cx) => this.save(cx))
+        .child(this.saveError ? "Save failed" : this.saving ? "Saving…" : this.dirty ? "Save" : "Saved")));
+
+    const compareHeader = h_flex().h(24).flex_none().px(10).text_size(9).font_weight(600).text_color(t.dim)
+      .child(div().flex_1().child("BEFORE"))
+      .child(div().w(1).flex_none().bg(withAlpha(t.foreground, "0f")))
+      .child(div().flex_1().pl(8).child("AFTER"));
+
+    const compareBody = div().relative().flex_1().min_h(0).font_family(settings().font_family ?? "JetBrains Mono").text_size(11)
+      .child(v_virtual_list(compareId, this.diffPairs.length, 20, (i) => String(i),
+        (range) => this.diffPairs.slice(range.start, range.end).map((pair) => this.compareRow(pair, t))).size_full())
+      .child(Scrollbar.vertical(compareId).absolute().inset_0());
+
+    const diffPane = this.diffMode
+      ? v_flex().flex_1().min_w(0).min_h(0)
+        .when(this.diffLoading, (el) => el.child(div().p(12).text_size(TYPE.meta).text_color(t.dim).child("Loading comparison…")))
+        .when(!this.diffLoading && Boolean(this.diffError), (el) => el.child(div().p(12).text_size(TYPE.meta).text_color(t.dim).child(this.diffError)))
+        .when(!this.diffLoading && !this.diffError && this.diffPairs.length > 0, (el) => el.child(compareHeader).child(compareBody))
+        .when(!this.diffLoading && !this.diffError && this.diffPairs.length === 0, (el) => el.child(
+          div().p(12).text_size(TYPE.meta).text_color(t.dim).child(this.gitTop ? "No differences" : "Not in a git repository")))
+      : (this.code ? Editor.new(this.code).flex_1().min_h(0) : div().p(12).text_size(TYPE.meta).text_color(t.dim).child(this.fileError || "Loading file…"));
+
+    const emptyPreview = v_flex().flex_1().items_center().justify_center().gap(6)
+      .child(h_flex().size(32).flex_none().items_center().justify_center().rounded_full().bg(withAlpha(t.foreground, "05"))
+        .child(svg("mods/my-files/file.svg").size(14).text_color(t.dim)))
+      .child(div().text_size(TYPE.body).text_color(t.muted).child("Select a file"))
+      .child(div().text_size(TYPE.meta).text_color(t.dim).child("Preview or edit it here."));
+
+    const previewPanel = resizable_panel().size_range(240).child(
+      v_flex().size_full().min_w(0).min_h(0).bg(t.background)
+        .border_l(1).border_color(withAlpha(t.foreground, "0d"))
+        .when(Boolean(this.file), (el) => el.child(previewHeader).child(diffPane))
+        .when(!this.file, (el) => el.child(emptyPreview))
+    );
+
     // 原生分栏按实例保留拖动后的宽度，重绘和切换标签不会重置。
-    return h_resizable(`files-${this.uid}`).size_full().min_h(0).min_w(0).overflow_hidden().bg(withAlpha(t.surface, "e6")).text_color(t.foreground).text_size(13)
-      // Left: the tree stays visible while a file is open, so a preview never
-      // hides the way back. Its own header carries the folder name.
-      .child(resizable_panel().size(220).size_range(160).child(v_flex().id(`files-tree-${this.uid}`).size_full().min_w(0).min_h(0).p(6).gap(2)
-        .child(div().px(8).py(4).text_size(11).text_color(t.dim).truncate().child(this.root?.split(/[\\/]/).pop() ?? ""))
-        .when(rows.length > 0, tree => tree.child(v_flex().relative().flex_1().min_h(0)
-          .child(v_virtual_list(listId, rows.length, 28, (i) => rows[i].path,
-            (range) => rows.slice(range.start, range.end).map((r) => this.fileRow(r, t)))
-            .on_item_click((path, cx) => {
-              const row = rows.find((r) => r.path === path);
-              if (!row) return;
-              if (row.dir) this.toggle(path, cx);
-              // A second click on the open file goes back to the empty preview.
-              else if (this.file === path) { this.show(null, cx); cx.notify(); }
-              else this.show(path, cx);
-            })
-            .size_full())
-          .child(Scrollbar.vertical(listId).absolute().inset_0())))
-        .when(Boolean(this.error) || !this.entries.get("")?.length, el => el.child(div().p(8).text_size(12).text_color(t.dim).child(message)))
-        .when(this.limited, el => el.child(div().flex_none().p(8).text_size(11).text_color(t.dim).child("File list limited to 500 entries per folder and 5,000 total")))))
-      // Right: the preview, on the terminal's own background, with the file's
-      // path above it.
-      .child(resizable_panel().size_range(240).child(v_flex().size_full().min_w(0).min_h(0).bg(withAlpha(t.background, "e6"))
-        .when(Boolean(this.file), el => el
-          .child(h_flex().h(32).flex_none().px(12).gap(8).items_center()
-            .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(this.file))
-            // 在编辑器和“变更前/后”并排对比之间切换。
-            .child(div().id(`files-diff-${this.uid}`).h(22).flex_none().flex().items_center().px(6).rounded(6).text_size(11)
-              .text_color(this.diffMode ? t.foreground : repo ? t.muted : t.dim)
-              .when(this.diffMode, (e) => e.bg(t.raised))
-              .when(Boolean(repo || this.diffMode), (e) => e.cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground)))
-              .tooltip(this.diffMode ? "Back to the file" : repo ? "Compare with the last commit" : "Not in a git repository")
-              .on_click((_e, cx) => { if (repo || this.diffMode) this.toggleDiff(cx); })
-              .child("Diff"))
-            // The file saves itself after a pause; this says where a write stands
-            // and saves at once when pressed.
-            .when(!this.editable, el => el.child(div().text_size(11).text_color(t.dim).child("Read-only")))
-            .when(this.editable, el => el.child(div().text_size(11)
-              .text_color(this.saveError ? t.ansi1 : this.dirty || this.saving ? t.muted : t.dim)
-              .when(this.dirty, e => e.cursor_pointer().hover(s => s.text_color(t.foreground)))
-              .when(Boolean(this.saveError), e => e.tooltip(this.saveError))
-              .on_click((_e, cx) => this.save(cx))
-              .child(this.saveError ? "Save failed" : this.saving ? "Saving…" : this.dirty ? "Save" : "Saved"))))
-          .child(this.diffMode
-            ? v_flex().flex_1().min_w(0).min_h(0)
-              .when(this.diffLoading, el => el.child(div().p(12).text_size(12).text_color(t.dim).child("Loading comparison…")))
-              .when(!this.diffLoading && Boolean(this.diffError), el => el.child(div().p(12).text_size(12).text_color(t.dim).child(this.diffError)))
-              .when(!this.diffLoading && !this.diffError && this.diffPairs.length > 0, el => el
-                .child(h_flex().h(24).flex_none().text_size(10).text_color(t.dim)
-                  .child(div().flex_1().px(8).child("Before"))
-                  .child(div().w(1).flex_none().bg(t.border))
-                  .child(div().flex_1().px(8).child("After")))
-                .child(div().relative().flex_1().min_h(0)
-                  .child(v_virtual_list(compareId, this.diffPairs.length, 20, (i) => String(i),
-                    (range) => this.diffPairs.slice(range.start, range.end).map(pair => this.compareRow(pair, t))).size_full())
-                  .child(Scrollbar.vertical(compareId).absolute().inset_0())))
-              .when(!this.diffLoading && !this.diffError && this.diffPairs.length === 0, el => el
-                .child(div().p(12).text_size(12).text_color(t.dim).child(this.gitTop ? "No differences" : "Not in a git repository")))
-            : (this.code ? Editor.new(this.code).flex_1().min_h(0) : div().p(12).text_color(t.dim).child(this.fileError || "Loading file…"))))
-        .when(!this.file, el => el.child(div().flex_1().flex().items_center().justify_center().text_size(12).text_color(t.dim).child("Select a file to preview")))));
+    return h_resizable(`files-${this.uid}`).size_full().min_h(0).min_w(0).overflow_hidden().bg(t.surface).text_color(t.foreground).text_size(13)
+      .child(treePanel)
+      .child(previewPanel);
   }
 }

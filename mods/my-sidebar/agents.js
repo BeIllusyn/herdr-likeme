@@ -4,7 +4,7 @@
 import { View, div, image, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay } from "herdr";
-import { markColor, withAlpha, GLASS } from "./colors.js";
+import { markColor, withAlpha, UI, TYPE } from "./colors.js";
 import { backgroundTick } from "./util.js";
 
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
@@ -179,24 +179,24 @@ export default class Agents extends View {
       .w_full()
       .p(5)
       .bg(t.popover)
-      .text_size(12.8)
-      .child(div().px(8).pt(4).pb(6).text_size(11).text_color(t.dim).child("Sort agents"))
+      .text_size(TYPE.small)
+      .child(div().px(8).pt(4).pb(6).text_size(TYPE.label).font_semibold().text_color(t.muted).child("SORT AGENTS"))
       .children(SORTS.map((s) => h_flex()
         .id(`sort-${s.id}`)
-        .h(31)
+        .h(29)
         .px(8)
-        .gap(9)
-        .rounded(7)
+        .gap(8)
+        .rounded(5)
         .items_center()
         .text_color(t.foreground)
-        .hover((el) => el.bg(t.hover))
+        .hover((el) => el.bg(withAlpha(t.foreground, UI.hover)))
         .on_click(() => {
           setShared("agents.sort", s.id);
           closeOverlay(this.overlay);
         })
-        .child(svg(s.icon).size(14).flex_none().text_color(t.muted))
+        .child(svg(s.icon).size(13).flex_none().text_color(t.muted))
         .child(div().flex_1().child(s.label))
-        .when(s.id === on, (el) => el.child(svg("mods/workspace-chrome/check.svg").size(14).flex_none().text_color(t.foreground)))));
+        .when(s.id === on, (el) => el.child(svg("mods/workspace-chrome/check.svg").size(12).flex_none().text_color(t.foreground)))));
   }
 
   peek(addr) {
@@ -239,33 +239,31 @@ export default class Agents extends View {
     return { subsOf, urgency: (addr) => urgency.get(addr) ?? 0 };
   }
 
-  // A sub-agent sits one glass step below its parent: a fainter wash of the same
-  // space colour, no edge of its own, and the parent's active fill when focused.
-  subRow(t, s, shown, compact, fill) {
+  // A sub-agent sits one step below its parent: the parent's row indent, a
+  // quieter name and no mark of its own. The focused one takes the neutral
+  // selection and a brighter name.
+  subRow(t, s, shown, compact) {
     const k = s.t;
     const st = kidStatus(k, this.listed);
-    const pic = icon(k.program, 20, t.foreground);
+    const pic = icon(k.program, 14, t.foreground);
     const on = k.address === shown;
     return h_flex()
       .id(`sub-${k.address}`)
-      .pl(49)
-      .pr(8)
-      .h(26)
+      .relative()
+      .pl(40)
+      .pr(6)
+      .h(24)
       .flex_none()
-      .gap(0)
       .items_center()
-      .rounded(8)
-      .text_size(12.5)
-      .when(on, (el) => el.bg(fill ? withAlpha(fill, GLASS.active) : t.raised))
-      .when(!on && Boolean(fill), (el) => el
-        .bg(withAlpha(fill, GLASS.wash))
-        .hover((s) => s.bg(withAlpha(fill, GLASS.hover))))
-      .when(!on && !fill, (el) => el.hover((s) => s.bg(t.hover)))
+      .rounded(5)
+      .text_size(TYPE.small)
+      .when(on, (el) => el.bg(withAlpha(t.foreground, UI.active)))
+      .when(!on, (el) => el.hover((s) => s.bg(withAlpha(t.foreground, "06"))))
       .on_click(() => this.peek(k.address))
-      .children(s.lines.map(l => div().self_start().mt(-4).w(9).h(17).mr(4).flex_none()
-        .when(Boolean(l), el => el.border_l(1.5).border_color(t.input))
-        .when(l === "└" || l === "├", el => el.border_b(1.5).rounded_bl(6))))
-      .when(Boolean(pic), el => el.child(div().mr(8).child(pic)))
+      .children(s.lines.map(l => div().self_start().mt(-5).w(10).h(16).mr(3).flex_none()
+        .when(Boolean(l), el => el.border_l(1).border_color(withAlpha(t.foreground, "1c")))
+        .when(l === "└" || l === "├", el => el.border_b(1).rounded_bl(5))))
+      .when(Boolean(pic), el => el.child(div().mr(7).child(pic)))
       .child(div().flex_1().truncate().text_color(on ? t.foreground : t.muted).child(k.name || k.template || k.program?.name || k.address))
       .child(this.status(t, { status: st }, compact));
   }
@@ -274,13 +272,13 @@ export default class Agents extends View {
   status(t, a, compact = false) {
     const color = t[a.status] ?? t.dim;
     if (a.status === "working") return div().w(18).h_full().flex_none().flex().items_center().justify_center()
-      .child(div().text_size(16).line_height("16px").text_color(t.working).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 80));
-    if (a.status === "blocked" && compact) return div().size(14).flex_none().rounded(4).border(1).border_color(withAlpha(t.blocked, "40")).bg(withAlpha(t.blocked, "26")).text_size(10.5).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!");
-    if (a.status === "blocked") return div().flex_none().px(6).h(18).rounded(5).border(1).border_color(withAlpha(t.blocked, "40")).bg(withAlpha(t.blocked, "26")).text_size(10.5).font_semibold().text_color(t.blocked).flex().items_center().child("Needs you");
-    // Idle keeps a faint ring: every row shows where its agent stands, and a
-    // quiet one reads as quiet rather than as a row with no state at all.
-    if (a.status === "idle") return div().size(7).mx(3).flex_none().rounded(4).border(1).border_color(t.dim + "80");
-    return div().size(7).mx(3).flex_none().rounded(4).bg(a.status === "done" ? color : t.dim + "00");
+      .child(div().text_size(15).line_height("15px").text_color(t.working).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 80));
+    if (a.status === "blocked" && compact) return div().size(13).flex_none().rounded(4).bg(withAlpha(t.blocked, "1f")).text_size(10).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!");
+    if (a.status === "blocked") return div().flex_none().px(5).h(16).rounded(4).bg(withAlpha(t.blocked, "1f")).text_size(TYPE.label).font_semibold().text_color(t.blocked).flex().items_center().child("NEEDS YOU");
+    // A quiet ring for idle: the row says where its agent stands without
+    // turning every quiet agent into a badge.
+    if (a.status === "idle") return div().size(6).mx(3).flex_none().rounded_full().border(1).border_color(withAlpha(t.dim, "99"));
+    return div().size(6).mx(3).flex_none().rounded_full().bg(a.status === "done" ? color : withAlpha(t.dim, "00"));
   }
 
   render(cx) {
@@ -321,7 +319,7 @@ export default class Agents extends View {
       const subs = trees.subsOf.get(a.address) ?? [];
       const r = row(a, subs);
       if (this.folded.has(a.address)) return [r];
-      return [r, ...subs.map((s) => this.subRow(t, s, shown, byPriority, fillOf(a)))];
+      return [r, ...subs.map((s) => this.subRow(t, s, shown, byPriority))];
     };
 
     // The fold chevron; folded, the count too, colored by the most urgent one.
@@ -331,22 +329,23 @@ export default class Agents extends View {
       const open = !this.folded.has(a.address);
       return div()
         .id(`fold-${a.address}`)
-        .h(18)
-        .px(3)
-        .gap(3)
+        .h(16)
+        .px(2)
+        .gap(2)
         .flex()
         .items_center()
-        .rounded(4)
-        .text_size(11)
+        .rounded(3)
+        .text_size(TYPE.label)
+        .font_semibold()
         .text_color(open ? t.dim : (t[STATUS_OF_RANK[rankOf(a)] ?? top] ?? t.dim))
         .cursor_pointer()
-        .hover((s) => s.bg(t.hover).text_color(t.foreground))
+        .hover((s) => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground))
         .on_click((_e, cx) => {
           cx.stop_propagation();
           open ? this.folded.add(a.address) : this.folded.delete(a.address);
           cx.notify();
         })
-        .child(svg(`mods/workspace-chrome/chevron-${open ? "down" : "right"}.svg`).size(11).flex_none())
+        .child(svg(`mods/workspace-chrome/chevron-${open ? "down" : "right"}.svg`).size(9).flex_none())
         .when(!open, (el) => el.child(String(subs.length)));
     };
 
@@ -360,7 +359,8 @@ export default class Agents extends View {
     if (list.length) for (const s of spaces()) for (const tab of s.tabs) tabTitle.set(tab.id, title(tab, leads.get(tab.id)));
     const labelOf = (a) => tabTitle.get(a.tab) ?? (a.title || a.program?.name || "");
     // Every agent row is washed with its space's colour, faint when idle; the
-    // focused one takes the same active glass steps as the selected space row.
+    // focused one takes the same neutral selection as the selected space row,
+    // and its program icon sits on a tile of the space's colour.
     // Cache per space so a list of twenty does not repeat the same
     // regex and blend twenty times.
     const colors = shared("space.colors") ?? {};
@@ -376,10 +376,10 @@ export default class Agents extends View {
     };
 
     const row = (a, subs = []) => {
-      const pic = icon(a.program, 30, t.foreground);
+      const fill = fillOf(a);
+      const pic = icon(a.program, 18, a.focused ? (fill ?? t.foreground) : t.muted);
       // An agent on another machine (`vps/t7`) says which.
       const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
-      const fill = fillOf(a);
       // Top: the title the agent generated, else the project (its space).
       // Under it: whichever of the two did not lead.
       const raw = labelOf(a);
@@ -395,10 +395,10 @@ export default class Agents extends View {
         .id(`pin-${a.address}`)
         .flex_none()
         .p(2)
-        .rounded(4)
+        .rounded(3)
         .text_color(t.dim)
         .cursor_pointer()
-        .hover((s) => s.bg(t.hover).text_color(t.foreground))
+        .hover((s) => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground))
         .tooltip(isPinned ? "Unpin" : "Pin to the top")
         .on_click((_e, cx) => {
           cx.stop_propagation();
@@ -407,29 +407,18 @@ export default class Agents extends View {
           this.hovered = null;
           cx.notify();
         })
-        .child(svg(`mods/workspace-chrome/${isPinned ? "pin-off" : "pin"}.svg`).size(13));
+        .child(svg(`mods/workspace-chrome/${isPinned ? "pin-off" : "pin"}.svg`).size(12));
       return h_flex()
         .id(`ag-${a.address}`)
-        .px(10)
-        .h(44)
+        .relative()
+        .px(8)
+        .h(40)
         .flex_none()
         .items_center()
-        .gap(9)
-        .rounded(12)
-        .border(1)
-        .when(a.focused, (el) => el
-          .bg(fill ? withAlpha(fill, GLASS.active) : withAlpha(t.raised, "90"))
-          .border_color(fill ? withAlpha(fill, GLASS.activeEdge) : withAlpha(t.foreground, "3d")))
-        .when(!a.focused, (el) => el
-          .when(Boolean(fill), (r) => r
-            .bg(withAlpha(fill, GLASS.rest))
-            .border_color(withAlpha(fill, GLASS.restEdge)))
-          .when(!fill, (r) => r
-            .bg(withAlpha(t.surface, "1f"))
-            .border_color(withAlpha(t.foreground, "1a")))
-          .hover((s) => s
-            .bg(fill ? withAlpha(fill, GLASS.hover) : withAlpha(t.hover, "40"))
-            .border_color(fill ? withAlpha(fill, GLASS.hoverEdge) : withAlpha(t.foreground, "2b"))))
+        .gap(8)
+        .rounded(6)
+        .when(a.focused, (el) => el.bg(withAlpha(t.foreground, UI.active)))
+        .when(!a.focused, (el) => el.hover((s) => s.bg(withAlpha(t.foreground, UI.hover))))
         .cursor_pointer()
         .on_hover((on, cx) => {
           // Only a change of which row is hovered needs a redraw; the event also
@@ -439,36 +428,40 @@ export default class Agents extends View {
           cx.notify();
         })
         .on_click(() => run("pane.focus", { pane: a.pane }))
-        .when(Boolean(pic), el => el.child(div().id(`agent-fold-${a.address}`)
+        .when(Boolean(pic), el => el.child(div().id(`agent-fold-${a.address}`).size(24).flex_none().rounded(6).flex().items_center().justify_center()
+          .when(a.focused, el => el.bg(fill ? withAlpha(fill, "2e") : withAlpha(t.foreground, "08")))
           .when(subs.length > 0, el => el.on_click((_e, cx) => {
             cx.stop_propagation();
             this.folded.has(a.address) ? this.folded.delete(a.address) : this.folded.add(a.address);
             cx.notify();
           })).child(pic)))
+        .when(!pic, el => el.child(div().size(24).flex_none()))
         .child(
           v_flex()
             .flex_1()
             .min_w(0)
-            .gap(2)
-            .child(div().min_w(0).truncate().text_size(13).line_height("16px").text_color(idle ? t.muted : t.foreground).tooltip(top).child(top))
+            .gap(1)
+            .child(div().min_w(0).truncate().text_size(TYPE.body).line_height("15px").font_weight(idle ? 500 : 600)
+              .text_color(idle ? t.muted : t.foreground).tooltip(top).child(top))
             .when(Boolean(under) || Boolean(machine), el => el.child(
               h_flex()
                 .min_w(0)
                 .items_center()
-                .gap(6)
-                .text_size(11)
-                .line_height("14px")
+                .gap(5)
+                .text_size(TYPE.meta)
+                .line_height("13px")
                 .text_color(t.muted)
+                .when(Boolean(fill) && Boolean(under), el => el.child(div().size(4).rounded_full().flex_none().bg(withAlpha(fill, "cc"))))
                 .when(Boolean(under), el => el.child(div().min_w(0).truncate().tooltip(under).child(under)))
                 .when(Boolean(under) && Boolean(machine), el => el.child(div().flex_none().child("·")))
-                .when(Boolean(machine), el => el.child(div().flex_none().text_size(10).child(machine))),
+                .when(Boolean(machine), el => el.child(div().flex_none().text_size(9.5).child(machine))),
             )),
         )
         .when(subs.length > 0, el => el.child(fold(a, subs)))
         // A fixed slot for the pin and the elapsed time: hovering must not move the row.
-        .child(div().w(32).flex_none().h_full().flex().items_center().justify_end()
+        .child(div().w(30).flex_none().h_full().flex().items_center().justify_end()
           .when(this.hovered === a.address, el => el.child(pin))
-          .when(this.hovered !== a.address && Boolean(when), el => el.child(div().text_size(11).text_color(t.muted).child(duration(now - when)))))
+          .when(this.hovered !== a.address && Boolean(when), el => el.child(div().text_size(TYPE.meta).text_color(t.dim).child(duration(now - when)))))
         .child(div().min_w(18).flex_none().h_full().flex().items_center().justify_end().child(this.status(t, { status: mark }, byPriority && !isPinned)));
     };
 
@@ -482,33 +475,36 @@ export default class Agents extends View {
       else groups.push({ id, label: byPriority ? SECTION[r] : a.space_name || "", status: byPriority ? SECTION_STATUS[r] : null, members: [a] });
     }
 
-    // A group's header; it folds the group. Folded, it says how many and the most urgent state.
+    // A group's header; it folds the group. The label is a quiet section
+    // caption with a status or space dot; folded, it says how many.
     const header = (g) => {
       const open = !this.folded.has(g.id);
       const top = g.members.reduce((m, a) => ((rankOf(a) ?? 0) > (RANK[m] ?? 0) ? STATUS_OF_RANK[rankOf(a)] : m), null);
+      const dot = g.status ? t[g.status] : fillOf(g.members[0]) ?? t.muted;
       return h_flex()
         .id(g.id)
-        .px(10)
-        .pt(4)
-        .h(28)
+        .px(8)
+        .mt(6)
+        .h(24)
         .flex_none()
         .gap(6)
         .items_center()
-        .rounded(8)
-        .text_size(11)
-        .font_medium()
+        .rounded(5)
+        .text_size(byPriority ? TYPE.label : TYPE.meta)
+        .font_weight(600)
         .cursor_pointer()
-        .hover((s) => s.bg(t.hover).text_color(t.foreground))
+        .hover((s) => s.bg(withAlpha(t.foreground, "06")).text_color(t.foreground))
         .on_click((_e, cx) => {
           open ? this.folded.add(g.id) : this.folded.delete(g.id);
           cx.notify();
         })
-        .child(div().truncate().text_color(t[g.status] ?? t.dim).child(g.label))
-        .when(byPriority || !open, (el) => el.child(div().text_color(t.dim).child(String(g.members.length))))
+        .child(div().size(5).rounded_full().flex_none().bg(withAlpha(dot, "cc")))
+        .child(div().min_w(0).truncate().text_color(t.muted).child(byPriority ? g.label.toUpperCase() : g.label))
+        .when(byPriority || !open, (el) => el.child(div().text_size(TYPE.label).font_weight(500).text_color(t.dim).child(String(g.members.length))))
         .child(div().flex_1())
         .when(!open, (el) => el
           .when(!byPriority && top, (el) => el.child(this.status(t, { status: top }, true)))
-          .child(svg("mods/workspace-chrome/chevron-right.svg").size(11).flex_none().text_color(t.dim)));
+          .child(svg("mods/workspace-chrome/chevron-right.svg").size(9).flex_none().text_color(t.dim)));
     };
     // Priority's sections are the list's own labels, so they always show — an
     // all-idle list still says "Idle". A single space group in the grouped view
@@ -518,50 +514,52 @@ export default class Agents extends View {
       ? [header(g), ...(this.folded.has(g.id) ? [] : g.members.flatMap(withKids))]
       : g.members.flatMap(withKids));
     const empty = list.length === 0;
-    // The empty list gets the same glass card as a row, so it reads as a place
-    // waiting for content rather than as nothing.
+    // The empty list is a quiet place, not a card: a small mark, a title and
+    // one line of guidance.
     const emptyState = v_flex()
       .w_full()
       .flex_none()
-      .mt(6)
+      .mt(4)
       .items_center()
-      .gap(8)
+      .gap(6)
       .px(16)
-      .py(24)
-      .rounded(12)
-      .border(1)
-      .bg(withAlpha(t.surface, "14"))
-      .border_color(withAlpha(t.foreground, GLASS.restEdge))
-      .child(svg("mods/workspace-chrome/layers.svg").size(22).text_color(t.muted))
-      .child(div().text_size(12.5).text_color(t.muted).child("No agents yet"))
-      .child(div().w_full().text_center().text_size(11).line_height("15px").text_color(t.muted).child("Agents appear here when they report their status."));
+      .py(28)
+      .child(h_flex().size(28).flex_none().items_center().justify_center().rounded_full().bg(withAlpha(t.foreground, "06"))
+        .child(svg("mods/workspace-chrome/layers.svg").size(14).text_color(t.dim)))
+      .child(div().text_size(TYPE.body).text_color(t.muted).child("No agents yet"))
+      .child(div().w_full().text_center().text_size(TYPE.meta).line_height("14px").text_color(t.dim).child("Agents appear here when they report their status."));
 
     return v_flex()
       .text_size(13)
-      .when(!embedded, el => el.size_full().min_h(0).bg(t.chrome).border_t(1).border_color(t.border))
+      .when(!embedded, el => el.size_full().min_h(0).bg(t.chrome))
       .when(embedded, el => el.w_full().flex_none())
+      .child(div().h(1).flex_none().mx(16).mt(6).bg(withAlpha(t.foreground, UI.line)))
       .child(
         h_flex()
           .px(16)
-          .h(41)
-          .pt(embedded ? 10 : 14)
-          .pb(5)
+          .h(30)
           .flex_none()
           .items_center()
           .justify_between()
-          .child(div().text_size(14).font_medium().text_color(t.muted).child("Agents"))
+          .child(h_flex().gap(6).items_center()
+            .child(div().text_size(TYPE.label).font_semibold().text_color(t.muted).child("AGENTS"))
+            .child(div().text_size(TYPE.label).text_color(t.dim).child(String(list.length))))
           .child(
             div()
               .id("ag-sort")
-              .text_size(11)
+              .size(22)
+              .flex()
+              .items_center()
+              .justify_center()
+              .rounded(5)
               .text_color(t.muted)
-              .hover((s) => s.text_color(t.foreground))
+              .hover((s) => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground))
               .on_click(() => openOverlay({ mod: "my-sidebar", kind: "popup", width: 200, height: 140, props: { sortMenu: true } }))
               .tooltip(`Sort agents: ${sort.label}`)
-              .child(svg(sort.icon).size(14)),
+              .child(svg(sort.icon).size(13)),
           ),
       )
-      .child(v_flex().id("ag-list").px(6).gap(4)
+      .child(v_flex().id("ag-list").px(8).gap(1)
         .when(!embedded, el => el.flex_1().min_h(0).overflow_y_scrollbar().mode("hover"))
         .when(empty && !embedded, el => el.items_center().justify_center())
         .children(empty ? [emptyState] : rows));

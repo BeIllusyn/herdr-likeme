@@ -9,7 +9,7 @@
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { panes, props, run, theme, home, focused, shared } from "herdr";
-import { markColor, withAlpha, GLASS } from "./colors.js";
+import { markColor, withAlpha, mix, UI, TYPE } from "./colors.js";
 
 const HOME = home();
 // A mod pane carries its folder name as `title`; the helper panes read better.
@@ -33,15 +33,19 @@ export default class Pane extends View {
   button(t, id, icon, command, args) {
     return div()
       .id(id)
-      .p(3)
-      .rounded(4)
+      .size(24)
+      .flex_none()
+      .flex()
+      .items_center()
+      .justify_center()
+      .rounded(5)
       .text_color(t.muted)
-      .hover((s) => s.bg(t.hover).text_color(t.foreground))
+      .hover((s) => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground))
       .on_click((_e, cx) => {
         cx.stop_propagation();
         run(command, args);
       })
-      .child(svg(`mods/my-pane/${icon}.svg`).size(14));
+      .child(svg(`mods/my-pane/${icon}.svg`).size(13));
   }
 
   render(cx) {
@@ -49,49 +53,51 @@ export default class Pane extends View {
     const p = this.me();
     if (!p) return div();
     const name = ((p.program?.agent || p.program?.shell) && p.program.name) || (p.mod && MOD_NAMES[p.mod]) || p.title || p.program?.name || "shell";
-    const pic = icon(p.program, 14, t.muted);
     const st = p.status;
     const pane = p.pane;
-    // A row or a tab fills with the space's colour at GLASS.active; a whole
-    // header is much larger, so it takes the same colour at the quieter
-    // GLASS.header strength, with its edge in GLASS.headerEdge. Only the
-    // focused header wears it, so only that one does the lookup and blend.
-    // The surface is the theme's, so light and dark themes each get their own.
+    // The header is always the theme's surface. Focus adds a little of the
+    // space's colour (8 %), brightens the title and gives the program icon the
+    // same colour — selection by warmth and type, not by a line.
     let bg = t.surface;
-    let borderColor = withAlpha(t.foreground, "14");
+    let focusedHere = false;
+    let accent = t.accent;
     // A mod pane holds the keyboard; `focused` on the panes list is not always
     // cleared for the terminal beside it, so trust the live focus when there is
     // one. A layout terminal block (no model pane focused) keeps `focused`.
     const liveFocus = focused()?.pane;
     if (liveFocus ? liveFocus === p.pane : p.focused) {
+      focusedHere = true;
       const fillRaw = markColor((shared("space.colors") ?? {})[focused()?.space], t);
       const fill = fillRaw ? fillRaw.slice(0, 7) : null;
-      bg = fill ? withAlpha(fill, GLASS.header) : t.raised;
-      borderColor = fill ? withAlpha(fill, GLASS.headerEdge) : withAlpha(t.foreground, "30");
+      bg = fill ? mix(t.surface, fill, 0.08) : t.raised;
+      accent = fill ?? t.accent;
     }
+    const pic = icon(p.program, 13, focusedHere ? accent : t.dim);
     return h_flex()
       .id(`pane-head-${pane}`)
+      .relative()
       .size_full()
       .px(10)
       .gap(8)
       .items_center()
       .bg(bg)
-      .border_b(1).border_color(borderColor)
+      .border_b(1).border_color(withAlpha(t.foreground, "10"))
       .overflow_hidden()
-      .text_size(12)
+      .text_size(TYPE.small)
       .on_click(() => run("pane.focus", { pane }))
       .when(Boolean(pic), (el) => el.child(pic))
-      .child(div().flex_none().truncate().max_w(260).text_size(12.5).font_medium().text_color(t.foreground).child(name))
-      .child(div().flex_1().truncate().text_size(11.5).text_color(t.muted).child(folder(p.cwd)))
+      .child(div().flex_none().truncate().max_w(260).text_size(TYPE.title).font_weight(focusedHere ? 600 : 500)
+        .text_color(focusedHere ? t.foreground : t.muted).child(name))
+      .child(div().flex_1().truncate().text_size(TYPE.meta).text_color(focusedHere ? t.muted : t.dim).child(folder(p.cwd)))
       // The window controls keep their places whether the pointer is here or not.
       // A quiet agent shows no status mark at all: a ring beside every idle pane
       // read as something to act on. The slot keeps its width so a status turn
       // never moves the folder's truncation point.
-      .child(div().w(64).h_full().flex_none().flex().items_center().justify_end()
+      .child(div().w(58).h_full().flex_none().flex().items_center().justify_end()
         .when(st === "working", el => el.child(div().w(18).h_full().flex_none().flex().items_center().justify_center()
-          .child(div().text_size(16).line_height("16px").text_color(t.working).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 80))))
-        .when(st === "blocked", el => el.child(div().flex_none().px(6).h(18).flex().items_center().rounded(5).border(1).border_color(withAlpha(t.blocked, "40")).bg(withAlpha(t.blocked, "26")).text_size(10.5).font_semibold().text_color(t.blocked).child("Needs you")))
-        .when(st === "done", el => el.child(div().size(7).flex_none().rounded(4).bg(t.done))))
+          .child(div().text_size(14).line_height("14px").text_color(t.working).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 80))))
+        .when(st === "blocked", el => el.child(div().flex_none().px(5).h(16).flex().items_center().rounded(4).bg(withAlpha(t.blocked, "1f")).text_size(TYPE.label).font_semibold().text_color(t.blocked).child("NEEDS YOU")))
+        .when(st === "done", el => el.child(div().size(5).flex_none().rounded_full().bg(t.done))))
       .child(this.button(t, `ph-r-${pane}`, "split-right", "pane.split", { direction: "right", pane }))
       .child(this.button(t, `ph-d-${pane}`, "split-down", "pane.split", { direction: "down", pane }))
       .child(this.button(t, `ph-z-${pane}`, p.zoomed ? "unzoom" : "zoom", "pane.zoom", { pane }))

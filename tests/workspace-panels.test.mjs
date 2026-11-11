@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
-import { markColor, withAlpha, GLASS } from "../mods/my-sidebar/colors.js";
+import { markColor, withAlpha, UI, TYPE } from "../mods/my-sidebar/colors.js";
 
 const read = file => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 
@@ -63,8 +63,8 @@ function fixture({ legacy = false } = {}) {
     window: () => ({ platform: "macos", titlebar: "none" }),
     settings: () => ({ zoom: 1 }), shared: () => undefined,
     // The tab bar imports these from colors.js; the loader strips imports, so
-    // the fixture hands the mod the real ones, tokens and all.
-    markColor, withAlpha, GLASS,
+    // the fixture hands the mod the real tokens.
+    markColor, withAlpha, UI, TYPE,
     openOverlay: spec => commands.push({ name: "overlay", args: spec }),
     run(name, args) {
       commands.push({ name, args: JSON.parse(JSON.stringify(args)) });
@@ -106,13 +106,15 @@ test("连续点击和切换工具只选择工作区视图，不增加或关闭 T
   assert.equal(f.body.active, "changes");
   assert.equal(f.tabs.length, 2);
   assert.ok(f.commands.every(c => c.name === "layout.select"));
-  // Glass effect: bg has alpha suffix, check base color
+  // The panel and the active tab share the neutral selection step; the panel
+  // button is readable on its own fill, and neither borrows the space colour.
   const panelEl = find(f.render(), "panel-changes");
   const tabEl = find(f.render(), "tab-one");
   const panelBg = panelEl?.styles?.bg ?? "";
   const tabBg = tabEl?.styles?.bg ?? "";
-  assert.ok(panelBg.startsWith("#222222"), `panel bg should be based on #222222, got ${panelBg}`);
-  assert.ok(!tabBg.startsWith("#222222") || tabBg === "#222222", `tab bg should differ, got ${tabBg}`);
+  assert.equal(panelBg, withAlpha("#ffffff", UI.active));
+  // While a tool view is open no tab carries the selection.
+  assert.equal(tabBg, "");
 });
 
 test("点击当前普通 Tab 也会退出工具视图", () => {
@@ -271,7 +273,7 @@ test("Files 的对比模式读取整个文件的 diff", async () => {
 });
 
 test("Files 的并排对比行给删除/新增半边着色", () => {
-  const { Files } = load("mods/my-files/main.js", "Files", { div: element, h_flex: element });
+  const { Files } = load("mods/my-files/main.js", "Files", { div: element, h_flex: element, withAlpha, UI, TYPE });
   const files = new Files();
   const theme = { ansi1: "#e06c75", ansi2: "#98c379", dim: "#999999", border: "#333333" };
   const row = files.compareRow({

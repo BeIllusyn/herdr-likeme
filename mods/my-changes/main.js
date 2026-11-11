@@ -1,9 +1,7 @@
-import { View, div } from "gpui-kit";
+import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, h_resizable, resizable_panel, InputState, Input, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
-import { spaces, panes, focused, props, exec, readTextFile, watchFolder, theme, settings, run, setShared } from "herdr";
-// Helper: ensure 6-digit hex before appending alpha
-const hex6 = (c) => c && /^#[0-9a-f]{8}$/i.test(c) ? c.slice(0, 7) : c;
-const withAlpha = (c, a) => { const h = hex6(c); return h ? h + a : c; };
+import { spaces, panes, focused, props, exec, readTextFile, watchFolder, theme, settings, run, setShared, shared } from "herdr";
+import { markColor, withAlpha, UI, TYPE } from "./colors.js";
 
 
 // 工作区固定视图跟随当前终端目录；旧版独立工具 Tab 保留自己的根目录和选中文件。
@@ -259,25 +257,33 @@ export default class Changes extends View {
 
   // A changed-file row inside the virtual renderer: no handler of its own; the
   // list's `on_item_click` names the path.
-  fileRow(f, t) {
+  fileRow(f, t, accent) {
     const parts = f.path.split("/"), name = parts.pop();
-    return h_flex().h(28).flex_none().px(8).gap(8).items_center().rounded(6).cursor_pointer()
-      .when(this.open === f.path, (e) => e.bg(t.selected)).hover((s) => s.bg(t.hover))
-      .child(div().w(14).text_size(11).text_color(f.status === "A" ? t.ansi2 : f.status === "D" || f.status === "U" ? t.ansi1 : t.blocked).child(f.status))
-      .child(h_flex().flex_1().min_w(0).child(div().text_color(t.dim).truncate().child(parts.length ? parts.join("/") + "/" : "")).child(div().max_w(260).min_w(0).truncate().child(name)))
-      .when(f.add > 0, (e) => e.child(div().text_size(11).text_color(t.ansi2).child(`+${f.add}`))).when(f.del > 0, (e) => e.child(div().text_size(11).text_color(t.ansi1).child(`−${f.del}`)));
+    const dir = parts.length ? parts.join("/") + "/" : "";
+    const status = f.status === "A" ? t.ansi2 : f.status === "D" ? t.ansi1 : f.status === "U" ? t.ansi5 : t.ansi3;
+    const on = this.open === f.path;
+    return h_flex().h(27).flex_none().px(8).gap(7).items_center().rounded(6).cursor_pointer()
+      .when(on, (e) => e.bg(withAlpha(t.foreground, UI.active)))
+      .when(!on, (s) => s.hover((e) => e.bg(withAlpha(t.foreground, "06"))))
+      .child(div().w(11).flex_none().text_size(9.5).font_weight(600).text_color(status).child(f.status))
+      .child(h_flex().flex_1().min_w(0)
+        .when(Boolean(dir), (e) => e.child(div().min_w(0).truncate().text_size(TYPE.label).text_color(t.dim).child(dir)))
+        .child(div().max_w(220).min_w(0).truncate().text_size(TYPE.small).font_weight(on ? 500 : 400).text_color(on ? t.foreground : t.muted).child(name)))
+      .when(f.add > 0, (e) => e.child(div().text_size(TYPE.label).text_color(t.ansi2).child(`+${f.add}`)))
+      .when(f.del > 0, (e) => e.child(div().text_size(TYPE.label).text_color(t.ansi1).child(`−${f.del}`)));
   }
 
   diffRow({ kind, number, text }, t) {
-    if (kind === "@") return div().w_full().px(12).h(20).flex_none().truncate().bg(t.raised).text_color(t.dim).child(text);
+    if (kind === "@") return div().w_full().px(10).h(21).flex_none().truncate().bg(withAlpha(t.foreground, "04")).text_size(9.5).text_color(t.dim).child(text);
     const add = kind === "+", del = kind === "-";
-    // 9% 的整行底色在深色主题下混出来几乎一样；加深到 20%，并给每行一个
-    // 带色的 +/− 标记，不靠颜色也能一眼分清新增和删除。
-    return h_flex().w_full().h(20).flex_none().gap(8)
-      .when(add, (e) => e.bg(t.ansi2 + "33")).when(del, (e) => e.bg(t.ansi1 + "33"))
-      .child(div().w(30).flex_none().text_right().text_color(t.dim).child(number === undefined ? "" : String(number)))
-      .child(div().w(10).flex_none().text_color(add ? t.ansi2 : del ? t.ansi1 : t.dim).child(add ? "+" : del ? "−" : ""))
-      .child(div().flex_1().min_w(0).truncate().child(text));
+    // The tint and the coloured sign keep changes readable without a gutter
+    // line and without relying on hue alone.
+    return h_flex().w_full().h(21).flex_none().gap(7)
+      .when(add, (e) => e.bg(withAlpha(t.ansi2, "26")))
+      .when(del, (e) => e.bg(withAlpha(t.ansi1, "26")))
+      .child(div().w(30).flex_none().text_right().text_size(10).text_color(t.dim).child(number === undefined ? "" : String(number)))
+      .child(div().w(8).flex_none().text_size(10).text_color(add ? t.ansi2 : del ? t.ansi1 : t.dim).child(add ? "+" : del ? "−" : ""))
+      .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(text));
   }
 
   render(cx) {
@@ -302,52 +308,101 @@ export default class Changes extends View {
     const t = theme(), add = this.files.reduce((n, f) => n + f.add, 0), del = this.files.reduce((n, f) => n + f.del, 0);
     const enabled = Boolean(this.message.trim() && this.root && !this.busy && !this.loading);
     const filesId = `changes-files-${this.uid}`, diffId = `changes-diff-${this.uid}`;
+    // The active space's colour is the focus ring on the commit field; the
+    // same thread runs from the sidebar through the tabs to this panel (the
+    // location already knows the space, so no second spaces() copy is needed).
+    const accentRaw = markColor((shared("space.colors") ?? {})[loc?.space], t);
+    const accent = accentRaw ? accentRaw.slice(0, 7) : (t.accent ?? t.muted);
+    const parts = this.open ? this.open.split("/") : [];
+    const leaf = parts.pop() ?? "";
+    const dir = parts.length ? parts.join("/") + "/" : "";
     // 变动导航和“在 Files 打开”共用的小工具按钮。
-    const diffButton = (id, label, tip, on, action) => h_flex().id(`changes-${id}-${this.uid}`).h(22).flex_none().px(6).rounded(6).items_center()
-      .text_color(on ? t.muted : t.dim).opacity(on ? 1 : 0.4)
-      .when(on, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground)))
+    const diffButton = (id, label, tip, on, action) => h_flex().id(`changes-${id}-${this.uid}`).h(22).flex_none().px(5).rounded(4).items_center()
+      .text_size(TYPE.meta).font_weight(500)
+      .text_color(on ? t.muted : t.dim).opacity(on ? 1 : 0.55)
+      .when(on, (el) => el.cursor_pointer().hover((s) => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground)))
       .tooltip(tip)
       .on_click((_e, cx) => { if (on) action(cx); })
       .child(label);
-    return v_flex().id(`changes-${this.uid}`).size_full().min_w(0).min_h(0).overflow_hidden().bg(withAlpha(t.surface, "e6")).text_color(t.foreground).text_size(13).track_focus(this.handle)
+
+    // Left: the changed files and the commit box, above the diff's list height.
+    const leftPanel = resizable_panel().size(240).size_range(200).child(
+      v_flex().size_full().min_w(0).min_h(0)
+        .child(h_flex().h(34).flex_none().px(12).gap(7).items_center()
+          .child(div().text_size(TYPE.label).font_weight(600).text_color(t.muted).child("CHANGES"))
+          .child(h_flex().h(16).flex_none().px(5).rounded(4).bg(withAlpha(t.foreground, "06")).items_center().text_size(9.5).text_color(t.muted).child(String(this.files.length)))
+          .child(div().flex_1())
+          .when(add > 0, (el) => el.child(div().text_size(TYPE.meta).text_color(t.ansi2).child(`+${add}`)))
+          .when(del > 0, (el) => el.child(div().text_size(TYPE.meta).text_color(t.ansi1).child(`−${del}`))))
+        .child(v_flex().id(`changes-list-${this.uid}`).flex_1().min_h(0).p(6)
+          // Only the rows on screen are built: a thousand changed files used to
+          // cost a thousand elements on every render for a 200 px box.
+          .when(this.files.length > 0, (el) => el.child(v_flex().relative().flex_1().min_h(0)
+            .child(v_virtual_list(filesId, this.files.length, 27, (i) => this.files[i].path,
+              (range) => this.files.slice(range.start, range.end).map((f) => this.fileRow(f, t, accent)))
+              .on_item_click((path, cx) => this.pick(path, cx))
+              .size_full())
+            .child(Scrollbar.vertical(filesId).absolute().inset_0())))
+          .when(!this.files.length, (el) => el.child(
+            div().px(8).py(10).text_size(TYPE.meta).line_height("15px").text_color(t.dim)
+              .child(this.error || (this.loading ? "Loading changes…" : this.root ? "No uncommitted changes" : "No folder")))))
+        .when(this.limited, (el) => el.child(div().px(12).pb(6).text_size(TYPE.label).text_color(t.dim).child("Showing the first 1,000 changed files")))
+        .when(Boolean(this.note), (el) => el.child(div().px(12).pb(6).text_size(TYPE.label).line_height("13px").text_color(t.ansi1).child(this.note)))
+        .child(v_flex().flex_none().p(8).gap(6).border_t(1).border_color(withAlpha(t.foreground, "0a"))
+          .child(div().id(`commit-message-${this.uid}`).w_full().h(30).px(9).flex().items_center().rounded(6)
+            .bg(withAlpha(t.foreground, "05"))
+            .border(1).border_color(this.typing ? withAlpha(accent, "b0") : withAlpha(t.foreground, "10"))
+            .cursor_text().on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+            .child(Input.new(this.input).h_full().text_size(TYPE.small).text_color(t.foreground)))
+          .child(div().id(`commit-${this.uid}`).w_full().h(30).flex().items_center().justify_center().rounded(6)
+            .bg(enabled ? t.solid : withAlpha(t.foreground, "06"))
+            .text_color(enabled ? t.solid_foreground : t.dim)
+            .text_size(TYPE.small).font_weight(600)
+            .when(enabled, (el) => el.cursor_pointer())
+            .on_click((_e, cx) => this.commit(cx))
+            .child(this.busy ? "Committing…" : "Commit")))
+    );
+
+    // Right: the diff on the terminal's background, with the file path and
+    // change navigation above it.
+    const rightHeader = h_flex().h(32).flex_none().px(10).gap(6).items_center()
+      .border_b(1).border_color(withAlpha(t.foreground, "0a"))
+      .child(h_flex().flex_1().min_w(0).items_center()
+        .when(Boolean(dir), (el) => el.child(div().min_w(0).truncate().text_size(TYPE.label).text_color(t.dim).child(dir)))
+        .child(div().flex_none().max_w(200).truncate().text_size(TYPE.small).font_weight(600).text_color(t.foreground).tooltip(this.open ?? "").child(leaf)))
+      .child(diffButton("prev", "↑", "Previous change", this.changes.length > 0, () => this.step(-1, cx)))
+      .child(diffButton("next", "↓", "Next change", this.changes.length > 0, () => this.step(1, cx)))
+      .child(diffButton("files", "Files", "Open this file in Files", Boolean(this.root), () => this.openInFiles(cx)));
+
+    const emptyHint = v_flex().absolute().inset_0().items_center().justify_center().gap(6)
+      .child(h_flex().size(32).flex_none().items_center().justify_center().rounded_full().bg(withAlpha(t.foreground, "05"))
+        .child(svg("mods/my-changes/changes.svg").size(14).text_color(t.dim)))
+      .child(div().text_size(TYPE.body).text_color(t.muted).child("Select a file"))
+      .child(div().text_size(TYPE.meta).text_color(t.dim).child("Its changes appear here."));
+
+    const diffArea = div().flex_1().min_w(0).min_h(0).relative().font_family(settings().font_family ?? "JetBrains Mono").text_size(11)
+      .child(div().id(`changes-diff-x-${this.uid}`).size_full().overflow_x_scrollbar()
+        .child(div().w_full().min_w(this.diffWidth).h_full()
+          .child(v_virtual_list(diffId, this.rows.length, 21, (i) => String(i),
+            (range) => this.rows.slice(range.start, range.end).map((row) => this.diffRow(row, t)))
+            .track_scroll(this.scroll).size_full())))
+      .child(Scrollbar.vertical(diffId).viewport_from_layout().absolute().inset_0())
+      .when(!this.open && this.files.length > 0, (el) => el.child(emptyHint));
+
+    const rightPanel = resizable_panel().size_range(240).child(
+      v_flex().size_full().min_w(0).min_h(0).bg(t.background)
+        .border_l(1).border_color(withAlpha(t.foreground, "0d"))
+        .when(Boolean(this.open), (el) => el.child(rightHeader))
+        .child(diffArea)
+    );
+
+    return v_flex().id(`changes-${this.uid}`).size_full().min_w(0).min_h(0).overflow_hidden().bg(t.surface).text_color(t.foreground).text_size(13).track_focus(this.handle)
       .on_key_down((e, cx) => {
         if (e.key === "escape" && this.typing) { this.typing = false; this.handle.focus(); cx.stop_propagation(); cx.notify(); }
       })
       // 原生分栏按实例保留拖动后的宽度，重绘和切换标签不会重置。
-      // Left: the changed files and the commit box, above the diff's list height.
       .child(h_resizable(`changes-split-${this.uid}`).flex_1().min_w(0).min_h(0)
-        .child(resizable_panel().size(240).size_range(200).child(v_flex().size_full().min_w(0).min_h(0)
-          .child(h_flex().h(34).flex_none().px(12).gap(8).items_center()
-            .child(div().px(5).py(1).rounded(5).border_1().border_color(t.border).text_size(10).text_color(t.muted).child(`${this.files.length} files`))
-            .child(div().flex_1()).child(div().text_size(11).text_color(t.ansi2).child(`+${add}`)).child(div().text_size(11).text_color(t.ansi1).child(`−${del}`)))
-          .child(v_flex().id(`changes-list-${this.uid}`).flex_1().min_h(0).p(6)
-            // Only the rows on screen are built: a thousand changed files used to
-            // cost a thousand elements on every render for a 200 px box.
-            .when(this.files.length > 0, (el) => el.child(v_flex().relative().flex_1().min_h(0)
-              .child(v_virtual_list(filesId, this.files.length, 28, (i) => this.files[i].path,
-                (range) => this.files.slice(range.start, range.end).map((f) => this.fileRow(f, t)))
-                .on_item_click((path, cx) => this.pick(path, cx))
-                .size_full())
-              .child(Scrollbar.vertical(filesId).absolute().inset_0())))
-            .when(!this.files.length, (e) => e.child(div().p(8).text_color(t.dim).child(this.error || (this.loading ? "Loading changes…" : this.root ? "No uncommitted changes" : "No folder")))))
-          .when(this.limited, el => el.child(div().px(10).pb(2).text_size(11).text_color(t.dim).child("Showing the first 1,000 changed files")))
-          .when(Boolean(this.note), (e) => e.child(div().px(10).pb(4).text_size(11).text_color(t.ansi1).child(this.note)))
-          .child(v_flex().flex_none().p(8).gap(6)
-            .child(div().id(`commit-message-${this.uid}`).w_full().h(32).px(10).flex().items_center().rounded(8).border_1().border_color(this.typing ? t.accent : t.border).cursor_text().on_mouse_down("left", (_e, cx) => cx.stop_propagation()).child(Input.new(this.input).h_full().text_size(12).text_color(t.foreground)))
-            .child(div().id(`commit-${this.uid}`).w_full().h(32).flex().items_center().justify_center().rounded(8).bg(enabled ? t.solid : t.raised).text_color(enabled ? t.solid_foreground : t.dim).text_size(12).when(enabled, (e) => e.cursor_pointer()).on_click((_e, cx) => this.commit(cx)).child(this.busy ? "Committing…" : "Commit")))))
-        // Right: the diff on the terminal's background, with the file path and
-        // change navigation above it.
-        .child(resizable_panel().size_range(240).child(v_flex().size_full().min_w(0).min_h(0).bg(withAlpha(t.background, "e6"))
-          .when(Boolean(this.open), (el) => el.child(h_flex().h(30).flex_none().px(10).gap(6).items_center().text_size(11)
-            .child(div().flex_1().min_w(0).truncate().text_color(t.dim).tooltip(this.open).child(this.open))
-            .child(diffButton("prev", "↑", "Previous change", this.changes.length > 0, () => this.step(-1, cx)))
-            .child(diffButton("next", "↓", "Next change", this.changes.length > 0, () => this.step(1, cx)))
-            .child(diffButton("files", "Files", "Open this file in Files", Boolean(this.root), () => this.openInFiles(cx)))))
-          .child(div().flex_1().min_w(0).min_h(0).relative().font_family(settings().font_family ?? "JetBrains Mono").text_size(11)
-            .child(div().id(`changes-diff-x-${this.uid}`).size_full().overflow_x_scrollbar()
-              .child(div().w_full().min_w(this.diffWidth).h_full().child(v_virtual_list(diffId, this.rows.length, 20, (i) => String(i),
-                (range) => this.rows.slice(range.start, range.end).map((row) => this.diffRow(row, t))).track_scroll(this.scroll).size_full())))
-            .child(Scrollbar.vertical(diffId).viewport_from_layout().absolute().inset_0())
-            .when(!this.open && this.files.length > 0, (e) => e.child(div().absolute().top(6).px(12).text_color(t.dim).child("Select a file to view its changes")))))));
+        .child(leftPanel)
+        .child(rightPanel));
   }
 }

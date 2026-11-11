@@ -1,15 +1,17 @@
-// Shared by the sidebar, the tab bar and the pane header: the same table paints a
-// space's avatar and tints its rows, tabs and focused header, so every surface
-// speaks the same colour language. The same file lives in my-sidebar, my-tabs and
-// my-pane; `check.sh` fails when the three copies drift.
+// Shared by the sidebar, the tab bar and the pane header: one palette and one
+// scale of neutral surfaces keeps every part of the window in the same visual
+// system. The same file lives in my-sidebar, my-tabs and my-pane; `check.sh`
+// fails when the three copies drift.
 
-// What a stored color name looks like on an avatar (the same in every mod that
-// draws space avatars): one strong color per hue, light and dark alike.
-export const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
+// Fallbacks for a theme that does not name an ANSI colour. A current theme
+// supplies ansi0..ansi15, and those are preferred, so a space takes the hue the
+// terminal already uses and a light theme gets the light palette's own colours.
+export const MARK = { ansi6: "#56b6c2", ansi3: "#e5c07b", ansi4: "#61afef", ansi5: "#c678dd", ansi2: "#98c379", ansi1: "#e06c75" };
 
-// A stored name (or a hex of its own) as a colour, or null when it names nothing.
+// A stored colour name (ansi6, …) or a hex of its own as a 6-digit colour, or
+// null when it names nothing.
 export function markColor(color, t) {
-  const c = color?.startsWith("#") ? color : MARK[color] ?? t[color];
+  const c = color?.startsWith("#") ? color : t?.[color] ?? MARK[color];
   return /^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(c ?? "") ? c.slice(0, 7) : null;
 }
 
@@ -27,23 +29,36 @@ export function hex6(c) {
   return c && /^#[0-9a-f]{8}$/i.test(c) ? c.slice(0, 7) : c;
 }
 
-// `c` at `a` (two hex digits): the alpha layer of a glass card.
+// `c` at `a` (two hex digits): an alpha layer over the surface behind it.
 export function withAlpha(c, a) {
   const h = hex6(c);
   return h ? h + a : c;
 }
 
-// The glass scale every card shares, so the sidebar rows, the tabs, the panel
-// buttons and the focused header lift and glow by the same steps. A resting
-// card is a whisper of its space's colour with a soft edge; the pointer lifts
-// it a step; selection fills it with the space's colour at a strength that
-// reads as the same glow on every surface. `wash` is the fainter step for
-// sub-agent rows under their parent's card, and `header` the quieter pair a
-// whole pane header takes, being much larger than a row or a tab.
-export const GLASS = {
-  rest: "12", restEdge: "26",
-  hover: "1f", hoverEdge: "40",
-  active: "50", activeEdge: "82",
-  wash: "0a",
-  header: "33", headerEdge: "59",
+// The neutral scale every surface shares. It is drawn in the foreground colour
+// at low alpha, so it follows both light and dark themes and reads identically
+// on the chrome (sidebar, tab bar) and on the terminal's background.
+//
+// `hover` lifts a row under the pointer; `active` is the selected row or tab;
+// `line` is the hairline that separates regions. A space's colour is used as a
+// mark, never as a line: `tint` behind its letter while resting, `tintEdge`
+// around it, and — once selected — a solid fill on the monogram or a tinted
+// tile behind the agent's program icon. Selection is the neutral fill plus a
+// mark that comes alive; there is no rail or underline anywhere.
+export const UI = {
+  hover: "08",
+  active: "14",
+  line: "12",
+  tint: "1c",
+  tintEdge: "3a",
+};
+
+// The type scale, in px. Labels are uppercase and tracked; meta is the quiet
+// second line; body is the name in a row.
+export const TYPE = {
+  label: 9.5,
+  meta: 10.5,
+  small: 11.5,
+  body: 12.5,
+  title: 12.5,
 };
