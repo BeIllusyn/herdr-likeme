@@ -25,11 +25,18 @@ function leadPanes(all) {
   return leads;
 }
 
+// The title the agent itself generated, when its terminal reports one that says
+// more than the program: a program name, a path, a user@host or the program key
+// is not a title.
+function ownTitle(t) {
+  const prog = t?.program?.name;
+  const live = clean(t?.title);
+  return live && live !== prog && !/^[~/]|^[A-Za-z]:\\/.test(live) && !live.includes("@") && live.toLowerCase() !== t?.program?.key ? live : "";
+}
+
 function title(tab, l) {
-  const prog = l?.program?.name;
-  const live = clean(l?.title);
-  const telling = live && live !== prog && !/^[~/]|^[A-Za-z]:\\/.test(live) && !live.includes("@") && live.toLowerCase() !== l?.program?.key;
-  return (tab.name === prog || !tab.named) && telling ? live : tab.name;
+  const live = ownTitle(l);
+  return (tab.name === l?.program?.name || !tab.named) && live ? live : tab.name;
 }
 const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
 // The row's mark and its section come from the same rank, so a parent with a
@@ -338,8 +345,9 @@ export default class Agents extends View {
         .when(!open, (el) => el.child(String(subs.length)));
     };
 
-    // A row reads like a space row: its space's name on top, the agent's own
-    // title below it, and its space's colour as a faint wash behind both.
+    // A row reads like a space row: the agent's own generated title leads when
+    // there is one, with its space's name under it (the space alone leads when
+    // not), and its space's colour as a faint wash behind both.
     // The tab and pane snapshots are read once for the whole list: the old
     // per-agent lookup copied `panes()` once per row and scanned every tab.
     const leads = list.length ? leadPanes(panes()) : null;
@@ -376,10 +384,13 @@ export default class Agents extends View {
       // An agent on another machine (`vps/t7`) says which.
       const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
       const fill = fillOf(a);
-      // Top: the project (its space). Bottom: the agent's own title.
+      // Top: the title the agent generated, else the project (its space).
+      // Under it: whichever of the two did not lead.
       const raw = labelOf(a);
-      const top = a.space_name || raw;
-      const under = raw && raw !== top && !/^\d+$/.test(raw) ? raw : "";
+      const own = ownTitle(a);
+      const titled = own && own !== a.space_name;
+      const top = titled ? own : a.space_name || raw;
+      const under = titled ? a.space_name : raw && raw !== top && !/^\d+$/.test(raw) ? raw : "";
       const when = this.since(a);
       const mark = STATUS_OF_RANK[rankOf(a)] ?? a.status;
       const idle = mark === "idle" && !a.focused;

@@ -56,9 +56,10 @@ redundant header. Agent rows are 44 px 10 px-radius cards with the same 6 px ins
 
 - 16 px program icon (agent's own report, else the program), clickable to fold
   sub-agents;
-- right, the space (project) name at 13 px (`line-height` 16 px), and the agent's own
-  title at 11 px (`line-height` 14 px) in `muted`; an automatic tab number is
-  suppressed, so a row says nothing rather than "1";
+- right, the agent's own generated title at 13 px (`line-height` 16 px) when it
+  reports one, with the space (project) name at 11 px (`line-height` 14 px) in
+  `muted` underneath; without a title the space name leads and the tab's title sits
+  below. An automatic tab number is suppressed, so a row says nothing rather than "1";
 - end of row: sub-agent fold chevron, a fixed 32 px slot for the pin (hover) or the
   elapsed time (11 px, `muted`), and the status glyph. The fixed slot means hovering
   never reflows the row. Sub-agent rows are 26 px cards with tree lines;
