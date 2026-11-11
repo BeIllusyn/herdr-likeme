@@ -1,7 +1,7 @@
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, panes, focused, run, openOverlay, theme, window, shared, layout, settings } from "herdr";
-import { markColor, withAlpha, UI, TYPE } from "./colors.js";
+import { markColor, withAlpha, UI, TYPE, SIZE } from "./colors.js";
 
 // The bar reads the sidebar node out of `layout()` (the whole layout document);
 // the traffic lights and window facts come from the root and `window()`.
@@ -21,6 +21,7 @@ export default class Tabs extends View {
   init() {
     this.pressed = null;
     this.over = null;
+    this.compact = false;
   }
 
   render(cx) {
@@ -93,13 +94,13 @@ export default class Tabs extends View {
     const fill = fillRaw ? fillRaw.slice(0, 7) : null;
     const item = ({ c, i, program }) => {
       const name = labels.get(c.id), active = c.active && !panelOpen;
-      return h_flex().id(`tab-${c.id}`).relative().h(30).rounded(7).px(9).gap(7).items_center().flex_none().text_size(TYPE.small)
+      return h_flex().id(`tab-${c.id}`).relative().h(32).rounded(SIZE.radius).px(10).gap(7).items_center().flex_none().text_size(TYPE.small).cursor_pointer()
         .when(active, el => el
           .bg(withAlpha(t.foreground, UI.active))
           .text_color(t.foreground))
         .when(!active, el => el
           .text_color(t.muted)
-          .hover(s => s.bg(withAlpha(t.foreground, "06")).text_color(t.foreground)))
+          .hover(s => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground)))
         .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.pressed = i; this.over = i; if (e.click_count === 2) run("tab.rename", { id: c.id }); })
         .on_mouse_move((_e, cx) => {
           if (this.pressed === null || this.over === i) return;
@@ -133,7 +134,7 @@ export default class Tabs extends View {
           .when(c.status === "working", el => el.child(div().text_size(14).line_height("14px").text_color(t.working).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 80)))
           .when(c.status === "blocked" || c.status === "done", el => el.child(div().size(5).rounded_full().bg(t[c.status]))))
         .child(div().id(`close-${c.id}`).size(14).flex().flex_none().items_center().justify_center().rounded(3).text_color(t.muted)
-          .opacity(active ? 0.65 : 0.3).hover(s => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground).opacity(1))
+          .opacity(active ? 0.7 : 0.4).tooltip("Close tab").hover(s => s.bg(withAlpha(t.ansi1, UI.hover)).text_color(t.ansi1).opacity(1))
           .on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/pane/close.svg").size(10)));
     };
     // macOS draws the traffic lights over the window's top-left corner. While the
@@ -151,12 +152,12 @@ export default class Tabs extends View {
       });
       const on = body?.active === id || (!panelOpen && Boolean(own?.active));
       const tint = on ? fill ?? t.accent : t.muted;
-      return h_flex().id(`panel-${id}`).h(28).rounded(6).px(8).gap(5).flex_none().items_center()
-        .text_size(TYPE.small)
+      return h_flex().id(`panel-${id}`).h(SIZE.button).rounded(6).px(this.compact ? 8 : 9).gap(6).flex_none().items_center()
+        .cursor_pointer().tooltip(label).text_size(TYPE.small).font_weight(on ? 600 : 500)
         .when(on, el => el
           .bg(withAlpha(t.foreground, UI.active))
           .text_color(t.foreground)
-          .hover(s => s.bg(withAlpha(t.foreground, "12"))))
+          .hover(s => s.bg(withAlpha(t.foreground, UI.active))))
         .when(!on, el => el
           .text_color(t.muted)
           .hover(s => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground)))
@@ -184,19 +185,20 @@ export default class Tabs extends View {
             return;
           }
           run("layout.select", { stack: "work-body", child: current?.active === id ? "main" : id });
-        }).child(svg(icon).size(13).flex_none().text_color(tint)).child(label);
+        }).child(svg(icon).size(14).flex_none().text_color(tint))
+        .when(!this.compact, el => el.child(label));
     };
     const panels = [];
     if (enabled.includes("files")) panels.push(panelButton("files", "Files", "mods/my-files/file.svg"));
     if (enabled.includes("changes")) panels.push(panelButton("changes", "Changes", "mods/my-changes/changes.svg"));
     // The + and the quick starts are quiet toolbar buttons: no cards, no
     // borders; only the pointer lifts them out of the bar.
-    const ghostAction = (id, tip, child, action) => div().id(id).h(28).w(28).rounded(6).flex_none().flex().items_center().justify_center()
-      .text_color(t.muted).tooltip(tip)
+    const ghostAction = (id, tip, child, action) => div().id(id).size(SIZE.button).rounded(6).flex_none().flex().items_center().justify_center()
+      .cursor_pointer().text_color(t.muted).tooltip(tip)
       .hover(s => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground)).on_mouse_down("left", stop)
       .on_click(action)
       .child(child);
-    const newTab = ghostAction("tab-new", "New tab", "+", () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }));
+    const newTab = ghostAction("tab-new", "New tab", div().text_size(17).line_height("18px").child("+"), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }));
     // One-click starts beside the +, using the program table's own icons: the
     // shipped tinted glyphs inherit the button's colour, Claude's stays orange.
     const launch = (id, label, icon, tint, argv) => ghostAction(id, label, tint ? svg(icon).size(14).flex_none() : image(icon).size(14), () => { showMain(); run("tab.new", { space: space?.id, argv }); });
@@ -206,14 +208,21 @@ export default class Tabs extends View {
       launch("start-lazygit", "Lazygit", "icons/lazygit.svg", true, ["lazygit"]),
       launch("start-nvim", "Neovim", "icons/nvim.svg", true, ["nvim"]),
     ];
-    return h_flex().size_full().min_w(0).gap(6).pl(left).pr(8).items_center()
+    return h_flex().id("tabs-bar").size_full().min_w(0).gap(8).pl(left).pr(8).items_center()
+      .on_size_change((size, cx) => {
+        const compact = size.width < 680;
+        if (compact !== this.compact) { this.compact = compact; cx.notify(); }
+      })
       .bg(t.chrome)
       .border_b(1).border_color(withAlpha(t.foreground, UI.line))
       .on_mouse_up("left", () => { this.pressed = null; this.over = null; })
       // 标签和新建入口留在可滚动区域内；Files／Changes 固定在标签栏最右侧。
-      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(3).overflow_x_scrollbar().children([...entries.map(item), newTab, ...launches]))
-      .when(panels.length > 0, el => el.child(h_flex().id("tab-panels").flex_none().h_full().items_center().gap(2).pl(8)
-        .border_l(1).border_color(withAlpha(t.foreground, "0d")).children(panels)))
+      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(4).overflow_x_scrollbar().mode("hover")
+        .children([...entries.map(item), newTab])
+        .child(h_flex().id("tab-launches").flex_none().h(SIZE.button).items_center().gap(2).ml(4).pl(8)
+          .border_l(1).border_color(withAlpha(t.foreground, UI.line)).children(launches)))
+      .when(panels.length > 0, el => el.child(h_flex().id("tab-panels").flex_none().h(SIZE.button).items_center().gap(3).pl(8)
+        .border_l(1).border_color(withAlpha(t.foreground, UI.line)).children(panels)))
       .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/my-tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))
         .child(button("maximize", w.platform === "windows" ? svg(`mods/my-tabs/${w.maximized ? "win-restore" : "win-max"}.svg`).size(16) : "□", () => run("window.maximize")))
         .child(button("close-window", w.platform === "windows" ? svg("mods/my-tabs/win-close.svg").size(16) : svg("mods/pane/close.svg").size(13), () => run("window.close"))));

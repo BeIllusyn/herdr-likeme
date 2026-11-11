@@ -1,7 +1,7 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, h_resizable, resizable_panel, InputState, Input, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { spaces, panes, focused, props, exec, readTextFile, watchFolder, theme, settings, run, setShared, shared } from "herdr";
-import { markColor, withAlpha, UI, TYPE } from "./colors.js";
+import { markColor, withAlpha, UI, TYPE, SIZE } from "./colors.js";
 
 
 // 工作区固定视图跟随当前终端目录；旧版独立工具 Tab 保留自己的根目录和选中文件。
@@ -201,7 +201,7 @@ export default class Changes extends View {
   setLines(lines) {
     this.rows = diffRows(lines);
     this.changes = changeStarts(this.rows);
-    this.diffWidth = Math.max(300, ...lines.map(line => line.length * 7 + 50));
+    this.diffWidth = Math.max(300, ...lines.map(line => line.length * TYPE.small * 0.65 + 72));
   }
 
   pick(path, cx) {
@@ -262,27 +262,28 @@ export default class Changes extends View {
     const dir = parts.length ? parts.join("/") + "/" : "";
     const status = f.status === "A" ? t.ansi2 : f.status === "D" ? t.ansi1 : f.status === "U" ? t.ansi5 : t.ansi3;
     const on = this.open === f.path;
-    return h_flex().h(27).flex_none().px(8).gap(7).items_center().rounded(6).cursor_pointer()
+    return h_flex().h(SIZE.listRow).flex_none().px(8).gap(7).items_center().rounded(SIZE.radius).cursor_pointer().tooltip(f.path)
       .when(on, (e) => e.bg(withAlpha(t.foreground, UI.active)))
-      .when(!on, (s) => s.hover((e) => e.bg(withAlpha(t.foreground, "06"))))
-      .child(div().w(11).flex_none().text_size(9.5).font_weight(600).text_color(status).child(f.status))
-      .child(h_flex().flex_1().min_w(0)
-        .when(Boolean(dir), (e) => e.child(div().min_w(0).truncate().text_size(TYPE.label).text_color(t.dim).child(dir)))
-        .child(div().max_w(220).min_w(0).truncate().text_size(TYPE.small).font_weight(on ? 500 : 400).text_color(on ? t.foreground : t.muted).child(name)))
+      .when(!on, (s) => s.hover((e) => e.bg(withAlpha(t.foreground, UI.hover))))
+      .child(h_flex().size(18).flex_none().rounded(4).items_center().justify_center()
+        .bg(withAlpha(status, UI.tint)).text_size(TYPE.label).font_weight(600).text_color(status).child(f.status))
+      .child(h_flex().flex_1().min_w(0).gap(6).items_center()
+        .child(div().flex_1().min_w(0).truncate().text_size(TYPE.small).font_weight(on ? 600 : 400).text_color(on ? t.foreground : t.muted).child(name))
+        .when(Boolean(dir), (e) => e.child(div().max_w(80).min_w(0).truncate().text_size(TYPE.label).text_color(t.dim).child(dir))))
       .when(f.add > 0, (e) => e.child(div().text_size(TYPE.label).text_color(t.ansi2).child(`+${f.add}`)))
       .when(f.del > 0, (e) => e.child(div().text_size(TYPE.label).text_color(t.ansi1).child(`−${f.del}`)));
   }
 
   diffRow({ kind, number, text }, t) {
-    if (kind === "@") return div().w_full().px(10).h(21).flex_none().truncate().bg(withAlpha(t.foreground, "04")).text_size(9.5).text_color(t.dim).child(text);
+    if (kind === "@") return div().w_full().px(12).h(SIZE.diffRow).flex_none().truncate().bg(withAlpha(t.foreground, UI.subtle)).text_size(TYPE.meta).text_color(t.muted).child(text);
     const add = kind === "+", del = kind === "-";
     // The tint and the coloured sign keep changes readable without a gutter
     // line and without relying on hue alone.
-    return h_flex().w_full().h(21).flex_none().gap(7)
+    return h_flex().w_full().h(SIZE.diffRow).flex_none().gap(8)
       .when(add, (e) => e.bg(withAlpha(t.ansi2, "26")))
       .when(del, (e) => e.bg(withAlpha(t.ansi1, "26")))
-      .child(div().w(30).flex_none().text_right().text_size(10).text_color(t.dim).child(number === undefined ? "" : String(number)))
-      .child(div().w(8).flex_none().text_size(10).text_color(add ? t.ansi2 : del ? t.ansi1 : t.dim).child(add ? "+" : del ? "−" : ""))
+      .child(div().w(40).flex_none().text_right().text_size(TYPE.meta).text_color(t.dim).child(number === undefined ? "" : String(number)))
+      .child(div().w(8).flex_none().text_size(TYPE.meta).text_color(add ? t.ansi2 : del ? t.ansi1 : t.dim).child(add ? "+" : del ? "−" : ""))
       .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(text));
   }
 
@@ -317,7 +318,7 @@ export default class Changes extends View {
     const leaf = parts.pop() ?? "";
     const dir = parts.length ? parts.join("/") + "/" : "";
     // 变动导航和“在 Files 打开”共用的小工具按钮。
-    const diffButton = (id, label, tip, on, action) => h_flex().id(`changes-${id}-${this.uid}`).h(22).flex_none().px(5).rounded(4).items_center()
+    const diffButton = (id, label, tip, on, action) => h_flex().id(`changes-${id}-${this.uid}`).h(SIZE.control).min_w(SIZE.control).flex_none().px(7).rounded(5).justify_center().items_center()
       .text_size(TYPE.meta).font_weight(500)
       .text_color(on ? t.muted : t.dim).opacity(on ? 1 : 0.55)
       .when(on, (el) => el.cursor_pointer().hover((s) => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground)))
@@ -326,19 +327,20 @@ export default class Changes extends View {
       .child(label);
 
     // Left: the changed files and the commit box, above the diff's list height.
-    const leftPanel = resizable_panel().size(240).size_range(200).child(
+    const leftPanel = resizable_panel().size(260).size_range(200).child(
       v_flex().size_full().min_w(0).min_h(0)
-        .child(h_flex().h(34).flex_none().px(12).gap(7).items_center()
+        .child(h_flex().h(SIZE.header).flex_none().px(14).gap(7).items_center()
+          .border_b(1).border_color(withAlpha(t.foreground, UI.lineSoft))
           .child(div().text_size(TYPE.label).font_weight(600).text_color(t.muted).child("CHANGES"))
-          .child(h_flex().h(16).flex_none().px(5).rounded(4).bg(withAlpha(t.foreground, "06")).items_center().text_size(9.5).text_color(t.muted).child(String(this.files.length)))
+          .child(h_flex().h(16).flex_none().px(5).rounded(4).bg(withAlpha(t.foreground, UI.subtle)).items_center().text_size(TYPE.label).text_color(t.muted).child(String(this.files.length)))
           .child(div().flex_1())
           .when(add > 0, (el) => el.child(div().text_size(TYPE.meta).text_color(t.ansi2).child(`+${add}`)))
           .when(del > 0, (el) => el.child(div().text_size(TYPE.meta).text_color(t.ansi1).child(`−${del}`))))
-        .child(v_flex().id(`changes-list-${this.uid}`).flex_1().min_h(0).p(6)
+        .child(v_flex().id(`changes-list-${this.uid}`).flex_1().min_h(0).p(SIZE.inset)
           // Only the rows on screen are built: a thousand changed files used to
           // cost a thousand elements on every render for a 200 px box.
           .when(this.files.length > 0, (el) => el.child(v_flex().relative().flex_1().min_h(0)
-            .child(v_virtual_list(filesId, this.files.length, 27, (i) => this.files[i].path,
+            .child(v_virtual_list(filesId, this.files.length, SIZE.listRow, (i) => this.files[i].path,
               (range) => this.files.slice(range.start, range.end).map((f) => this.fileRow(f, t, accent)))
               .on_item_click((path, cx) => this.pick(path, cx))
               .size_full())
@@ -348,50 +350,52 @@ export default class Changes extends View {
               .child(this.error || (this.loading ? "Loading changes…" : this.root ? "No uncommitted changes" : "No folder")))))
         .when(this.limited, (el) => el.child(div().px(12).pb(6).text_size(TYPE.label).text_color(t.dim).child("Showing the first 1,000 changed files")))
         .when(Boolean(this.note), (el) => el.child(div().px(12).pb(6).text_size(TYPE.label).line_height("13px").text_color(t.ansi1).child(this.note)))
-        .child(v_flex().flex_none().p(8).gap(6).border_t(1).border_color(withAlpha(t.foreground, "0a"))
-          .child(div().id(`commit-message-${this.uid}`).w_full().h(30).px(9).flex().items_center().rounded(6)
-            .bg(withAlpha(t.foreground, "05"))
+        .child(v_flex().flex_none().p(10).gap(8).border_t(1).border_color(withAlpha(t.foreground, UI.lineSoft))
+          .child(div().id(`commit-message-${this.uid}`).w_full().h(32).px(10).flex().items_center().rounded(SIZE.radius)
+            .bg(t.background)
             .border(1).border_color(this.typing ? withAlpha(accent, "b0") : withAlpha(t.foreground, "10"))
             .cursor_text().on_mouse_down("left", (_e, cx) => cx.stop_propagation())
             .child(Input.new(this.input).h_full().text_size(TYPE.small).text_color(t.foreground)))
-          .child(div().id(`commit-${this.uid}`).w_full().h(30).flex().items_center().justify_center().rounded(6)
+          .child(div().id(`commit-${this.uid}`).w_full().h(32).flex().items_center().justify_center().rounded(SIZE.radius)
             .bg(enabled ? t.solid : withAlpha(t.foreground, "06"))
             .text_color(enabled ? t.solid_foreground : t.dim)
             .text_size(TYPE.small).font_weight(600)
-            .when(enabled, (el) => el.cursor_pointer())
+            .when(enabled, (el) => el.cursor_pointer().hover(s => s.opacity(0.88)))
             .on_click((_e, cx) => this.commit(cx))
             .child(this.busy ? "Committing…" : "Commit")))
     );
 
     // Right: the diff on the terminal's background, with the file path and
     // change navigation above it.
-    const rightHeader = h_flex().h(32).flex_none().px(10).gap(6).items_center()
-      .border_b(1).border_color(withAlpha(t.foreground, "0a"))
+    const rightHeader = h_flex().h(SIZE.header).flex_none().px(12).gap(8).items_center()
+      .border_b(1).border_color(withAlpha(t.foreground, UI.lineSoft))
+      .child(svg("mods/my-changes/changes.svg").size(13).flex_none().text_color(accent))
       .child(h_flex().flex_1().min_w(0).items_center()
-        .when(Boolean(dir), (el) => el.child(div().min_w(0).truncate().text_size(TYPE.label).text_color(t.dim).child(dir)))
-        .child(div().flex_none().max_w(200).truncate().text_size(TYPE.small).font_weight(600).text_color(t.foreground).tooltip(this.open ?? "").child(leaf)))
-      .child(diffButton("prev", "↑", "Previous change", this.changes.length > 0, () => this.step(-1, cx)))
-      .child(diffButton("next", "↓", "Next change", this.changes.length > 0, () => this.step(1, cx)))
+        .when(Boolean(dir), (el) => el.child(div().min_w(0).truncate().text_size(TYPE.meta).text_color(t.muted).child(dir)))
+        .child(div().min_w(0).max_w(260).truncate().text_size(TYPE.small).font_weight(600).text_color(t.foreground).tooltip(this.open ?? "").child(leaf)))
+      .child(h_flex().flex_none().gap(2).p(2).rounded(7).bg(withAlpha(t.foreground, UI.subtle))
+        .child(diffButton("prev", "↑", "Previous change", this.changes.length > 0, () => this.step(-1, cx)))
+        .child(diffButton("next", "↓", "Next change", this.changes.length > 0, () => this.step(1, cx))))
       .child(diffButton("files", "Files", "Open this file in Files", Boolean(this.root), () => this.openInFiles(cx)));
 
-    const emptyHint = v_flex().absolute().inset_0().items_center().justify_center().gap(6)
-      .child(h_flex().size(32).flex_none().items_center().justify_center().rounded_full().bg(withAlpha(t.foreground, "05"))
-        .child(svg("mods/my-changes/changes.svg").size(14).text_color(t.dim)))
-      .child(div().text_size(TYPE.body).text_color(t.muted).child("Select a file"))
-      .child(div().text_size(TYPE.meta).text_color(t.dim).child("Its changes appear here."));
+    const emptyHint = v_flex().absolute().inset_0().p(24).items_center().justify_center().gap(8)
+      .child(h_flex().size(40).mb(4).flex_none().items_center().justify_center().rounded(12).bg(withAlpha(t.foreground, UI.subtle))
+        .child(svg("mods/my-changes/changes.svg").size(18).text_color(t.muted)))
+      .child(div().text_size(TYPE.body).font_weight(500).text_color(t.foreground).child(this.files.length ? "Select a file" : "All caught up"))
+      .child(div().text_size(TYPE.meta).text_center().text_color(t.muted).child(this.files.length ? "Choose a changed file to review its diff." : "Your working tree is clean."));
 
-    const diffArea = div().flex_1().min_w(0).min_h(0).relative().font_family(settings().font_family ?? "JetBrains Mono").text_size(11)
+    const diffArea = div().flex_1().min_w(0).min_h(0).relative().font_family(settings().font_family ?? "JetBrains Mono").text_size(TYPE.small)
       .child(div().id(`changes-diff-x-${this.uid}`).size_full().overflow_x_scrollbar()
         .child(div().w_full().min_w(this.diffWidth).h_full()
-          .child(v_virtual_list(diffId, this.rows.length, 21, (i) => String(i),
+          .child(v_virtual_list(diffId, this.rows.length, SIZE.diffRow, (i) => String(i),
             (range) => this.rows.slice(range.start, range.end).map((row) => this.diffRow(row, t)))
             .track_scroll(this.scroll).size_full())))
       .child(Scrollbar.vertical(diffId).viewport_from_layout().absolute().inset_0())
-      .when(!this.open && this.files.length > 0, (el) => el.child(emptyHint));
+      .when(!this.open && !this.loading && !this.error && Boolean(this.root), (el) => el.child(emptyHint));
 
     const rightPanel = resizable_panel().size_range(240).child(
       v_flex().size_full().min_w(0).min_h(0).bg(t.background)
-        .border_l(1).border_color(withAlpha(t.foreground, "0d"))
+        .border_l(1).border_color(withAlpha(t.foreground, UI.line))
         .when(Boolean(this.open), (el) => el.child(rightHeader))
         .child(diffArea)
     );

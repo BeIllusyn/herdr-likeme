@@ -17,7 +17,7 @@
             "mod": "my-brand"
           },
           "size": {
-            "px": 46
+            "px": 44
           },
           "window_drag": true
         },
@@ -42,7 +42,7 @@
             }
           },
           "size": {
-            "px": 69
+            "px": 76
           }
         }
       ],
@@ -65,7 +65,7 @@
             "mod": "my-tabs"
           },
           "size": {
-            "px": 42
+            "px": 44
           },
           "window_drag": true
         },
@@ -85,7 +85,7 @@
                       "mod": "my-pane"
                     },
                     "reveal": "always",
-                    "height": 30,
+                    "height": 36,
                     "position": "top"
                   },
                   "background": "surface",

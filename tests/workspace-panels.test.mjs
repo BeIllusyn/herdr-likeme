@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
-import { markColor, withAlpha, UI, TYPE } from "../mods/my-sidebar/colors.js";
+import { markColor, markInk, withAlpha, UI, TYPE, SIZE } from "../mods/my-sidebar/colors.js";
 
 const read = file => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 
@@ -64,7 +64,7 @@ function fixture({ legacy = false } = {}) {
     settings: () => ({ zoom: 1 }), shared: () => undefined,
     // The tab bar imports these from colors.js; the loader strips imports, so
     // the fixture hands the mod the real tokens.
-    markColor, withAlpha, UI, TYPE,
+    markColor, withAlpha, UI, TYPE, SIZE,
     openOverlay: spec => commands.push({ name: "overlay", args: spec }),
     run(name, args) {
       commands.push({ name, args: JSON.parse(JSON.stringify(args)) });
@@ -80,13 +80,40 @@ function fixture({ legacy = false } = {}) {
   return { body, tabs, panes, space, host, commands, timers, cx, view, render, click };
 }
 
+test("窄窗口收起工具文字，入口仍可点击，跨过宽度阈值时才重绘", () => {
+  const f = fixture();
+  let redraws = 0;
+  const cx = { ...f.cx, notify: () => redraws++ };
+  const resize = f.render().handlers.on_size_change;
+  resize({ width: 600 }, cx);
+  const compact = f.render();
+  assert.ok(!find(compact, "panel-files").nodes.includes("Files"));
+  assert.equal(find(compact, "panel-files").styles.tooltip, "Files");
+  f.click("panel-files", compact);
+  assert.equal(f.body.active, "files");
+  resize({ width: 620 }, cx);
+  assert.equal(redraws, 1);
+  resize({ width: 900 }, cx);
+  assert.ok(find(f.render(), "panel-files").nodes.includes("Files"));
+  assert.equal(redraws, 2);
+});
+
+test("空间标记在明暗底色上自动选择可读的文字颜色", () => {
+  assert.equal(markInk("#ffffff"), "#101114");
+  assert.equal(markInk("#56b6c2"), "#101114");
+  assert.equal(markInk("#101114"), "#ffffff");
+  assert.equal(markInk("#243764"), "#ffffff");
+});
+
 test("Files 和 Changes 固定在标签栏右侧，只显示一次，布局不含额外工具 Tab", () => {
   const f = fixture(), root = f.render();
   assert.equal(f.body.type, "stack");
   assert.deepEqual(f.body.children.map(n => n.id), ["main", "files", "changes"]);
   assert.ok(f.body.children.filter(n => n.id !== "main").every(n => n.content.props.workspace));
   assert.deepEqual(find(root, "tab-scroll").nodes.map(n => n.key), [
-    "tab-one", "tab-two", "tab-new",
+    "tab-one", "tab-two", "tab-new", "tab-launches",
+  ]);
+  assert.deepEqual(find(root, "tab-launches").nodes.map(n => n.key), [
     "start-claude", "start-pi", "start-lazygit", "start-nvim",
   ]);
   // 两个入口不在滚动区内，而是作为标签栏的最后一段固定在最右侧。
@@ -208,6 +235,7 @@ test("Changes 把连续的新增/删除行归为一个变动块", () => {
 test("Changes 用整个文件作为 diff 上下文", async () => {
   const calls = [];
   const { Changes } = load("mods/my-changes/main.js", "Changes", {
+    TYPE,
     exec: async (_cmd, args) => {
       calls.push(args);
       return { code: 0, stderr: "", stdout: "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1,2 +1,2 @@\n-old\n+new\n" };
@@ -273,7 +301,7 @@ test("Files 的对比模式读取整个文件的 diff", async () => {
 });
 
 test("Files 的并排对比行给删除/新增半边着色", () => {
-  const { Files } = load("mods/my-files/main.js", "Files", { div: element, h_flex: element, withAlpha, UI, TYPE });
+  const { Files } = load("mods/my-files/main.js", "Files", { div: element, h_flex: element, withAlpha, UI, TYPE, SIZE });
   const files = new Files();
   const theme = { ansi1: "#e06c75", ansi2: "#98c379", dim: "#999999", border: "#333333" };
   const row = files.compareRow({

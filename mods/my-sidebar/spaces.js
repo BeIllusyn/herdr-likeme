@@ -6,7 +6,7 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window } from "herdr";
-import { markColor, withAlpha, UI, TYPE } from "./colors.js";
+import { markColor, markInk, withAlpha, UI, TYPE, SIZE } from "./colors.js";
 import { backgroundTick } from "./util.js";
 
 // A place key is machine + NUL + folder: neither part can contain NUL, so the
@@ -25,7 +25,7 @@ function place(s, ps) {
   const tabs = new Set((s.tabs ?? []).map((c) => c.id));
   return ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
 }
-const rowHeight = ({ tree }) => (tree ? 38 : 40);
+const rowHeight = ({ tree }) => (tree ? SIZE.worktreeRow : SIZE.row);
 const where = (s, ps) => keyOf(s.machine ?? null, place(s, ps));
 const base = (path) => path.replace(/\/+$/, "").split("/").pop();
 // Changes made outside Herdr (an editor's save, a commit in another app): looked
@@ -413,9 +413,10 @@ export default class Spaces extends View {
       .id(`space-${w.id}`)
       .px(8)
       .h(rowHeight({ tree }))
+      .cursor_pointer().tooltip(w.name)
       .flex_none()
       .justify_center()
-      .rounded(6)
+      .rounded(SIZE.radius)
       .when(on, (el) => el.bg(withAlpha(t.foreground, UI.active)))
       .when(!on, (el) => el.hover((s) => s.bg(withAlpha(t.foreground, UI.hover))))
       .when(this.pressed === i && this.over !== i, (el) => el.opacity(0.45))
@@ -461,11 +462,11 @@ export default class Spaces extends View {
                 .when(tree !== "└─", d => d.self_stretch()),
             )
             .child(svg("mods/workspace-chrome/branch.svg").size(14).text_color(on ? fill : t.muted)))
-          .when(!tree, el => el.child(h_flex().size(24).flex_none().rounded(6).border(1)
+          .when(!tree, el => el.child(h_flex().size(SIZE.mark).flex_none().rounded(SIZE.radius).border(1)
             .bg(on ? fill : withAlpha(fill, UI.tint))
             .border_color(on ? fill : withAlpha(fill, UI.tintEdge))
             .items_center().justify_center().text_size(11).font_semibold()
-            .text_color(on ? "#101114" : fill)
+            .text_color(on ? markInk(fill) : fill)
             .child([...w.name][0]?.toUpperCase() ?? "?")))
           // Left: the mark. Right: the project name over its branch.
           .child(
@@ -481,8 +482,9 @@ export default class Spaces extends View {
                   .items_center()
                   .gap(4)
                   .text_size(TYPE.meta)
-                  .line_height("13px")
+                  .line_height("14px")
                   .text_color(t.muted)
+                  .child(svg("mods/workspace-chrome/branch.svg").size(10).flex_none().text_color(t.dim))
                   .child(div().min_w(0).truncate().child(g.branch ?? "detached"))
                   .when(g.ahead > 0, el => el.child(div().flex_none().text_color(t.ansi2).child(`↑${g.ahead}`)))
                   .when(g.behind > 0, el => el.child(div().flex_none().text_color(t.ansi1).child(`↓${g.behind}`))),
@@ -494,11 +496,11 @@ export default class Spaces extends View {
   // A quiet action at the end of the list, not a card: it reads as the next
   // thing to do rather than as another space.
   ghost(t) {
-    return h_flex().id("space-new-hint").h(32).flex_none().px(8).gap(8).rounded(6)
+    return h_flex().id("space-new-hint").h(32).flex_none().px(8).gap(8).rounded(SIZE.radius)
       .text_size(TYPE.small).text_color(t.muted).items_center().cursor_pointer()
       .hover(s => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground))
       .on_click(() => run("space.new"))
-      .child(h_flex().size(24).flex_none().items_center().justify_center().child(svg("mods/workspace-chrome/plus.svg").size(11)))
+      .child(h_flex().size(SIZE.mark).flex_none().items_center().justify_center().child(svg("mods/workspace-chrome/plus.svg").size(12)))
       .child("New space");
   }
 
@@ -526,14 +528,15 @@ export default class Spaces extends View {
     return v_flex().text_size(13)
       .when(!embedded, el => el.size_full().min_h(0).bg(t.chrome))
       .when(embedded, el => el.w_full().flex_none())
-      .child(h_flex().h(30).pl(16).pr(10).items_center().justify_between()
+      .child(h_flex().h(SIZE.section).pl(16).pr(12).items_center().justify_between()
         .child(h_flex().gap(6).items_center()
           .child(div().text_size(TYPE.label).font_semibold().text_color(t.muted).child("SPACES"))
-          .child(div().text_size(TYPE.label).text_color(t.dim).child(String(sp.length))))
-        .child(div().id("space-new").size(22).flex_none().flex().items_center().justify_center().rounded(5)
+          .child(h_flex().min_w(18).h(16).px(5).rounded(5).items_center().justify_center()
+            .bg(withAlpha(t.foreground, UI.subtle)).text_size(TYPE.label).text_color(t.muted).child(String(sp.length))))
+        .child(div().id("space-new").size(SIZE.control).flex_none().flex().items_center().justify_center().rounded(5).cursor_pointer().tooltip("New space")
           .text_color(t.muted).hover(s => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground))
           .on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(12))))
-      .child(v_flex().px(8).pb(embedded ? 6 : 16).gap(2)
+      .child(v_flex().px(SIZE.inset).pb(embedded ? 8 : 16).gap(3)
         .when(!embedded, el => el.flex_1().min_h(0).overflow_y_scrollbar().mode("hover"))
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
         .children([...this.grouped(t, sp, ps, ms, fillOf), this.ghost(t)]));

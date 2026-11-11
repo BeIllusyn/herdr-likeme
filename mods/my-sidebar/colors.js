@@ -1,7 +1,5 @@
-// Shared by the sidebar, the tab bar and the pane header: one palette and one
-// scale of neutral surfaces keeps every part of the window in the same visual
-// system. The same file lives in my-sidebar, my-tabs and my-pane; `check.sh`
-// fails when the three copies drift.
+// Shared by all six mods: neutral surfaces, readable type and common dimensions.
+// Each mod carries the same file; `check.sh` checks that the copies stay in sync.
 
 // Fallbacks for a theme that does not name an ANSI colour. A current theme
 // supplies ansi0..ansi15, and those are preferred, so a space takes the hue the
@@ -46,19 +44,49 @@ export function withAlpha(c, a) {
 // tile behind the agent's program icon. Selection is the neutral fill plus a
 // mark that comes alive; there is no rail or underline anywhere.
 export const UI = {
-  hover: "08",
-  active: "14",
+  subtle: "06",
+  hover: "0b",
+  active: "16",
   line: "12",
+  lineSoft: "0c",
   tint: "1c",
-  tintEdge: "3a",
+  tintEdge: "32",
 };
 
-// The type scale, in px. Labels are uppercase and tracked; meta is the quiet
+// The type scale, in px. Labels are uppercase; meta is the quiet
 // second line; body is the name in a row.
 export const TYPE = {
-  label: 9.5,
-  meta: 10.5,
-  small: 11.5,
-  body: 12.5,
-  title: 12.5,
+  label: 10,
+  meta: 11,
+  small: 12,
+  body: 13,
+  title: 13,
 };
+
+export const SIZE = {
+  bar: 44,
+  header: 36,
+  section: 32,
+  row: 44,
+  worktreeRow: 40,
+  childRow: 26,
+  listRow: 28,
+  diffRow: 22,
+  button: 28,
+  control: 24,
+  mark: 26,
+  radius: 7,
+  inset: 8,
+};
+
+// Choose the more legible ink for a solid space mark, including custom colours.
+export function markInk(color) {
+  if (!markColor(color)) return "#101114";
+  const rgb = [1, 3, 5].map(i => {
+    const v = parseInt(color.slice(i, i + 2), 16) / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  });
+  const luminance = rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+  const darkLuminance = 0.0056; // #101114
+  return (luminance + 0.05) / (darkLuminance + 0.05) >= 1.05 / (luminance + 0.05) ? "#101114" : "#ffffff";
+}

@@ -4,7 +4,7 @@
 import { View, div, image, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay } from "herdr";
-import { markColor, withAlpha, UI, TYPE } from "./colors.js";
+import { markColor, withAlpha, UI, TYPE, SIZE } from "./colors.js";
 import { backgroundTick } from "./util.js";
 
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
@@ -252,7 +252,7 @@ export default class Agents extends View {
       .relative()
       .pl(40)
       .pr(6)
-      .h(24)
+      .h(SIZE.childRow)
       .flex_none()
       .items_center()
       .rounded(5)
@@ -412,11 +412,11 @@ export default class Agents extends View {
         .id(`ag-${a.address}`)
         .relative()
         .px(8)
-        .h(40)
+        .h(SIZE.row)
         .flex_none()
         .items_center()
         .gap(8)
-        .rounded(6)
+        .rounded(SIZE.radius)
         .when(a.focused, (el) => el.bg(withAlpha(t.foreground, UI.active)))
         .when(!a.focused, (el) => el.hover((s) => s.bg(withAlpha(t.foreground, UI.hover))))
         .cursor_pointer()
@@ -428,20 +428,20 @@ export default class Agents extends View {
           cx.notify();
         })
         .on_click(() => run("pane.focus", { pane: a.pane }))
-        .when(Boolean(pic), el => el.child(div().id(`agent-fold-${a.address}`).size(24).flex_none().rounded(6).flex().items_center().justify_center()
+        .when(Boolean(pic), el => el.child(div().id(`agent-fold-${a.address}`).size(SIZE.mark).flex_none().rounded(SIZE.radius).flex().items_center().justify_center()
           .when(a.focused, el => el.bg(fill ? withAlpha(fill, "2e") : withAlpha(t.foreground, "08")))
           .when(subs.length > 0, el => el.on_click((_e, cx) => {
             cx.stop_propagation();
             this.folded.has(a.address) ? this.folded.delete(a.address) : this.folded.add(a.address);
             cx.notify();
           })).child(pic)))
-        .when(!pic, el => el.child(div().size(24).flex_none()))
+        .when(!pic, el => el.child(div().size(SIZE.mark).flex_none()))
         .child(
           v_flex()
             .flex_1()
             .min_w(0)
             .gap(1)
-            .child(div().min_w(0).truncate().text_size(TYPE.body).line_height("15px").font_weight(idle ? 500 : 600)
+            .child(div().min_w(0).truncate().text_size(TYPE.body).line_height("15px").font_weight(a.focused ? 600 : 500)
               .text_color(idle ? t.muted : t.foreground).tooltip(top).child(top))
             .when(Boolean(under) || Boolean(machine), el => el.child(
               h_flex()
@@ -449,12 +449,12 @@ export default class Agents extends View {
                 .items_center()
                 .gap(5)
                 .text_size(TYPE.meta)
-                .line_height("13px")
+                .line_height("14px")
                 .text_color(t.muted)
                 .when(Boolean(fill) && Boolean(under), el => el.child(div().size(4).rounded_full().flex_none().bg(withAlpha(fill, "cc"))))
                 .when(Boolean(under), el => el.child(div().min_w(0).truncate().tooltip(under).child(under)))
                 .when(Boolean(under) && Boolean(machine), el => el.child(div().flex_none().child("·")))
-                .when(Boolean(machine), el => el.child(div().flex_none().text_size(9.5).child(machine))),
+                .when(Boolean(machine), el => el.child(div().flex_none().text_size(TYPE.meta).child(machine))),
             )),
         )
         .when(subs.length > 0, el => el.child(fold(a, subs)))
@@ -533,21 +533,22 @@ export default class Agents extends View {
       .text_size(13)
       .when(!embedded, el => el.size_full().min_h(0).bg(t.chrome))
       .when(embedded, el => el.w_full().flex_none())
-      .child(div().h(1).flex_none().mx(16).mt(6).bg(withAlpha(t.foreground, UI.line)))
+      .child(div().h(1).flex_none().mx(16).mt(4).mb(6).bg(withAlpha(t.foreground, UI.line)))
       .child(
         h_flex()
-          .px(16)
-          .h(30)
+          .pl(16).pr(12)
+          .h(SIZE.section)
           .flex_none()
           .items_center()
           .justify_between()
           .child(h_flex().gap(6).items_center()
             .child(div().text_size(TYPE.label).font_semibold().text_color(t.muted).child("AGENTS"))
-            .child(div().text_size(TYPE.label).text_color(t.dim).child(String(list.length))))
+            .child(h_flex().min_w(18).h(16).px(5).rounded(5).items_center().justify_center()
+              .bg(withAlpha(t.foreground, UI.subtle)).text_size(TYPE.label).text_color(t.muted).child(String(list.length))))
           .child(
             div()
               .id("ag-sort")
-              .size(22)
+              .size(SIZE.control).cursor_pointer()
               .flex()
               .items_center()
               .justify_center()
@@ -559,7 +560,7 @@ export default class Agents extends View {
               .child(svg(sort.icon).size(13)),
           ),
       )
-      .child(v_flex().id("ag-list").px(8).gap(1)
+      .child(v_flex().id("ag-list").px(SIZE.inset).pb(12).gap(3)
         .when(!embedded, el => el.flex_1().min_h(0).overflow_y_scrollbar().mode("hover"))
         .when(empty && !embedded, el => el.items_center().justify_center())
         .children(empty ? [emptyState] : rows));

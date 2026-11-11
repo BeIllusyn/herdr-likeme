@@ -1,8 +1,8 @@
-// A lazy file browser for the focused pane's folder, with bounded read-only previews.
+// A lazy file browser for the focused folder, with an editor and a comparison view.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, h_resizable, resizable_panel, Editor, EditorState, Scrollbar, v_virtual_list } from "gpui-base";
 import { spaces, panes, focused, props, exec, readTextFile, writeTextFile, watchFolder, theme, settings, window, shared } from "herdr";
-import { markColor, withAlpha, UI, TYPE } from "./colors.js";
+import { markColor, withAlpha, UI, TYPE, SIZE } from "./colors.js";
 
 
 // 工作区固定视图跟随当前终端目录；旧版独立工具 Tab 保留自己的根目录和展开状态。
@@ -363,13 +363,13 @@ export default class Files extends View {
 
   // 并排对比的一行：左侧是旧文件，右侧是新文件；变化的半边用底色和符号标出。
   compareRow(pair, t) {
-    if (pair.note) return div().w_full().h(20).flex_none().px(12).truncate().text_color(t.dim).child(pair.note);
+    if (pair.note) return div().w_full().h(SIZE.diffRow).flex_none().px(12).truncate().text_color(t.muted).child(pair.note);
     const cell = (row, tint, number) => h_flex().flex_1().min_w(0).h_full().gap(6).items_center().px(6)
       .when(Boolean(row) && Boolean(tint), (e) => e.bg(tint))
-      .child(div().w(26).flex_none().text_right().text_size(10).text_color(t.dim).child(row && number !== undefined ? String(number) : ""))
-      .child(div().w(8).flex_none().text_size(10).text_color(t.dim).child(row?.kind === "-" ? "−" : row?.kind === "+" ? "+" : ""))
+      .child(div().w(36).flex_none().text_right().text_size(TYPE.meta).text_color(t.dim).child(row && number !== undefined ? String(number) : ""))
+      .child(div().w(8).flex_none().text_size(TYPE.meta).text_color(row?.kind === "-" ? t.ansi1 : row?.kind === "+" ? t.ansi2 : t.dim).child(row?.kind === "-" ? "−" : row?.kind === "+" ? "+" : ""))
       .child(div().flex_1().min_w(0).truncate().child(row?.text ?? ""));
-    return h_flex().w_full().h(20).flex_none()
+    return h_flex().w_full().h(SIZE.diffRow).flex_none()
       .child(pair.left?.kind === "-"
         ? cell(pair.left, withAlpha(t.ansi1, "33"), pair.left.oldNumber)
         : cell(pair.left, null, pair.left?.oldNumber))
@@ -446,14 +446,14 @@ export default class Files extends View {
   fileRow(r, t, accent) {
     const selected = this.file === r.path && !r.dir;
     const markTint = r.mark === "A" ? t.ansi2 : r.mark === "D" || r.mark === "U" ? t.ansi1 : t.ansi3;
-    return h_flex().h(26).flex_none().pl(6 + r.depth * 14).pr(6).gap(6).items_center().rounded(6).cursor_pointer()
+    return h_flex().h(SIZE.listRow).flex_none().pl(6 + r.depth * 14).pr(8).gap(7).items_center().rounded(SIZE.radius).cursor_pointer()
       .when(selected, el => el.bg(withAlpha(t.foreground, UI.active)))
-      .when(!selected, el => el.hover(s => s.bg(withAlpha(t.foreground, "06"))))
+      .when(!selected, el => el.hover(s => s.bg(withAlpha(t.foreground, UI.hover))))
       .child(r.dir ? svg(`mods/my-files/chevron-${r.open ? "down" : "right"}.svg`).size(10).flex_none().text_color(t.dim) : div().w(10).flex_none())
       .child(svg(`mods/my-files/${r.dir ? "folder" : "file"}.svg`).size(13).flex_none().text_color(selected ? accent : t.muted))
-      .child(div().flex_1().min_w(0).truncate().text_size(TYPE.small).font_weight(selected ? 500 : 400)
+      .child(div().flex_1().min_w(0).truncate().text_size(TYPE.small).font_weight(selected ? 600 : 400)
         .text_color(selected ? t.foreground : t.muted).child(r.name))
-      .when(Boolean(r.mark), el => el.child(div().w(10).flex_none().text_size(9).font_weight(600).text_color(markTint).child(r.mark)));
+      .when(Boolean(r.mark), el => el.child(div().w(10).flex_none().text_size(TYPE.label).font_weight(600).text_color(markTint).child(r.mark)));
   }
 
   render(cx) {
@@ -488,23 +488,24 @@ export default class Files extends View {
     const parts = this.file ? this.file.split("/") : [];
     const leaf = parts.pop() ?? "";
     const dir = parts.length ? parts.join("/") + "/" : "";
-    const segment = (id, label, on, enabled, tip, action) => h_flex().id(id).h(20).flex_none().px(6).rounded(4).items_center()
-      .text_size(9.5).font_weight(600)
-      .when(on, (el) => el.bg(withAlpha(t.foreground, "0e")).text_color(t.foreground))
+    const segment = (id, label, on, enabled, tip, action) => h_flex().id(id).h(SIZE.control).flex_none().px(9).rounded(5).items_center()
+      .text_size(TYPE.meta).font_weight(600)
+      .when(on, (el) => el.bg(withAlpha(t.foreground, UI.active)).text_color(t.foreground))
       .when(!on, (el) => el.text_color(enabled ? t.muted : t.dim))
       .when(enabled && !on, (el) => el.cursor_pointer().hover((s) => s.text_color(t.foreground)))
       .when(enabled, (el) => el.tooltip(tip).on_click(action))
       .child(label);
 
-    const treePanel = resizable_panel().size(220).size_range(160).child(
+    const treePanel = resizable_panel().size(260).size_range(200).child(
       v_flex().size_full().min_w(0).min_h(0)
-        .child(h_flex().h(34).flex_none().px(12).gap(6).items_center()
-          .child(svg("mods/my-files/folder.svg").size(12).flex_none().text_color(t.dim))
-          .child(div().flex_1().min_w(0).truncate().text_size(TYPE.meta).font_weight(600).text_color(t.muted)
+        .child(h_flex().h(SIZE.header).flex_none().px(14).gap(8).items_center()
+          .border_b(1).border_color(withAlpha(t.foreground, UI.lineSoft))
+          .child(svg("mods/my-files/folder.svg").size(14).flex_none().text_color(t.muted))
+          .child(div().flex_1().min_w(0).truncate().text_size(TYPE.small).font_weight(600).text_color(t.foreground).tooltip(this.root ?? "")
             .child(this.root?.split(/[\\/]/).pop() ?? "")))
-        .child(v_flex().id(`files-tree-${this.uid}`).p(6).gap(1).flex_1().min_w(0).min_h(0)
+        .child(v_flex().id(`files-tree-${this.uid}`).p(SIZE.inset).gap(2).flex_1().min_w(0).min_h(0)
           .when(rows.length > 0, (tree) => tree.child(v_flex().relative().flex_1().min_h(0)
-            .child(v_virtual_list(listId, rows.length, 26, (i) => rows[i].path,
+            .child(v_virtual_list(listId, rows.length, SIZE.listRow, (i) => rows[i].path,
               (range) => rows.slice(range.start, range.end).map((r) => this.fileRow(r, t, accent)))
               .on_item_click((path, cx) => {
                 const row = rows.find((r) => r.path === path);
@@ -522,31 +523,34 @@ export default class Files extends View {
             div().flex_none().px(8).py(8).text_size(TYPE.label).line_height("13px").text_color(t.dim).child("Limit: 500 per folder · 5,000 total"))))
     );
 
-    const previewHeader = h_flex().h(34).flex_none().px(12).gap(8).items_center()
-      .border_b(1).border_color(withAlpha(t.foreground, "0a"))
+    const previewHeader = h_flex().h(SIZE.header).flex_none().px(12).gap(10).items_center()
+      .border_b(1).border_color(withAlpha(t.foreground, UI.lineSoft))
+      .child(svg("mods/my-files/file.svg").size(13).flex_none().text_color(accent))
       .child(h_flex().flex_1().min_w(0).items_center()
-        .when(Boolean(dir), (el) => el.child(div().min_w(0).truncate().text_size(TYPE.meta).text_color(t.dim).child(dir)))
-        .child(div().flex_none().max_w(220).truncate().text_size(TYPE.small).font_weight(600).text_color(t.foreground).child(leaf)))
-      .child(h_flex().h(22).flex_none().p(1).gap(1).rounded(5).items_center().bg(withAlpha(t.foreground, "05"))
+        .when(Boolean(dir), (el) => el.child(div().min_w(0).truncate().text_size(TYPE.meta).text_color(t.muted).child(dir)))
+        .child(div().min_w(0).max_w(260).truncate().text_size(TYPE.small).font_weight(600).text_color(t.foreground).tooltip(this.file ?? "").child(leaf)))
+      .child(h_flex().h(SIZE.button).flex_none().p(2).gap(2).rounded(7).items_center().bg(withAlpha(t.foreground, UI.subtle))
         .child(segment(`files-edit-${this.uid}`, "Edit", !this.diffMode, true, "Edit the file", (_e, cx) => { if (this.diffMode) this.toggleDiff(cx); }))
         .child(segment(`files-diff-${this.uid}`, "Diff", this.diffMode, Boolean(repo || this.diffMode), repo ? "Compare with the last commit" : "Not in a git repository", (_e, cx) => { if (repo) this.toggleDiff(cx); })))
       // The file saves itself after a pause; this says where a write stands
       // and saves at once when pressed.
-      .when(!this.editable, (el) => el.child(div().text_size(TYPE.meta).text_color(t.dim).child("Read-only")))
-      .when(this.editable, (el) => el.child(div().text_size(TYPE.meta)
-        .text_color(this.saveError ? t.ansi1 : this.dirty || this.saving ? t.muted : t.dim)
+      .when(!this.editable, (el) => el.child(div().w(76).flex_none().text_size(TYPE.meta).text_color(t.muted).child("Read-only")))
+      .when(this.editable, (el) => el.child(h_flex().w(76).flex_none().gap(5).items_center().text_size(TYPE.meta)
+        .text_color(this.saveError ? t.ansi1 : t.muted)
         .when(this.dirty, (e) => e.cursor_pointer().hover((s) => s.text_color(t.foreground)))
         .when(Boolean(this.saveError), (e) => e.tooltip(this.saveError))
         .on_click((_e, cx) => this.save(cx))
+        .child(div().size(4).flex_none().rounded_full().bg(this.saveError ? t.ansi1 : this.dirty || this.saving ? t.working : withAlpha(t.ansi2, "99")))
         .child(this.saveError ? "Save failed" : this.saving ? "Saving…" : this.dirty ? "Save" : "Saved")));
 
-    const compareHeader = h_flex().h(24).flex_none().px(10).text_size(9).font_weight(600).text_color(t.dim)
+    const compareHeader = h_flex().h(28).flex_none().px(12).text_size(TYPE.label).font_weight(600).text_color(t.muted)
+      .bg(withAlpha(t.foreground, UI.subtle)).border_b(1).border_color(withAlpha(t.foreground, UI.lineSoft))
       .child(div().flex_1().child("BEFORE"))
       .child(div().w(1).flex_none().bg(withAlpha(t.foreground, "0f")))
       .child(div().flex_1().pl(8).child("AFTER"));
 
-    const compareBody = div().relative().flex_1().min_h(0).font_family(settings().font_family ?? "JetBrains Mono").text_size(11)
-      .child(v_virtual_list(compareId, this.diffPairs.length, 20, (i) => String(i),
+    const compareBody = div().relative().flex_1().min_h(0).font_family(settings().font_family ?? "JetBrains Mono").text_size(TYPE.small)
+      .child(v_virtual_list(compareId, this.diffPairs.length, SIZE.diffRow, (i) => String(i),
         (range) => this.diffPairs.slice(range.start, range.end).map((pair) => this.compareRow(pair, t))).size_full())
       .child(Scrollbar.vertical(compareId).absolute().inset_0());
 
@@ -559,15 +563,15 @@ export default class Files extends View {
           div().p(12).text_size(TYPE.meta).text_color(t.dim).child(this.gitTop ? "No differences" : "Not in a git repository")))
       : (this.code ? Editor.new(this.code).flex_1().min_h(0) : div().p(12).text_size(TYPE.meta).text_color(t.dim).child(this.fileError || "Loading file…"));
 
-    const emptyPreview = v_flex().flex_1().items_center().justify_center().gap(6)
-      .child(h_flex().size(32).flex_none().items_center().justify_center().rounded_full().bg(withAlpha(t.foreground, "05"))
-        .child(svg("mods/my-files/file.svg").size(14).text_color(t.dim)))
-      .child(div().text_size(TYPE.body).text_color(t.muted).child("Select a file"))
-      .child(div().text_size(TYPE.meta).text_color(t.dim).child("Preview or edit it here."));
+    const emptyPreview = v_flex().flex_1().min_w(0).p(24).items_center().justify_center().gap(8)
+      .child(h_flex().size(40).mb(4).flex_none().items_center().justify_center().rounded(12).bg(withAlpha(t.foreground, UI.subtle))
+        .child(svg("mods/my-files/file.svg").size(18).text_color(t.muted)))
+      .child(div().text_size(TYPE.body).font_weight(500).text_color(t.foreground).child("Select a file"))
+      .child(div().text_size(TYPE.meta).text_center().text_color(t.muted).child("Choose a file to preview, edit or compare."));
 
     const previewPanel = resizable_panel().size_range(240).child(
       v_flex().size_full().min_w(0).min_h(0).bg(t.background)
-        .border_l(1).border_color(withAlpha(t.foreground, "0d"))
+        .border_l(1).border_color(withAlpha(t.foreground, UI.line))
         .when(Boolean(this.file), (el) => el.child(previewHeader).child(diffPane))
         .when(!this.file, (el) => el.child(emptyPreview))
     );

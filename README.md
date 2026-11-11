@@ -19,13 +19,13 @@ the active tool view and its editor are the real UI._
 
 | Area | Change |
 |---|---|
-| **Sidebar** | Spaces and agents share one scrolling column; the Agents section follows the spaces content instead of starting at the sidebar's midpoint, and the whole column scrolls together — its scrollbar shows itself only while the pointer is over it, so the column reads clean when nothing is scrolling. Section captions are 9.5 px uppercase labels with a count (`SPACES 2`, `AGENTS 1`), separated by a hairline. Both halves watch their data on a 250 ms timer while the window is in front, and take one look in four (1 s) while it is in the background; a redraw happens only when what they draw actually changed. |
-| **Spaces** | A 24 px monogram in the space's colour on a faint tinted chip; the project name (12.5 px, 600 when active) over the current git branch (10.5 px, muted, plus ahead/behind). Rows are flat 6 px-radius list rows inset 8 px from the sidebar edges with a 2 px gap: resting rows are transparent, the pointer lifts them to a 3 % neutral fill, and the active space takes an 8 % neutral fill while its monogram fills solid with dark ink (and a worktree's branch glyph takes the space colour) — no coloured cards, no borders, no rail. Worktrees hang from a 1 px tree line under their checkout; a quiet 32 px "New space" row ends the list. |
-| **Agents** | The same flat row, led by the agent's own generated title with its space (project) name underneath, falling back to the space name over the title when the agent has none. The program icon sits in a 24 px box at 18 px; the space's colour returns as a 4 px dot on the second line. The focused agent takes the same 8 % neutral fill as the selected space row and its icon box takes an 18 % tint of the space colour (a tinted glyph turns that colour too); sub-agent rows are 24 px flat rows under a 1 px tree line. The column watches its data on a 250 ms timer (1 s while the window is in the background) and redraws when it changes, so focus and status turns show without hovering; every agent keeps a status mark visible — the working spinner, a `NEEDS YOU` pill, the done dot and a quiet idle ring. The elapsed time and pin share a fixed slot, so hovering never shifts the text. Priority view keeps its section headers (Needs you / Done / Working / Idle) visible at all times, so an all-idle list still reads as "Idle"; a lone space group hides its redundant header, and the sort button uses an up/down icon. |
-| **Tabs** | Tabs are 30 px pills (7 px radius, 9 px padding) with a 3 px gap, centred in the 42 px bar. The active tab takes an 8 % neutral fill, a 600-weight name and the space's colour in its tinted program icon; the others are transparent with a close button at 30 % (65 % when active) and lift to a 2.5 % neutral on hover. The `+` and the four quick starts are 28 px ghost buttons with a tooltip. `Files`／`Changes` 固定在标签栏最右侧、不随标签滚动；两者是同一排安静的 28 px 工具按钮，当前入口使用中性选中底色和空间色图标，点击只切换工作区内容，不创建新的 Tab，再次点击或选择普通 Tab 即返回终端。 Dragging a tab shows the accent line it will land on. A default-numbered tab shows what it runs — the folder name, or the program when two tabs share it — and `+` follows the ordinary tabs; the fixed Files/Changes entries sit on the bar's right edge behind a hairline. A zoomed tab gets a small zoom glyph instead of a trailing `Z`. Four one-click starts sit right after the `+` — Claude Code (with `--dangerously-skip-permissions`), Pi, Lazygit and Neovim — each opening a tab in the focused folder and using Herdr's own program icon (Claude keeps its orange, the other three are tinted glyphs). The working spinner is a gold braille character (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, 80 ms per frame). |
-| **Panes** | Square corners and no padding or terminal padding — a lone pane fills the work area edge to edge, and split panes keep a 1 px gap where the layout's `canvas` shows through instead of a drawn border — a card surface named by the theme (`surface`), and a cloned header on that same surface. The focused header is the theme's `surface` mixed with 8 % of the space's colour; its title is 12.5 px at 600 in `foreground` and its program icon takes the space's colour, while inactive headers stay plain `surface` with a `muted`/500 title. Every header ends on a faint hairline. It is a flat colour — no gradient, no animation — and it follows the theme, so a light theme gets a light header. The folder is 10.5 px `muted`. The split/zoom/close buttons are 24 px ghost buttons; the status mark appears for working, blocked and done (nothing while idle). The header's working spinner is the same gold braille character as the tabs and agents. |
-| **Files / Changes** | 从 Herdr 的 `files` 和 `changes` Mod 克隆，作为工作区 stack 的固定视图显示，根目录跟随当前终端；入口固定在标签栏最右侧，不重复显示为普通 Tab。旧版已打开的独立工具 Tab 会由固定入口复用，不关闭其编辑器。The body splits left/right: the file tree or the changed-file list (with the commit box under it) on the left in `surface`, the preview or the diff on the right in the terminal's `background`, divided by a hairline. The diff covers the whole file — unchanged lines are included as context — and the header above it is a quiet breadcrumb (directory dim, file name strong) with `↑`／`↓` buttons that jump between change blocks and a `Files` button that opens the same file in the Files view (a file outside that view's folder is previewed from the repository root without changing its tree). The file preview is an editor: edits save themselves after a pause (and on blur, a file switch or closing the view), writing only while the file still matches the text it read; the header says Saved / Saving… / Save failed, and a file too large to round-trip stays read-only. An `Edit｜Diff` segmented switch turns the preview into a side-by-side before/after comparison against HEAD — deleted lines tinted red on the left, added lines green on the right, untracked files read as all additions — and back to the editor. The open file and the selected change are 8 % neutral fills; in the tree the open file's icon takes the space colour. Diff rows are 21 px, tint additions and deletions at 15 % and carry a coloured `+`／`−` sign beside the line number, so the two stay apart on a dark theme (and without relying on hue alone). The file tree rows are 26 px, the changed-file rows 27 px, the commit field and button 30 px, and the changed-file count is a small neutral chip. Both lists are virtualized, so a large tree or a thousand changed files only builds the rows on screen. 切换视图会保留文件树展开状态和分栏宽度；关闭布局时结束计时器和目录监听。 |
-| **Brand bar** | Cloned from `workspace-chrome` with its sidebar toggle, logo and search button removed: the sidebar stays open, and the top-left block is an empty window-drag surface (the macOS traffic lights still sit there). The same clone draws the sidebar footer (Settings / Add machine) as 26 px quiet rows over a hairline. |
+| **Sidebar** | One scrolling column for Spaces and Agents, with a scrollbar visible on hover. The 32 px section captions use 10 px labels and small neutral count chips; 44 px rows, 26 px marks and 3 px gaps give both lists the same rhythm. Both retained views check live data every 250 ms (1 s in the background) and redraw only when it changes. |
+| **Spaces** | A tinted monogram, a 13 px project name and an 11 px branch with a small branch icon and ahead/behind counts. Selection uses a neutral fill and a solid space mark; its text automatically chooses dark or white ink for contrast. Worktrees sit under their checkout on a quiet tree line. A 32 px New space action ends the list. |
+| **Agents** | The agent's title leads, with its space underneath and a small space-coloured dot. The focused row uses the same selection as Spaces and a tinted icon tile. Sub-agent rows are 26 px. Working, Needs you, Done and Idle remain visible; elapsed time and pin share a fixed slot. Priority keeps its section headers; Grouped hides a redundant single-space header. |
+| **Tabs** | A 44 px bar with 32 px tabs, 12 px labels and 4 px gaps. Quick starts are grouped behind a short hairline after `+`: Claude Code (`--dangerously-skip-permissions`), Pi, Lazygit and Neovim. Files / Changes stay fixed at the right, switch the workspace without creating tabs, and collapse to icons with tooltips below 680 px of bar width. Existing standalone tool tabs are reused. Tabs keep drag, rename, zoom and close actions; close buttons brighten on hover. |
+| **Panes** | Edge-to-edge terminals and 1 px split gaps. The 36 px header matches Files / Changes; focus adds a 6% space tint, a 13 px semibold title and a coloured program icon. Folder text is 11 px, the fixed status slot is 68 px, and split / zoom / close controls are grouped 24 px buttons with tooltips. Close actions use a red hover state. |
+| **Files / Changes** | Matching 260 px initial list widths, 36 px headers and 28 px file rows. Filenames lead in Changes, with quieter directory context, tinted status tiles and full-path tooltips. File previews keep the editor and optimistic auto-save, with a fixed-width save indicator and a larger Edit / Diff switch. Full-file diffs and before/after comparisons use 12 px type, 22 px rows and coloured `+` / `−` signs. Change navigation is grouped in the header. Lists remain virtualized, and switching views preserves folders and split widths. Both views share the same empty-state styling; a clean worktree shows All caught up. |
+| **Brand bar** | A 44 px empty window-drag surface, aligned with the tab bar, and a 76 px footer with 28 px Settings / Add machine rows. The footer, sidebar and brand share a continuous, faint right-hand divider. |
 
 Everything else — menus — is Herdr's `main` layout unchanged.
 
@@ -81,8 +81,9 @@ herdr-app check "$DST/mods/my-brand"
 herdr-app do layout.switch '{"name":"likeme"}'
 ```
 
-After editing a mod, run `./check.sh`: it loads all six mods and fails if the five
-`colors.js` copies drift.
+After editing a mod, run `./check.sh`: it loads all six mods and fails if their six
+`colors.js` copies drift. Shared `UI`, `TYPE` and `SIZE` tokens keep colours, text and
+component dimensions consistent.
 
 工作区入口的回归测试使用 Node.js 内置测试运行器：
 
@@ -95,8 +96,8 @@ matching `"mod"` references in `likeme.json`.
 
 - Update: run the one-liner again, or `git pull && ./install.sh`
 - Uninstall: delete `layouts/likeme.json`, `layouts/likeme.png` (if present) and the
-  `mods/my-sidebar`, `mods/my-tabs`, `mods/my-pane`, `mods/my-files`, `mods/my-changes`
-  folders. If you
+  `mods/my-sidebar`, `mods/my-tabs`, `mods/my-pane`, `mods/my-files`, `mods/my-changes`,
+  `mods/my-brand` folders. If you
   upgraded from a version before the merged sidebar, also delete the old
   `mods/my-spaces` and `mods/my-agents` folders; their code now lives inside
   `mods/my-sidebar`.
@@ -119,7 +120,7 @@ These six are meant to be read:
   tab。Files／Changes 固定入口使用 `layout.select` 切换工作区内容，不创建或关闭
   Tab；升级前已存在的工具 Tab 会保留并由固定入口复用。Mod 不运行 `exec`，也不使用网络。
 - **`my-pane`** is a clone of the shipped pane header; it reads the same live pane
-  data, mixes 8 % of the space's colour into the focused header and colours its icon,
+  data, mixes 6 % of the space's colour into the focused header and colours its icon,
   and carries its own split/zoom/close SVGs. No `exec`, no network.
 - **`my-files`** is a lazy file browser for the tab's terminal folder. It lists
   directories with `sh` (or PowerShell on Windows), previews and edits files with
@@ -132,7 +133,7 @@ These six are meant to be read:
   watches the worktree. Its header jumps between change blocks and hands the selected
   file to Files (`setShared` + `layout.select`). No network.
 - **`my-brand`** is a clone of the shipped brand bar and sidebar footer with the
-  sidebar toggle, logo and search button removed; the footer is 26 px quiet rows over a
+  sidebar toggle, logo and search button removed; the footer is 28 px quiet rows over a
   hairline. No `exec`, no network.
 
 `RECIPE.md` has the full build notes, including the exact layout tree, the two-line
