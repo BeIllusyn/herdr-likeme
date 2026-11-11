@@ -1,7 +1,7 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, h_resizable, resizable_panel, InputState, Input, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { spaces, panes, focused, props, exec, readTextFile, watchFolder, theme, settings, run, setShared, shared } from "herdr";
-import { markColor, withAlpha, UI, TYPE, SIZE } from "./colors.js";
+import { markColor, changeColor, withAlpha, UI, TYPE, SIZE } from "./colors.js";
 
 
 // 工作区固定视图跟随当前终端目录；旧版独立工具 Tab 保留自己的根目录和选中文件。
@@ -260,13 +260,14 @@ export default class Changes extends View {
   fileRow(f, t, accent) {
     const parts = f.path.split("/"), name = parts.pop();
     const dir = parts.length ? parts.join("/") + "/" : "";
-    const status = f.status === "A" ? t.ansi2 : f.status === "D" ? t.ansi1 : f.status === "U" ? t.ansi5 : t.ansi3;
+    const status = changeColor(f.status, t);
     const on = this.open === f.path;
     return h_flex().h(SIZE.listRow).flex_none().px(8).gap(7).items_center().rounded(SIZE.radius).cursor_pointer().tooltip(f.path)
       .when(on, (e) => e.bg(withAlpha(t.foreground, UI.active)))
       .when(!on, (s) => s.hover((e) => e.bg(withAlpha(t.foreground, UI.hover))))
       .child(h_flex().size(18).flex_none().rounded(4).items_center().justify_center()
-        .bg(withAlpha(status, UI.tint)).text_size(TYPE.label).font_weight(600).text_color(status).child(f.status))
+        .bg(withAlpha(status, UI.tint)).border(1).border_color(withAlpha(status, UI.tintEdge))
+        .text_size(TYPE.label).font_weight(600).text_color(status).child(f.status))
       .child(h_flex().flex_1().min_w(0).gap(6).items_center()
         .child(div().flex_1().min_w(0).truncate().text_size(TYPE.small).font_weight(on ? 600 : 400).text_color(on ? t.foreground : t.muted).child(name))
         .when(Boolean(dir), (e) => e.child(div().max_w(80).min_w(0).truncate().text_size(TYPE.label).text_color(t.dim).child(dir))))
@@ -280,8 +281,8 @@ export default class Changes extends View {
     // The tint and the coloured sign keep changes readable without a gutter
     // line and without relying on hue alone.
     return h_flex().w_full().h(SIZE.diffRow).flex_none().gap(8)
-      .when(add, (e) => e.bg(withAlpha(t.ansi2, "26")))
-      .when(del, (e) => e.bg(withAlpha(t.ansi1, "26")))
+      .when(add, (e) => e.bg(withAlpha(t.ansi2, UI.diff)))
+      .when(del, (e) => e.bg(withAlpha(t.ansi1, UI.diff)))
       .child(div().w(40).flex_none().text_right().text_size(TYPE.meta).text_color(t.dim).child(number === undefined ? "" : String(number)))
       .child(div().w(8).flex_none().text_size(TYPE.meta).text_color(add ? t.ansi2 : del ? t.ansi1 : t.dim).child(add ? "+" : del ? "−" : ""))
       .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(text));
@@ -353,11 +354,11 @@ export default class Changes extends View {
         .child(v_flex().flex_none().p(10).gap(8).border_t(1).border_color(withAlpha(t.foreground, UI.lineSoft))
           .child(div().id(`commit-message-${this.uid}`).w_full().h(32).px(10).flex().items_center().rounded(SIZE.radius)
             .bg(t.background)
-            .border(1).border_color(this.typing ? withAlpha(accent, "b0") : withAlpha(t.foreground, "10"))
+            .border(1).border_color(this.typing ? withAlpha(accent, UI.ring) : withAlpha(t.foreground, UI.field))
             .cursor_text().on_mouse_down("left", (_e, cx) => cx.stop_propagation())
             .child(Input.new(this.input).h_full().text_size(TYPE.small).text_color(t.foreground)))
           .child(div().id(`commit-${this.uid}`).w_full().h(32).flex().items_center().justify_center().rounded(SIZE.radius)
-            .bg(enabled ? t.solid : withAlpha(t.foreground, "06"))
+            .bg(enabled ? t.solid : withAlpha(t.foreground, UI.subtle))
             .text_color(enabled ? t.solid_foreground : t.dim)
             .text_size(TYPE.small).font_weight(600)
             .when(enabled, (el) => el.cursor_pointer().hover(s => s.opacity(0.88)))

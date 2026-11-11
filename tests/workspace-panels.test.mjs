@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
-import { markColor, markInk, withAlpha, UI, TYPE, SIZE } from "../mods/my-sidebar/colors.js";
+import { changeColor, markColor, markInk, withAlpha, UI, TYPE, SIZE } from "../mods/my-sidebar/colors.js";
 
 const read = file => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 
@@ -103,6 +103,27 @@ test("空间标记在明暗底色上自动选择可读的文字颜色", () => {
   assert.equal(markInk("#56b6c2"), "#101114");
   assert.equal(markInk("#101114"), "#ffffff");
   assert.equal(markInk("#243764"), "#ffffff");
+  // A stored ANSI name resolves through the fallback table before it is read.
+  assert.equal(markInk("ansi6"), "#101114");
+  assert.equal(markInk(null), "#101114");
+});
+
+test("空间与改动状态共用一套可辨识的颜色", () => {
+  const t = { ansi1: "#red", ansi2: "#green", ansi3: "#sand", ansi5: "#mauve", muted: "#muted" };
+  assert.equal(changeColor("A", t), "#green");
+  assert.equal(changeColor("D", t), "#red");
+  assert.equal(changeColor("U", t), "#mauve");
+  assert.equal(changeColor("M", t), "#sand");
+  assert.equal(changeColor("?", t), "#sand");
+  assert.equal(changeColor("A", { muted: "#muted" }), "#muted");
+});
+
+test("中性刻度逐级增强，线条分为三档", () => {
+  const a = (step) => parseInt(step, 16);
+  assert.ok(a(UI.subtle) < a(UI.hover));
+  assert.ok(a(UI.hover) < a(UI.active));
+  assert.ok(a(UI.lineSoft) < a(UI.field));
+  assert.ok(a(UI.field) < a(UI.line));
 });
 
 test("Files 和 Changes 固定在标签栏右侧，只显示一次，布局不含额外工具 Tab", () => {
@@ -308,8 +329,8 @@ test("Files 的并排对比行给删除/新增半边着色", () => {
     left: { kind: "-", oldNumber: 2, text: "old" },
     right: { kind: "+", newNumber: 2, text: "new" },
   }, theme);
-  assert.equal(row.nodes[0].styles.bg, "#e06c7533");
-  assert.equal(row.nodes[2].styles.bg, "#98c37933");
+  assert.equal(row.nodes[0].styles.bg, `#e06c75${UI.diff}`);
+  assert.equal(row.nodes[2].styles.bg, `#98c379${UI.diff}`);
 });
 
 test("Files 收到 Changes 的打开请求时展开父目录；跨目录时按仓库根预览", () => {

@@ -258,10 +258,10 @@ export default class Agents extends View {
       .rounded(5)
       .text_size(TYPE.small)
       .when(on, (el) => el.bg(withAlpha(t.foreground, UI.active)))
-      .when(!on, (el) => el.hover((s) => s.bg(withAlpha(t.foreground, "06"))))
+      .when(!on, (el) => el.hover((s) => s.bg(withAlpha(t.foreground, UI.hover))))
       .on_click(() => this.peek(k.address))
       .children(s.lines.map(l => div().self_start().mt(-5).w(10).h(16).mr(3).flex_none()
-        .when(Boolean(l), el => el.border_l(1).border_color(withAlpha(t.foreground, "1c")))
+        .when(Boolean(l), el => el.border_l(1).border_color(withAlpha(t.foreground, UI.line)))
         .when(l === "└" || l === "├", el => el.border_b(1).rounded_bl(5))))
       .when(Boolean(pic), el => el.child(div().mr(7).child(pic)))
       .child(div().flex_1().truncate().text_color(on ? t.foreground : t.muted).child(k.name || k.template || k.program?.name || k.address))
@@ -273,12 +273,16 @@ export default class Agents extends View {
     const color = t[a.status] ?? t.dim;
     if (a.status === "working") return div().w(18).h_full().flex_none().flex().items_center().justify_center()
       .child(div().text_size(15).line_height("15px").text_color(t.working).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 80));
-    if (a.status === "blocked" && compact) return div().size(13).flex_none().rounded(4).bg(withAlpha(t.blocked, "1f")).text_size(10).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!");
-    if (a.status === "blocked") return div().flex_none().px(5).h(16).rounded(4).bg(withAlpha(t.blocked, "1f")).text_size(TYPE.label).font_semibold().text_color(t.blocked).flex().items_center().child("NEEDS YOU");
+    if (a.status === "blocked" && compact) return div().size(14).flex_none().rounded(4)
+      .bg(withAlpha(t.blocked, UI.badge)).border(1).border_color(withAlpha(t.blocked, UI.tintEdge))
+      .text_size(10).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!");
+    if (a.status === "blocked") return div().flex_none().px(4).h(16).rounded(4)
+      .bg(withAlpha(t.blocked, UI.badge)).border(1).border_color(withAlpha(t.blocked, UI.tintEdge))
+      .text_size(TYPE.label).font_semibold().text_color(t.blocked).flex().items_center().child("NEEDS YOU");
     // A quiet ring for idle: the row says where its agent stands without
     // turning every quiet agent into a badge.
-    if (a.status === "idle") return div().size(6).mx(3).flex_none().rounded_full().border(1).border_color(withAlpha(t.dim, "99"));
-    return div().size(6).mx(3).flex_none().rounded_full().bg(a.status === "done" ? color : withAlpha(t.dim, "00"));
+    if (a.status === "idle") return div().size(6).mx(3).flex_none().rounded_full().border(1).border_color(withAlpha(t.dim, UI.dotSoft));
+    return div().size(6).mx(3).flex_none().rounded_full().when(a.status === "done", el => el.bg(color));
   }
 
   render(cx) {
@@ -429,7 +433,7 @@ export default class Agents extends View {
         })
         .on_click(() => run("pane.focus", { pane: a.pane }))
         .when(Boolean(pic), el => el.child(div().id(`agent-fold-${a.address}`).size(SIZE.mark).flex_none().rounded(SIZE.radius).flex().items_center().justify_center()
-          .when(a.focused, el => el.bg(fill ? withAlpha(fill, "2e") : withAlpha(t.foreground, "08")))
+          .when(a.focused, el => el.bg(fill ? withAlpha(fill, UI.tile) : withAlpha(t.foreground, UI.subtle)))
           .when(subs.length > 0, el => el.on_click((_e, cx) => {
             cx.stop_propagation();
             this.folded.has(a.address) ? this.folded.delete(a.address) : this.folded.add(a.address);
@@ -451,7 +455,7 @@ export default class Agents extends View {
                 .text_size(TYPE.meta)
                 .line_height("14px")
                 .text_color(t.muted)
-                .when(Boolean(fill) && Boolean(under), el => el.child(div().size(4).rounded_full().flex_none().bg(withAlpha(fill, "cc"))))
+                .when(Boolean(fill) && Boolean(under), el => el.child(div().size(4).rounded_full().flex_none().bg(withAlpha(fill, UI.dot))))
                 .when(Boolean(under), el => el.child(div().min_w(0).truncate().tooltip(under).child(under)))
                 .when(Boolean(under) && Boolean(machine), el => el.child(div().flex_none().child("·")))
                 .when(Boolean(machine), el => el.child(div().flex_none().text_size(TYPE.meta).child(machine))),
@@ -493,12 +497,12 @@ export default class Agents extends View {
         .text_size(byPriority ? TYPE.label : TYPE.meta)
         .font_weight(600)
         .cursor_pointer()
-        .hover((s) => s.bg(withAlpha(t.foreground, "06")).text_color(t.foreground))
+        .hover((s) => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground))
         .on_click((_e, cx) => {
           open ? this.folded.add(g.id) : this.folded.delete(g.id);
           cx.notify();
         })
-        .child(div().size(5).rounded_full().flex_none().bg(withAlpha(dot, "cc")))
+        .child(div().size(5).rounded_full().flex_none().bg(withAlpha(dot, UI.dot)))
         .child(div().min_w(0).truncate().text_color(t.muted).child(byPriority ? g.label.toUpperCase() : g.label))
         .when(byPriority || !open, (el) => el.child(div().text_size(TYPE.label).font_weight(500).text_color(t.dim).child(String(g.members.length))))
         .child(div().flex_1())
@@ -524,7 +528,7 @@ export default class Agents extends View {
       .gap(6)
       .px(16)
       .py(28)
-      .child(h_flex().size(28).flex_none().items_center().justify_center().rounded_full().bg(withAlpha(t.foreground, "06"))
+      .child(h_flex().size(28).flex_none().items_center().justify_center().rounded_full().bg(withAlpha(t.foreground, UI.subtle))
         .child(svg("mods/workspace-chrome/layers.svg").size(14).text_color(t.dim)))
       .child(div().text_size(TYPE.body).text_color(t.muted).child("No agents yet"))
       .child(div().w_full().text_center().text_size(TYPE.meta).line_height("14px").text_color(t.dim).child("Agents appear here when they report their status."));

@@ -2,7 +2,7 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, h_resizable, resizable_panel, Editor, EditorState, Scrollbar, v_virtual_list } from "gpui-base";
 import { spaces, panes, focused, props, exec, readTextFile, writeTextFile, watchFolder, theme, settings, window, shared } from "herdr";
-import { markColor, withAlpha, UI, TYPE, SIZE } from "./colors.js";
+import { markColor, changeColor, withAlpha, UI, TYPE, SIZE } from "./colors.js";
 
 
 // 工作区固定视图跟随当前终端目录；旧版独立工具 Tab 保留自己的根目录和展开状态。
@@ -371,11 +371,11 @@ export default class Files extends View {
       .child(div().flex_1().min_w(0).truncate().child(row?.text ?? ""));
     return h_flex().w_full().h(SIZE.diffRow).flex_none()
       .child(pair.left?.kind === "-"
-        ? cell(pair.left, withAlpha(t.ansi1, "33"), pair.left.oldNumber)
+        ? cell(pair.left, withAlpha(t.ansi1, UI.diff), pair.left.oldNumber)
         : cell(pair.left, null, pair.left?.oldNumber))
-      .child(div().w(1).flex_none().bg(withAlpha(t.foreground, "0f")))
+      .child(div().w(1).flex_none().bg(withAlpha(t.foreground, UI.field)))
       .child(pair.right?.kind === "+"
-        ? cell(pair.right, withAlpha(t.ansi2, "33"), pair.right.newNumber)
+        ? cell(pair.right, withAlpha(t.ansi2, UI.diff), pair.right.newNumber)
         : cell(pair.right, null, pair.right?.newNumber));
   }
 
@@ -445,7 +445,7 @@ export default class Files extends View {
   // click), and it is rebuilt only while its row is on screen.
   fileRow(r, t, accent) {
     const selected = this.file === r.path && !r.dir;
-    const markTint = r.mark === "A" ? t.ansi2 : r.mark === "D" || r.mark === "U" ? t.ansi1 : t.ansi3;
+    const markTint = changeColor(r.mark, t);
     return h_flex().h(SIZE.listRow).flex_none().pl(6 + r.depth * 14).pr(8).gap(7).items_center().rounded(SIZE.radius).cursor_pointer()
       .when(selected, el => el.bg(withAlpha(t.foreground, UI.active)))
       .when(!selected, el => el.hover(s => s.bg(withAlpha(t.foreground, UI.hover))))
@@ -540,13 +540,13 @@ export default class Files extends View {
         .when(this.dirty, (e) => e.cursor_pointer().hover((s) => s.text_color(t.foreground)))
         .when(Boolean(this.saveError), (e) => e.tooltip(this.saveError))
         .on_click((_e, cx) => this.save(cx))
-        .child(div().size(4).flex_none().rounded_full().bg(this.saveError ? t.ansi1 : this.dirty || this.saving ? t.working : withAlpha(t.ansi2, "99")))
+        .child(div().size(4).flex_none().rounded_full().bg(this.saveError ? t.ansi1 : this.dirty || this.saving ? t.working : withAlpha(t.ansi2, UI.dotSoft)))
         .child(this.saveError ? "Save failed" : this.saving ? "Saving…" : this.dirty ? "Save" : "Saved")));
 
     const compareHeader = h_flex().h(28).flex_none().px(12).text_size(TYPE.label).font_weight(600).text_color(t.muted)
       .bg(withAlpha(t.foreground, UI.subtle)).border_b(1).border_color(withAlpha(t.foreground, UI.lineSoft))
       .child(div().flex_1().child("BEFORE"))
-      .child(div().w(1).flex_none().bg(withAlpha(t.foreground, "0f")))
+      .child(div().w(1).flex_none().bg(withAlpha(t.foreground, UI.field)))
       .child(div().flex_1().pl(8).child("AFTER"));
 
     const compareBody = div().relative().flex_1().min_h(0).font_family(settings().font_family ?? "JetBrains Mono").text_size(TYPE.small)

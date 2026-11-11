@@ -457,7 +457,7 @@ export default class Spaces extends View {
             .child(
               // A real tree: the vertical line runs under the checkout's
               // monogram, the last worktree turns into the row.
-              div().ml(2).w(8).flex_none().border_l(1).border_color(withAlpha(t.foreground, "1c"))
+              div().ml(2).w(8).flex_none().border_l(1).border_color(withAlpha(t.foreground, UI.line))
                 .when(tree === "└─", d => d.h(19).self_start().border_b(1).rounded_bl(5))
                 .when(tree !== "└─", d => d.self_stretch()),
             )

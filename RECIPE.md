@@ -21,9 +21,12 @@ and previews. Regions meet on faint 1 px hairlines. All colours follow the activ
 light or dark theme, including space marks from the theme's ANSI palette.
 
 The design system is `colors.js`, copied identically into all six mods. `UI` holds
-neutral alphas: subtle 2.4%, hover 4.3%, active 8.6%, line 7%, soft line 4.7%, plus
-space-mark tints. `TYPE` sets labels to 10 px, metadata to 11 px, small text to 12 px
-and row / pane titles to 13 px. `SIZE` sets the shared dimensions:
+the neutral ladder — subtle 3.1%, hover 5.1%, active 9%, line 7.8%, field 6.3%,
+soft line 4.7% — and the semantic washes: tint 11.8% with a 22% edge, badge 12.2%,
+diff 18%, focused tile 18%, dots at 80% / 60%, and a 70% focus ring. `changeColor()`
+gives A / D / U / M one hue in both Files and Changes. `TYPE` sets labels to 10 px,
+metadata to 11 px, small text to 12 px and row / pane titles to 13 px. `SIZE` sets
+the shared dimensions:
 
 | Element | Size |
 |---|---|
@@ -78,15 +81,15 @@ The close control uses red hover feedback. A soft hairline ends the header.
 **Files / Changes.** Both start with a 260 px list panel (minimum 200 px), a 36 px
 header and 28 px rows. Files keeps its tree indentation and colours the selected
 file's icon. Changes leads with filenames, followed by muted directory context,
-and uses 18 px tinted status tiles. Full paths are available in tooltips. The
-commit field and button are 32 px with a 7 px radius.
+and uses 18 px tinted status tiles edged in the same hue. Full paths are available
+in tooltips. The commit field and button are 32 px with a 7 px radius.
 
 Preview headers share a breadcrumb, a coloured icon and quiet controls. Edit / Diff
 uses 24 px segments in a 28 px track; save status keeps a 76 px slot with a small
 status dot. Changes groups its previous / next controls. Both diff views use 12 px
 monospace text and 22 px rows, with room for five-digit line numbers and coloured
-addition / deletion signs. Unified diffs use 15% tints; side-by-side comparisons
-use 20% on the changed half under 28 px BEFORE / AFTER captions.
+addition / deletion signs. Both diff views use the same 18% wash; the side-by-side
+comparison keeps it on the changed half under 28 px BEFORE / AFTER captions.
 
 Empty previews share a 40 px rounded icon tile, a 13 px title and 11 px guidance.
 Changes shows All caught up only after a successful refresh finds a clean tree.
@@ -96,11 +99,11 @@ closing the layout ends its timers and directory watches.
 ## How it behaves
 
 - **Agent status.** Working: a gold braille character cycling through
-  `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` every 80 ms. Blocked: a `NEEDS YOU` pill (a bare `!` inside a
-  group whose header already says it). Idle: a quiet 6 px ring. Done: a 5 px dot. A
-  space's and a tab's status is their most urgent agent's.
-- **Spaces.** Click selects: the active row takes an 8.6 % neutral fill and its monogram
-  fills solid, while a resting row lifts to 4.3 % under the pointer. Drag a row to
+  `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` every 80 ms. Blocked: a `NEEDS YOU` pill edged in its own
+  colour (a bare `!` inside a group whose header already says it). Idle: a quiet 6 px
+  ring. Done: a 5 px dot. A space's and a tab's status is their most urgent agent's.
+- **Spaces.** Click selects: the active row takes a 9 % neutral fill and its monogram
+  fills solid, while a resting row lifts to 5.1 % under the pointer. Drag a row to
   reorder inside its machine; the accent line shows where it lands. Right-click opens
   Herdr's `menu` with the `space` context. Worktrees sort under their checkout and hang
   from a 1 px tree line; the last child turns into its row instead of continuing. The +
@@ -111,7 +114,7 @@ closing the layout ends its timers and directory watches.
   the terminal label). The chevron folds sub-agents. The header icon opens the sort
   popup (Priority / Grouped by space). Group headers and machine headers fold; Priority's
   section headers stay visible even when only one section has agents.
-- **Tabs.** Click selects; the active tab is an 8.6 % neutral pill with a 600 name and its
+- **Tabs.** Click selects; the active tab is a 9 % neutral pill with a 600 name and its
   tinted program icon in the space's colour. Drag reorders (`tab.move`) with an accent line on the edge it
   will land on, double-click renames, right-click opens the tab menu, every close
   button closes its own tab. A tab still named by its number is shown by what it runs,
@@ -133,7 +136,7 @@ closing the layout ends its timers and directory watches.
   Diff 覆盖整个文件（`git diff -U1000000`，未改动的行也作为上下文，最多 20,000 行）；
   右侧标题行显示文件路径，`↑`／`↓` 在连续的新增/删除块之间跳转，`Files` 把同一个文件
   交给 Files 视图（`shared("files.open")` 传仓库根和相对路径；终端停在子目录时 Files
-  仍按仓库根预览，不改变自己的树根）。Diff 的新增/删除行用 15% 的 ansi 色铺底，
+  仍按仓库根预览，不改变自己的树根）。Diff 的新增/删除行用 18% 的 ansi 色铺底，
   行号右侧再放一个同色的 `+`／`−` 标记，不靠颜色也能分辨。
   快捷键、侧栏或新建 Tab 改变当前终端时，也会退出工具视图。
   旧版已存在的单独工具 Tab 从普通列表中隐藏，由固定入口复用，避免丢失编辑和分栏状态。
@@ -226,12 +229,14 @@ copies for Windows.
   `mods/pane/close.svg` in `my-tabs`). If Herdr renames them, update the paths.
   `my-pane` uses its own `mods/my-pane/*.svg` copies instead.
 - The focused header is `mix(t.surface, fill, 0.06)` with a brighter title and a
-  space-coloured icon, drawn by the mod on its own header surface. `colors.js` (the shared
-  `MARK`, `markColor`,
-  `markInk`, `withAlpha`, `UI`, `TYPE` and `SIZE`) is one file copied into all six
-  mods; `check.sh` fails when they drift. The colour
+  space-coloured icon, drawn by the mod on its own header surface. `colors.js` (the
+  shared `MARK`, `markColor`, `changeColor`, `markInk`, `mix`, `withAlpha`, `UI`,
+  `TYPE` and `SIZE`) is one file copied into all six mods; `check.sh` fails when
+  they drift. The colour
   comes from `shared("space.colors")[space.id]`; `markColor` prefers the theme's own
-  `ansiN` colour and falls back to `MARK`, so a light theme gets its own palette. A
+  `ansiN` colour and falls back to `MARK`, so a light theme gets its own palette.
+  `changeColor` does the same for the A / D / U / M change kinds, so the file tree and
+  the Changes list never disagree about a state's hue. A
   space with no colour falls back to the theme's `accent` for its icon and a 2.5% foreground tint for
   the header mix. It is a solid fill because Herdr's pane frame exposes only a solid
   `border`/`focus` colour and `pane.background` ignores `gradient` and `image`; a
@@ -276,12 +281,15 @@ copies for Windows.
 - Heights are fixed by `SIZE`: 44 px agent/space rows, 40 px worktree rows, 26 px
   sub-agent rows, 32 px tabs in a 44 px bar, 28 px file rows and 22 px diff rows.
   Update the virtual list row height along with its renderer when changing density.
-- The neutral steps are the foreground colour at low alpha (`UI.hover` 4.3 %, `active`
-  8.6 %, `line` 7 %), so they read identically on `chrome`, `surface` and `background` and
-  follow a light theme. A space colour only ever appears as a solid monogram, a tinted
-  icon tile, a coloured glyph, a resting tint or a dot — never as a full row fill and
-  never as a rail or underline. The tab status slot is always 16 px, so a state turn
-  never changes a tab's width.
+- The neutral steps are the foreground colour at low alpha (`UI.subtle` 3.1 %,
+  `hover` 5.1 %, `active` 9 %, `line` 7.8 %, `field` 6.3 %, `lineSoft` 4.7 %), so they read
+  identically on `chrome`, `surface` and `background` and follow a light theme. The
+  semantic washes — `tint` 11.8 % (with a 22 % `tintEdge`), `badge` 12.2 %, `diff` 18 %
+  and `tile` 18 % — are declared once as well, so a status tile, a `NEEDS YOU` pill and
+  an added or removed line all take their tint from the same table. A space colour only
+  ever appears as a solid monogram, a tinted icon tile, a coloured glyph, a resting tint
+  or a dot — never as a full row fill and never as a rail or underline. The tab status
+  slot is always 16 px, so a state turn never changes a tab's width.
 - The spinner is `frames([...], 80)`, not `spin()`: a native SVG rotation runs at
   about 30 fps and reads as steppy at 12–16 px. `frames` swaps text natively on one
   shared clock.
