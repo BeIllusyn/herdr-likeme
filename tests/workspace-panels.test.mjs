@@ -39,7 +39,7 @@ function find(root, id) {
   }
 }
 
-function fixture({ legacy = false } = {}) {
+function fixture({ legacy = false, available = ["claude", "pi", "lazygit", "nvim"], fail = false, platform = "macos" } = {}) {
   const layout = JSON.parse(read("layouts/likeme.json"));
   const body = layout.children.find(n => n.id === "work").children.find(n => n.id === "work-body");
   const tabs = [{ id: "one", name: "1", active: true }, { id: "two", name: "2", active: false }];
@@ -50,7 +50,7 @@ function fixture({ legacy = false } = {}) {
   }
   const space = { id: "space", active: true, folder: "/project", machine: null, tabs };
   const commands = [], timers = [];
-  const cx = { stop_propagation() {}, notify() {}, timer: { after: (_ms, fn) => timers.push(fn) } };
+  const cx = { stop_propagation() {}, notify() {}, timer: { after: (_ms, fn) => timers.push(fn), every: (_ms, fn) => timers.push(fn) } };
   const host = {
     div: element, svg: element, image: element, h_flex: element,
     spaces: () => [space], panes: () => panes, layout: () => layout,
@@ -60,8 +60,15 @@ function fixture({ legacy = false } = {}) {
       return { space: space.id, tab: tab?.id, pane: pane?.pane, cwd: pane?.cwd };
     },
     theme: () => ({ raised: "#222222", muted: "#999999", foreground: "#ffffff", chrome: "#111111" }),
-    window: () => ({ platform: "macos", titlebar: "none" }),
+    window: () => ({ platform, titlebar: "none" }),
     settings: () => ({ zoom: 1 }), shared: () => undefined,
+    // The quick-start check: a failed look at the shell, or the commands the
+    // fixture says this machine has.
+    exec: async (command, args) => {
+      if (fail) throw new Error("no shell");
+      if (command === "where") return { code: available.includes(args[0]) ? 0 : 1, stdout: "", stderr: "" };
+      return { code: 0, stdout: available.map(c => `${c}\n`).join(""), stderr: "" };
+    },
     // The tab bar imports these from colors.js; the loader strips imports, so
     // the fixture hands the mod the real tokens.
     markColor, withAlpha, UI, TYPE, SIZE,
@@ -74,7 +81,7 @@ function fixture({ legacy = false } = {}) {
   };
   const { Tabs } = load("mods/my-tabs/main.js", "Tabs", host);
   const view = new Tabs();
-  view.init();
+  view.init({}, cx);
   const render = () => view.render(cx);
   const click = (id, root = render()) => find(root, id).handlers.on_click({}, cx);
   return { body, tabs, panes, space, host, commands, timers, cx, view, render, click };
@@ -227,6 +234,26 @@ test("加号保留菜单行为，快捷启动先返回终端再创建普通 Tab"
   f.click("start-nvim");
   assert.equal(f.body.active, "main");
   assert.deepEqual(f.commands.at(-1), { name: "tab.new", args: { space: "space", argv: ["nvim"] } });
+});
+
+test("快捷启动只显示这台机器装了的命令", async () => {
+  const f = fixture({ available: ["claude", "nvim"] });
+  await f.view.ready;
+  assert.deepEqual(find(f.render(), "tab-launches").nodes.map(n => n.key), ["start-claude", "start-nvim"]);
+});
+
+test("安装检测失败时保留全部快捷启动，不误藏入口", async () => {
+  const f = fixture({ fail: true });
+  await f.view.ready;
+  assert.deepEqual(find(f.render(), "tab-launches").nodes.map(n => n.key), [
+    "start-claude", "start-pi", "start-lazygit", "start-nvim",
+  ]);
+});
+
+test("Windows 用 where 判断安装", async () => {
+  const f = fixture({ platform: "windows", available: ["pi"] });
+  await f.view.ready;
+  assert.deepEqual(find(f.render(), "tab-launches").nodes.map(n => n.key), ["start-pi"]);
 });
 
 for (const [mod, name] of [["my-files", "Files"], ["my-changes", "Changes"]]) {

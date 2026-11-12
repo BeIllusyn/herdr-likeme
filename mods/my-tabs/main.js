@@ -1,7 +1,37 @@
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, panes, focused, run, openOverlay, theme, window, shared, layout, settings } from "herdr";
+import { spaces, panes, focused, run, openOverlay, theme, window, shared, layout, settings, exec } from "herdr";
 import { markColor, withAlpha, UI, TYPE, SIZE } from "./colors.js";
+
+// The quick starts, in a fixed order. Each one runs the command it is checked
+// against, so the bar only offers programs this machine actually has.
+const STARTS = [
+  { id: "start-claude", label: "Claude Code", icon: "icons/claude.svg", tint: false, command: "claude", argv: ["claude", "--dangerously-skip-permissions"] },
+  { id: "start-pi", label: "Pi", icon: "icons/pi.svg", tint: true, command: "pi", argv: ["pi"] },
+  { id: "start-lazygit", label: "Lazygit", icon: "icons/lazygit.svg", tint: true, command: "lazygit", argv: ["lazygit"] },
+  { id: "start-nvim", label: "Neovim", icon: "icons/nvim.svg", tint: true, command: "nvim", argv: ["nvim"] },
+];
+
+// Which of `commands` this machine can start. `command -v` also sees shell
+// functions, and Herdr's `exec` carries the user's login PATH, so a Homebrew or
+// npm install is found. Windows has no `sh`: ask `where`, one command at a time.
+// Throws when the check itself cannot run; the caller keeps its last answer.
+async function installed(commands) {
+  const found = new Set();
+  if (window()?.platform === "windows") {
+    for (const command of commands) {
+      if ((await exec("where", [command])).code === 0) found.add(command);
+    }
+    return found;
+  }
+  const script = `for c in ${commands.join(" ")}; do command -v "$c" >/dev/null 2>&1 && echo "$c"; done`;
+  const r = await exec("sh", ["-c", script]);
+  for (const line of r.stdout.split("\n")) {
+    const name = line.trim();
+    if (commands.includes(name)) found.add(name);
+  }
+  return found;
+}
 
 // The bar reads the sidebar node out of `layout()` (the whole layout document);
 // the traffic lights and window facts come from the root and `window()`.
@@ -18,10 +48,36 @@ function findMany(root, ids) {
 }
 
 export default class Tabs extends View {
-  init() {
+  init(_props, cx) {
     this.pressed = null;
     this.over = null;
     this.compact = false;
+    // Commands this machine does not have: their quick starts are hidden.
+    // Empty until the first answer, so the bar never drops a button it has.
+    this.hidden = new Set();
+    this.checking = false;
+    this.ready = this.check(cx);
+    // Installing one while Herdr runs brings it in without a restart.
+    cx.timer.every(60000, cx => this.check(cx));
+  }
+
+  async check(cx) {
+    if (this.checking) return;
+    this.checking = true;
+    try {
+      const found = await installed(STARTS.map(s => s.command));
+      const hidden = STARTS.filter(s => !found.has(s.command)).map(s => s.command);
+      // Only redraw when a button actually appears or goes away.
+      if (hidden.length !== this.hidden.size || hidden.some(c => !this.hidden.has(c))) {
+        this.hidden = new Set(hidden);
+        cx.notify();
+      }
+    } catch {
+      // Herdr does not cache a failed check, so the next one asks again. Until
+      // it answers, keep showing what the last one (or the bar) offered.
+    } finally {
+      this.checking = false;
+    }
   }
 
   render(cx) {
@@ -202,12 +258,9 @@ export default class Tabs extends View {
     // One-click starts beside the +, using the program table's own icons: the
     // shipped tinted glyphs inherit the button's colour, Claude's stays orange.
     const launch = (id, label, icon, tint, argv) => ghostAction(id, label, tint ? svg(icon).size(14).flex_none() : image(icon).size(14), () => { showMain(); run("tab.new", { space: space?.id, argv }); });
-    const launches = [
-      launch("start-claude", "Claude Code", "icons/claude.svg", false, ["claude", "--dangerously-skip-permissions"]),
-      launch("start-pi", "Pi", "icons/pi.svg", true, ["pi"]),
-      launch("start-lazygit", "Lazygit", "icons/lazygit.svg", true, ["lazygit"]),
-      launch("start-nvim", "Neovim", "icons/nvim.svg", true, ["nvim"]),
-    ];
+    const launches = STARTS
+      .filter(s => !this.hidden.has(s.command))
+      .map(s => launch(s.id, s.label, s.icon, s.tint, s.argv));
     return h_flex().id("tabs-bar").size_full().min_w(0).gap(8).pl(left).pr(8).items_center()
       .on_size_change((size, cx) => {
         const compact = size.width < 680;
