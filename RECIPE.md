@@ -53,7 +53,10 @@ The right divider continues through the brand, list and footer.
 **Spaces.** A 26 px rounded monogram sits before a 13 px project name and an 11 px
 branch line. The branch icon, ahead and behind counts stay quiet. A selected row
 uses the neutral active fill and a solid monogram; `markInk()` chooses dark or
-white lettering from the fill's luminance. Worktrees retain their tree lines.
+white lettering from the fill's luminance. Worktrees carry no tree line: a
+14 px branch glyph takes the column where a space's name starts, so the glyph
+and the checkout's title share a vertical line, and the worktree's own name and
+branch line indent one glyph (8 px) further. A worktree row is 40 px.
 The New space action is a 32 px ghost row.
 
 **Agents.** The same 44 px row and 26 px mark column. The generated title leads

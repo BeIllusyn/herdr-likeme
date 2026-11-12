@@ -341,7 +341,7 @@ export default class Spaces extends View {
       if (!r.g || r.g.linked || placed.has(r.g.repo)) continue;
       placed.add(r.g.repo);
       const kids = list.filter((k) => nested(k) && k.g.repo === r.g.repo);
-      kids.forEach((k, n) => out.push({ ...k, tree: n === kids.length - 1 ? "└─" : "├─" }));
+      for (const k of kids) out.push({ ...k, tree: true });
     }
     return out;
   }
@@ -454,14 +454,11 @@ export default class Spaces extends View {
           .items_center()
           .size_full()
           .when(Boolean(tree), el => el
-            .child(
-              // A real tree: the vertical line runs under the checkout's
-              // monogram, the last worktree turns into the row.
-              div().ml(2).w(8).flex_none().border_l(1).border_color(withAlpha(t.foreground, UI.line))
-                .when(tree === "└─", d => d.h(19).self_start().border_b(1).rounded_bl(5))
-                .when(tree !== "└─", d => d.self_stretch()),
-            )
-            .child(svg("mods/workspace-chrome/branch.svg").size(14).text_color(on ? fill : t.muted)))
+            // A worktree has no monogram: its branch glyph takes the column
+            // where a space's name starts, so the glyph and the checkout's
+            // title share a vertical line; the name then indents one glyph.
+            .child(svg("mods/workspace-chrome/branch.svg").size(14).flex_none()
+              .ml(SIZE.mark + 8).text_color(on ? fill : t.muted)))
           .when(!tree, el => el.child(h_flex().size(SIZE.mark).flex_none().rounded(SIZE.radius).border(1)
             .bg(on ? fill : withAlpha(fill, UI.tint))
             .border_color(on ? fill : withAlpha(fill, UI.tintEdge))
