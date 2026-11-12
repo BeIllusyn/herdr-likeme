@@ -273,6 +273,93 @@ test("Changes 用整个文件作为 diff 上下文", async () => {
   assert.deepEqual(Array.from(changes.changes), [1]);
 });
 
+test("Changes 列出本地与远端分支，跳过符号引用并标出当前分支", () => {
+  const { branchEntries } = load("mods/my-changes/main.js", "branchEntries", {});
+  const branches = branchEntries([
+    "refs/heads/feature\t\t*",
+    "refs/heads/main\t\t ",
+    "refs/heads/topic/z\t\t ",
+    "refs/remotes/origin/HEAD\trefs/remotes/origin/main\t ",
+    "refs/remotes/origin/main\t\t ",
+  ].join("\n"));
+  assert.deepEqual(Array.from(branches, b => [b.name, b.ref, b.local, b.current]), [
+    ["feature", "refs/heads/feature", true, true],
+    ["main", "refs/heads/main", true, false],
+    ["topic/z", "refs/heads/topic/z", true, false],
+    ["origin/main", "refs/remotes/origin/main", false, false],
+  ]);
+});
+
+test("Changes 把分支 diff 的 name-status 与 numstat 配成文件列表", () => {
+  const { branchChanges, numstats } = load("mods/my-changes/main.js", "branchChanges, numstats", {});
+  const changes = branchChanges("M\0a.js\0A\0b.js\0D\0c.js\0T\0d.js\0");
+  const stats = numstats("3\t1\ta.js\0-\t-\tb.js\0");
+  const files = Array.from(changes, c => ({ ...c, ...(stats[c.path] ?? { add: 0, del: 0 }) }));
+  assert.deepEqual(files, [
+    { path: "a.js", status: "M", add: 3, del: 1, binary: false },
+    { path: "b.js", status: "A", add: 0, del: 0, binary: true },
+    { path: "c.js", status: "D", add: 0, del: 0 },
+    { path: "d.js", status: "M", add: 0, del: 0 },
+  ]);
+});
+
+test("Changes 选择对比分支时清空旧列表并重新扫描", () => {
+  const { Changes } = load("mods/my-changes/main.js", "Changes", {});
+  const changes = new Changes();
+  let refreshed = 0, lines = null;
+  Object.assign(changes, {
+    compare: null, compareRef: null, files: [{ path: "a" }], open: "a", changeAt: 2,
+    closed: true, error: "old error", note: "old note", loading: false, busy: false,
+    refresh() { refreshed++; }, setLines(next) { lines = next; },
+  });
+  let notified = 0;
+  const cx = { notify: () => notified++ };
+  changes.setBase({ name: "main", ref: "refs/heads/main" }, cx);
+  assert.equal(changes.compare, "main");
+  assert.equal(changes.compareRef, "refs/heads/main");
+  assert.equal(changes.files.length, 0);
+  assert.equal(changes.open, null);
+  assert.equal(lines.length, 0);
+  assert.equal(changes.changeAt, -1);
+  assert.equal(changes.error, null);
+  assert.equal(changes.note, null);
+  assert.equal(refreshed, 1);
+  assert.equal(notified, 1);
+  // 同一个分支再点一次不重置正在看的 diff。
+  changes.files = [{ path: "b" }];
+  changes.setBase({ name: "main", ref: "refs/heads/main" }, cx);
+  assert.equal(changes.files[0].path, "b");
+  assert.equal(refreshed, 1);
+  changes.setBase(null, cx);
+  assert.equal(changes.compare, null);
+  assert.equal(changes.compareRef, null);
+  assert.equal(refreshed, 2);
+});
+
+test("Changes 的分支对比读取 merge base → HEAD 的整份 diff", async () => {
+  const calls = [];
+  const { Changes } = load("mods/my-changes/main.js", "Changes", {
+    TYPE,
+    exec: async (_cmd, args) => {
+      calls.push(args);
+      return { code: 0, stderr: "", stdout: "@@ -1,1 +1,1 @@\n-old\n+new\n" };
+    },
+  });
+  const changes = new Changes();
+  Object.assign(changes, {
+    files: [{ path: "a", status: "M", fresh: false, add: 1, del: 1 }],
+    root: "/repo", on: null, hasHead: true, context: "ctx", open: "a", diffWidth: 0,
+    compare: "main", baseSha: "abc123", headSha: "def456",
+  });
+  await changes.load("a", "ctx");
+  assert.ok(calls[0].includes("abc123"));
+  assert.ok(calls[0].includes("def456"));
+  assert.ok(calls[0].includes("-U1000000"));
+  // 两个显式提交，工作区里的未提交修改不会混进来。
+  assert.equal(calls[0].includes("HEAD"), false);
+  assert.deepEqual(Array.from(changes.rows, row => row.kind), ["@", "-", "+"]);
+});
+
 test("Files 把仓库里的绝对路径换算成自己树根下的相对路径", () => {
   const { relativePath } = load("mods/my-files/main.js", "relativePath", {});
   assert.equal(relativePath("/repo", "/repo/mods/a.js"), "mods/a.js");

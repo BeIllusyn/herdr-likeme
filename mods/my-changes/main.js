@@ -57,6 +57,52 @@ function changeStarts(rows) {
   return starts;
 }
 
+// `for-each-ref --format=%(refname)%09%(symref)%09%(HEAD)` lines. A symbolic
+// ref (origin/HEAD) is an alias, not a branch, so it is left out; `%(HEAD)`
+// marks the local branch the checkout is on, which the picker hides because a
+// branch cannot be compared with itself. Locals lead, then remotes, each
+// alphabetically.
+function branchEntries(text) {
+  const branches = [];
+  for (const line of text.split("\n")) {
+    if (!line) continue;
+    const [ref, symref, head] = line.split("\t");
+    if (!ref || symref) continue;
+    const local = ref.startsWith("refs/heads/");
+    if (!local && !ref.startsWith("refs/remotes/")) continue;
+    // The full ref travels with the label: `main` can also name a tag, and a
+    // local `origin/main` can shadow the remote-tracking one.
+    branches.push({ name: ref.slice(local ? 11 : 13), ref, local, current: local && head === "*" });
+  }
+  return branches.sort((a, b) => a.local !== b.local ? (a.local ? -1 : 1) : a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+}
+
+// `git diff --name-status -z` writes `<status>\0<path>\0` (two fields, because
+// --no-renames is always on). Only A and D keep a letter of their own.
+function branchChanges(text) {
+  const entries = text.split("\0"), changes = [];
+  for (let i = 0; i + 1 < entries.length; i += 2) {
+    const code = entries[i], path = entries[i + 1];
+    if (!code || !path) continue;
+    const conflict = code === "U" || code === "AA" || code === "DD";
+    changes.push({ path, status: conflict ? "U" : code === "A" ? "A" : code === "D" ? "D" : "M" });
+  }
+  return changes;
+}
+
+// `git diff --numstat -z` entries: `<add>\t<del>\t<path>\0`. A binary file
+// writes `-` for both counts.
+function numstats(text) {
+  const stats = {};
+  for (const entry of text.split("\0")) {
+    const [a, d, ...parts] = entry.split("\t");
+    if (!parts.length) continue;
+    const path = parts.join("\t");
+    stats[path] = { add: Number(a) || 0, del: Number(d) || 0, binary: a === "-" };
+  }
+  return stats;
+}
+
 // A whole-file diff is the whole file as context; the list is virtualized, but
 // a pathological file should not become an unbounded frame.
 const MAX_ROWS = 20000;
@@ -79,6 +125,11 @@ export default class Changes extends View {
     this.openedAt = props()?.cwd ?? null;
     this.workspace = Boolean(props()?.workspace);
     this.tab = null; this.lastLoc = null;
+    // What the panel diffs: the working tree (null) or one branch's merge base
+    // against HEAD. `branches` feeds the picker; `folder` is the repo identity
+    // the comparison belongs to.
+    this.folder = null; this.compare = null; this.compareRef = null; this.baseSha = null; this.baseFallback = false;
+    this.branches = []; this.current = null; this.pickerOpen = false; this.headSha = null;
     const f = focused(), at = f?.pane ? panes().find(p => p.pane === f.pane) : null;
     if (!this.workspace && at && !at.terminal && at.mod === "my-changes") this.tab = f.tab;
     // Several copies can be open, one per tab: keep their element ids apart so a
@@ -101,17 +152,35 @@ export default class Changes extends View {
     });
   }
 
+  // A folder owns its branch list and its comparison: moving to another space
+  // returns to the working tree rather than naming a branch that repo may not
+  // have. A typed commit message belongs to the folder, not to the mode, so a
+  // Working tree / branch switch keeps it.
+  place(loc) {
+    const folder = keyOf(loc);
+    if (folder === this.folder) return folder;
+    this.folder = folder;
+    this.compare = null; this.compareRef = null; this.pickerOpen = false;
+    this.branches = []; this.current = null;
+    this.message = ""; this.input.set_value(""); this.watched = null;
+    return folder;
+  }
+
   refresh(cx, loc, context) {
     // While another tab is in front, keep the folder this copy already shows.
     loc ??= location(this.tab, this.openedAt, this.workspace) ?? this.lastLoc;
     if (!loc) return;
     this.lastLoc = loc;
-    context ??= keyOf(loc);
+    const folder = this.place(loc);
+    // The mode is part of the identity: switching to a branch (or back to the
+    // working tree) empties the list and scans again.
+    context ??= `${folder}|${this.compareRef ?? this.compare ?? ""}`;
     if (this.loading || this.busy) return;
     const { cwd, on } = loc;
     if (context !== this.context) {
       this.context = context; this.root = null; this.files = []; this.open = null;
-      this.setLines([]); this.message = ""; this.input.set_value(""); this.error = null; this.note = null; this.watched = null; this.closed = false; this.limited = false;
+      this.setLines([]); this.error = null; this.note = null; this.closed = false; this.limited = false;
+      this.baseSha = null; this.baseFallback = false; this.headSha = null;
     }
     if (!cwd) return;
     this.loading = true;
@@ -121,39 +190,80 @@ export default class Changes extends View {
         if (this.context !== context) return;
         if (top.code !== 0) { this.root = null; this.files = []; this.setLines([]); this.open = null; this.error = "Not a git repository"; return; }
         const root = top.stdout.trim(), git = (args) => exec("git", [...READ, ...args], { cwd: root, on });
-        // The two reads are independent: one status scan and one rev read run
-        // together rather than one after the other.
-        const [status, head] = await Promise.all([
-          git(["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"]),
+        const compare = this.compare, target = this.compareRef ?? compare;
+        // The HEAD read and the branch list are independent reads; the worktree
+        // scan joins them only when the worktree is what is shown.
+        const [head, refs, status] = await Promise.all([
           git(["rev-parse", "--verify", "HEAD"]),
+          git(["for-each-ref", "--format=%(refname)%09%(symref)%09%(HEAD)", "refs/heads", "refs/remotes"]),
+          compare ? null : git(["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"]),
         ]);
         if (this.context !== context) return;
-        if (status.code !== 0) throw new Error(status.stderr);
-        const stats = {};
-        const results = head.code === 0
-          ? [await git(["diff", "HEAD", "--numstat", "-z", "--no-renames"])]
-          : await Promise.all([git(["diff", "--cached", "--numstat", "-z", "--no-renames"]), git(["diff", "--numstat", "-z", "--no-renames"])]);
-        for (const result of results) {
-          if (result.code !== 0) throw new Error(result.stderr);
-          for (const entry of result.stdout.split("\0")) {
-            const [a, d, ...parts] = entry.split("\t");
-            if (!parts.length) continue;
-            const path = parts.join("\t"), old = stats[path] ?? { add: 0, del: 0 };
-            stats[path] = { add: old.add + (Number(a) || 0), del: old.del + (Number(d) || 0), binary: a === "-" };
+        if (status && status.code !== 0) throw new Error(status.stderr);
+        this.branches = refs.code === 0 ? branchEntries(refs.stdout) : [];
+        this.current = this.branches.find((b) => b.current)?.name ?? (head.code === 0 ? head.stdout.trim().slice(0, 7) : null);
+        const headSha = head.code === 0 ? head.stdout.trim() : null;
+        this.root = root; this.on = on; this.hasHead = head.code === 0; this.headSha = headSha; this.error = null;
+        this.watch(root, cx);
+        let files;
+        if (compare) {
+          // A branch comparison is committed history only: merge base → HEAD,
+          // not the working tree, which the Working tree mode already shows.
+          if (!headSha) {
+            this.files = []; this.open = null; this.setLines([]); this.limited = false;
+            this.error = "No commits to compare yet";
+            return;
           }
-        }
-        const files = [];
-        const entries = status.stdout.split("\0").filter(Boolean);
-        for (const entry of entries.slice(0, 1000)) {
-          const xy = entry.slice(0, 2), path = entry.slice(3), fresh = xy === "??";
-          const conflict = xy.includes("U") || xy === "AA" || xy === "DD";
-          const s = conflict ? "U" : xy.includes("D") ? "D" : fresh || xy.includes("A") ? "A" : "M";
-          const stat = stats[path] ?? { add: 0, del: 0 };
-          files.push({ path, status: s, fresh, ...stat });
+          let base = null, fallback = false;
+          const merge = await git(["merge-base", target, "HEAD"]);
+          if (this.context !== context) return;
+          if (merge.code === 0) base = merge.stdout.trim();
+          else {
+            // Unrelated histories have no merge base; compare the two tips so
+            // the view still says something useful.
+            const tip = await git(["rev-parse", "--verify", `${target}^{commit}`]);
+            if (this.context !== context) return;
+            if (tip.code !== 0) throw new Error(`Cannot compare with ${compare}`);
+            base = tip.stdout.trim(); fallback = true;
+          }
+          const [names, nums] = await Promise.all([
+            git(["diff", "--name-status", "-z", "--no-renames", base, headSha]),
+            git(["diff", "--numstat", "-z", "--no-renames", base, headSha]),
+          ]);
+          if (this.context !== context) return;
+          if (names.code !== 0) throw new Error(names.stderr);
+          if (nums.code !== 0) throw new Error(nums.stderr);
+          const stats = numstats(nums.stdout), entries = branchChanges(names.stdout);
+          files = entries.slice(0, 1000).map(({ path, status }) => ({ path, status, fresh: false, ...(stats[path] ?? { add: 0, del: 0 }) }));
+          this.limited = entries.length > 1000;
+          this.baseSha = base; this.baseFallback = fallback;
+        } else {
+          const stats = {};
+          const results = head.code === 0
+            ? [await git(["diff", "HEAD", "--numstat", "-z", "--no-renames"])]
+            : await Promise.all([git(["diff", "--cached", "--numstat", "-z", "--no-renames"]), git(["diff", "--numstat", "-z", "--no-renames"])]);
+          for (const result of results) {
+            if (result.code !== 0) throw new Error(result.stderr);
+            const found = numstats(result.stdout);
+            for (const path in found) {
+              const old = stats[path] ?? { add: 0, del: 0, binary: false };
+              stats[path] = { add: old.add + found[path].add, del: old.del + found[path].del, binary: old.binary || found[path].binary };
+            }
+          }
+          const entries = status.stdout.split("\0").filter(Boolean);
+          files = [];
+          for (const entry of entries.slice(0, 1000)) {
+            const xy = entry.slice(0, 2), path = entry.slice(3), fresh = xy === "??";
+            const conflict = xy.includes("U") || xy === "AA" || xy === "DD";
+            const s = conflict ? "U" : xy.includes("D") ? "D" : fresh || xy.includes("A") ? "A" : "M";
+            const stat = stats[path] ?? { add: 0, del: 0 };
+            files.push({ path, status: s, fresh, ...stat });
+          }
+          this.limited = entries.length > 1000;
+          this.baseSha = null; this.baseFallback = false;
         }
         if (this.context !== context) return;
-        this.root = root; this.on = on; this.hasHead = head.code === 0; this.files = files; this.limited = entries.length > 1000; this.error = null;
-        this.watch(root, cx);
+        this.files = files;
         let picked = false;
         if (this.open && !files.some((f) => f.path === this.open)) { this.open = null; this.setLines([]); picked = true; }
         // The first file's diff shows until you pick another.
@@ -175,7 +285,14 @@ export default class Changes extends View {
     const file = this.files.find((f) => f.path === path), root = this.root, on = this.on;
     if (!file) return;
     let lines;
-    if (file.fresh || (!this.hasHead && file.status === "A")) {
+    if (this.baseSha) {
+      // merge base → HEAD, the whole file as context. Two explicit commits keep
+      // uncommitted edits out of a branch comparison.
+      const r = await exec("git", [...READ, "diff", this.baseSha, this.headSha ?? "HEAD", "-U1000000", "--no-ext-diff", "--no-textconv", "--no-color", "--", path], { cwd: root, on });
+      if (r.code !== 0) throw new Error(r.stderr);
+      const all = r.stdout.replace(/\n$/, "").split("\n"), first = all.findIndex((l) => l.startsWith("@@"));
+      lines = first < 0 ? [file.binary ? "Binary file changed" : "No text diff available"] : all.slice(first);
+    } else if (file.fresh || (!this.hasHead && file.status === "A")) {
       const text = await readTextFile(`${root}/${path}`, { on }).catch(() => null);
       if (text === null) lines = ["Cannot preview this file (binary, too large, or unreadable)"];
       else if (text.includes("\0")) lines = ["Binary file · no text diff"];
@@ -218,6 +335,22 @@ export default class Changes extends View {
     cx.notify();
   }
 
+  // 切换比较的对象：null 是工作区，否则是一个分支（短名用于显示，完整 ref
+  // 用于 git）。先清空列表，免得旧模式的文件在新标题下停留到扫描结束。
+  setBase(branch, cx) {
+    const next = branch?.name ?? null, ref = branch?.ref ?? null;
+    if (next === this.compare && ref === this.compareRef) return;
+    this.pickerOpen = false;
+    this.compare = next; this.compareRef = ref; this.baseSha = null; this.baseFallback = false;
+    this.files = []; this.open = null; this.setLines([]); this.changeAt = -1; this.closed = false;
+    this.error = null; this.note = null;
+    // A scan in flight would otherwise finish and write the old mode's files:
+    // clearing the context makes it discard its answer.
+    if (this.loading || this.busy) this.context = null;
+    this.refresh(cx);
+    cx.notify();
+  }
+
   // 在变动块之间移动：首尾相接，指针从文件顶部开始时下一步落在第一块。
   step(delta, cx) {
     const count = this.changes.length;
@@ -232,14 +365,16 @@ export default class Changes extends View {
   // 在 Files 中打开当前文件。shared 里放仓库根和文件相对路径，Files 自己
   // 换算到它的树根；终端停在仓库子目录时也能预览。
   openInFiles(_cx) {
-    if (!this.open || !this.root) return;
+    // A branch comparison may name a file the working tree no longer has.
+    if (!this.open || !this.root || this.compare) return;
     setShared("files.open", { root: this.root, path: this.open, at: Date.now() });
     run("layout.select", { stack: "work-body", child: "files" });
   }
 
   commit(cx) {
     const loc = location(this.tab, this.openedAt, this.workspace) ?? this.lastLoc;
-    if (!this.message.trim() || !this.root || this.busy || this.loading || !loc || this.context !== keyOf(loc)) return;
+    if (!this.message.trim() || !this.root || this.compare || this.busy || this.loading || !loc) return;
+    if (this.context !== `${keyOf(loc)}|`) return;
     const root = this.root, on = this.on, context = this.context, message = this.message.trim();
     this.busy = true; this.note = null;
     cx.spawn(async (cx) => {
@@ -253,6 +388,57 @@ export default class Changes extends View {
       finally { this.busy = false; this.refresh(cx); cx.notify(); }
     });
     cx.notify();
+  }
+
+  // 比较对象的入口：工作区，或一个分支。它是一行安静的选择器，右侧顺手显示
+  // 当前分支；点一下把下面的文件列表换成分支列表。
+  sourceRow(t, accent) {
+    const comparing = Boolean(this.compare);
+    return h_flex().id(`changes-source-${this.uid}`).w_full().h(SIZE.listRow).px(7).gap(6).items_center().rounded(SIZE.radius)
+      .cursor_pointer()
+      .when(this.pickerOpen, (el) => el.bg(withAlpha(t.foreground, UI.active)))
+      .when(!this.pickerOpen, (el) => el.hover((s) => s.bg(withAlpha(t.foreground, UI.hover))))
+      .tooltip(this.pickerOpen ? "Choose the branch to compare with" : comparing ? `Comparing with ${this.compare}` : "Compare the current branch with another branch")
+      .on_click((_e, cx) => { this.pickerOpen = !this.pickerOpen; cx.notify(); })
+      .child(svg(comparing ? "mods/workspace-chrome/branch.svg" : "mods/workspace-chrome/git-compare.svg").size(12).flex_none().text_color(comparing ? accent : t.muted))
+      .child(div().flex_1().min_w(0).truncate().text_size(TYPE.small).font_weight(comparing ? 600 : 400).text_color(comparing ? t.foreground : t.muted).child(comparing ? this.compare : "Working tree"))
+      .when(Boolean(this.current), (el) => el.child(div().flex_none().min_w(0).max_w(104).truncate().text_size(TYPE.label).text_color(t.dim).child(comparing ? `vs ${this.current}` : this.current)))
+      .child(svg("mods/workspace-chrome/chevron-down.svg").size(10).flex_none().text_color(t.dim));
+  }
+
+  // 分支列表占据文件列表的位置，而不是浮层：点击就是普通行的点击，选择分支
+  // 不需要在按下时拆掉一个原生弹层。
+  branchList(t, accent) {
+    const others = this.branches.filter((b) => !b.current);
+    const local = others.filter((b) => b.local), remote = others.filter((b) => !b.local);
+    const row = (key, label, selected, icon, action) => h_flex().id(`changes-branch-${this.uid}-${key}`)
+      .h(SIZE.listRow).flex_none().px(7).gap(7).items_center().rounded(5).cursor_pointer()
+      .when(selected, (el) => el.bg(withAlpha(t.foreground, UI.active)))
+      .when(!selected, (el) => el.hover((s) => s.bg(withAlpha(t.foreground, UI.hover))))
+      // 用点击事件自带的 cx：refresh 要用它启动异步任务，旧的 render cx 不算数。
+      .on_click((_e, cx) => { action(cx); this.pickerOpen = false; cx.notify(); })
+      .child(svg(icon).size(12).flex_none().text_color(selected ? accent : t.muted))
+      .child(div().flex_1().min_w(0).truncate().text_size(TYPE.small).text_color(selected ? t.foreground : t.muted).child(label))
+      .when(selected, (el) => el.child(svg("mods/workspace-chrome/check.svg").size(12).flex_none().text_color(accent)));
+    const caption = (label, right) => h_flex().h(26).flex_none().px(7).gap(6).items_center()
+      .child(div().text_size(TYPE.label).font_weight(600).text_color(t.muted).child(label))
+      .child(div().flex_1())
+      .when(Boolean(right), (el) => el.child(div().max_w(132).min_w(0).truncate().text_size(TYPE.label).text_color(t.dim).child(right)));
+    return v_flex().flex_1().min_h(0).overflow_y_scrollbar().gap(1)
+      .child(caption("COMPARE WITH", this.current))
+      .child(row("worktree", "Working tree", !this.compare, "mods/changes/changes.svg", (cx) => this.setBase(null, cx)))
+      .when(local.length > 0, (el) => el
+        .child(div().mx(5).my(4).h(1).flex_none().bg(withAlpha(t.foreground, UI.lineSoft)))
+        .child(caption("LOCAL"))
+        .children(local.map((b, i) => row(`local-${i}`, b.name, this.compareRef === b.ref, "mods/workspace-chrome/branch.svg", (cx) => this.setBase(b, cx)))))
+      .when(remote.length > 0, (el) => el
+        .child(div().mx(5).my(4).h(1).flex_none().bg(withAlpha(t.foreground, UI.lineSoft)))
+        .child(caption("REMOTE"))
+        .children(remote.map((b, i) => row(`remote-${i}`, b.name, this.compareRef === b.ref, "mods/workspace-chrome/branch.svg", (cx) => this.setBase(b, cx)))))
+      .when(!others.length, (el) => el.child(div().px(7).py(10).text_size(TYPE.meta).line_height("15px").text_color(t.dim)
+        .child(this.loading ? "Loading branches…" : "No other branches")))
+      .child(div().px(7).pt(10).text_size(TYPE.label).line_height("14px").text_color(t.dim)
+        .child("Committed changes from the merge base."));
   }
 
   // A changed-file row inside the virtual renderer: no handler of its own; the
@@ -300,7 +486,9 @@ export default class Changes extends View {
     if (now) this.lastLoc = now;
     const loc = now ?? this.lastLoc;
     if (loc) {
-      const next = keyOf(loc);
+      // A different folder also clears any branch comparison (place does that),
+      // so the mode is read after it.
+      const next = `${this.place(loc)}|${this.compareRef ?? this.compare ?? ""}`;
       // While a load or commit is out, the context is cleared as soon as the
       // place changes: results for the old folder are then discarded even though
       // the new refresh cannot start until the old one finishes.
@@ -337,21 +525,25 @@ export default class Changes extends View {
           .child(div().flex_1())
           .when(add > 0, (el) => el.child(div().text_size(TYPE.meta).text_color(t.ansi2).child(`+${add}`)))
           .when(del > 0, (el) => el.child(div().text_size(TYPE.meta).text_color(t.ansi1).child(`−${del}`))))
+        .when(Boolean(this.root), (el) => el.child(
+          h_flex().flex_none().px(SIZE.inset).pt(SIZE.inset).pb(2).child(this.sourceRow(t, accent))))
         .child(v_flex().id(`changes-list-${this.uid}`).flex_1().min_h(0).p(SIZE.inset)
+          // 分支列表占用文件列表的位置，所以打开时不会与浮层争抢点击或高度。
+          .when(this.pickerOpen, (el) => el.child(this.branchList(t, accent)))
           // Only the rows on screen are built: a thousand changed files used to
           // cost a thousand elements on every render for a 200 px box.
-          .when(this.files.length > 0, (el) => el.child(v_flex().relative().flex_1().min_h(0)
+          .when(!this.pickerOpen && this.files.length > 0, (el) => el.child(v_flex().relative().flex_1().min_h(0)
             .child(v_virtual_list(filesId, this.files.length, SIZE.listRow, (i) => this.files[i].path,
               (range) => this.files.slice(range.start, range.end).map((f) => this.fileRow(f, t, accent)))
               .on_item_click((path, cx) => this.pick(path, cx))
               .size_full())
             .child(Scrollbar.vertical(filesId).absolute().inset_0())))
-          .when(!this.files.length, (el) => el.child(
+          .when(!this.pickerOpen && !this.files.length, (el) => el.child(
             div().px(8).py(10).text_size(TYPE.meta).line_height("15px").text_color(t.dim)
-              .child(this.error || (this.loading ? "Loading changes…" : this.root ? "No uncommitted changes" : "No folder")))))
+              .child(this.error || (this.loading ? "Loading changes…" : this.root ? (this.compare ? `No differences from ${this.compare}` : "No uncommitted changes") : "No folder")))))
         .when(this.limited, (el) => el.child(div().px(12).pb(6).text_size(TYPE.label).text_color(t.dim).child("Showing the first 1,000 changed files")))
         .when(Boolean(this.note), (el) => el.child(div().px(12).pb(6).text_size(TYPE.label).line_height("13px").text_color(t.ansi1).child(this.note)))
-        .child(v_flex().flex_none().p(10).gap(8).border_t(1).border_color(withAlpha(t.foreground, UI.lineSoft))
+        .when(!this.compare, (el) => el.child(v_flex().flex_none().p(10).gap(8).border_t(1).border_color(withAlpha(t.foreground, UI.lineSoft))
           .child(div().id(`commit-message-${this.uid}`).w_full().h(32).px(10).flex().items_center().rounded(SIZE.radius)
             .bg(t.background)
             .border(1).border_color(this.typing ? withAlpha(accent, UI.ring) : withAlpha(t.foreground, UI.field))
@@ -363,7 +555,13 @@ export default class Changes extends View {
             .text_size(TYPE.small).font_weight(600)
             .when(enabled, (el) => el.cursor_pointer().hover(s => s.opacity(0.88)))
             .on_click((_e, cx) => this.commit(cx))
-            .child(this.busy ? "Committing…" : "Commit")))
+            .child(this.busy ? "Committing…" : "Commit"))))
+        .when(Boolean(this.compare), (el) => el.child(h_flex().flex_none().px(12).py(10).gap(7).items_center()
+          .border_t(1).border_color(withAlpha(t.foreground, UI.lineSoft))
+          .child(svg("mods/workspace-chrome/git-compare.svg").size(11).flex_none().text_color(t.dim))
+          .child(div().flex_1().min_w(0).truncate().text_size(TYPE.label).text_color(t.dim)
+            .tooltip("Uncommitted edits stay in Working tree")
+            .child(this.baseFallback ? "No common ancestor; comparing tips" : "Committed changes only"))))
     );
 
     // Right: the diff on the terminal's background, with the file path and
@@ -377,13 +575,18 @@ export default class Changes extends View {
       .child(h_flex().flex_none().gap(2).p(2).rounded(7).bg(withAlpha(t.foreground, UI.subtle))
         .child(diffButton("prev", "↑", "Previous change", this.changes.length > 0, () => this.step(-1, cx)))
         .child(diffButton("next", "↓", "Next change", this.changes.length > 0, () => this.step(1, cx))))
-      .child(diffButton("files", "Files", "Open this file in Files", Boolean(this.root), () => this.openInFiles(cx)));
+      // A compared file may be gone from the working tree, so this shortcut
+      // belongs to the working-tree mode only.
+      .when(!this.compare, (el) => el.child(diffButton("files", "Files", "Open this file in Files", Boolean(this.root), () => this.openInFiles(cx))));
 
     const emptyHint = v_flex().absolute().inset_0().p(24).items_center().justify_center().gap(8)
       .child(h_flex().size(40).mb(4).flex_none().items_center().justify_center().rounded(12).bg(withAlpha(t.foreground, UI.subtle))
         .child(svg("mods/my-changes/changes.svg").size(18).text_color(t.muted)))
-      .child(div().text_size(TYPE.body).font_weight(500).text_color(t.foreground).child(this.files.length ? "Select a file" : "All caught up"))
-      .child(div().text_size(TYPE.meta).text_center().text_color(t.muted).child(this.files.length ? "Choose a changed file to review its diff." : "Your working tree is clean."));
+      .child(div().text_size(TYPE.body).font_weight(500).text_color(t.foreground).child(this.files.length ? "Select a file" : this.compare ? "No differences" : "All caught up"))
+      .child(div().text_size(TYPE.meta).text_center().text_color(t.muted)
+        .child(this.files.length ? "Choose a changed file to review its diff."
+          : this.compare ? (this.baseFallback ? "Both branch tips have the same tree." : `This branch has no changes since ${this.compare}.`)
+            : "Your working tree is clean."));
 
     const diffArea = div().flex_1().min_w(0).min_h(0).relative().font_family(settings().font_family ?? "JetBrains Mono").text_size(TYPE.small)
       .child(div().id(`changes-diff-x-${this.uid}`).size_full().overflow_x_scrollbar()
@@ -403,7 +606,8 @@ export default class Changes extends View {
 
     return v_flex().id(`changes-${this.uid}`).size_full().min_w(0).min_h(0).overflow_hidden().bg(t.surface).text_color(t.foreground).text_size(13).track_focus(this.handle)
       .on_key_down((e, cx) => {
-        if (e.key === "escape" && this.typing) { this.typing = false; this.handle.focus(); cx.stop_propagation(); cx.notify(); }
+        if (e.key === "escape" && this.pickerOpen) { this.pickerOpen = false; cx.stop_propagation(); cx.notify(); }
+        else if (e.key === "escape" && this.typing) { this.typing = false; this.handle.focus(); cx.stop_propagation(); cx.notify(); }
       })
       // 原生分栏按实例保留拖动后的宽度，重绘和切换标签不会重置。
       .child(h_resizable(`changes-split-${this.uid}`).flex_1().min_w(0).min_h(0)

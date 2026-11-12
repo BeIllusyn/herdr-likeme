@@ -82,7 +82,13 @@ The close control uses red hover feedback. A soft hairline ends the header.
 header and 28 px rows. Files keeps its tree indentation and colours the selected
 file's icon. Changes leads with filenames, followed by muted directory context,
 and uses 18 px tinted status tiles edged in the same hue. Full paths are available
-in tooltips. The commit field and button are 32 px with a 7 px radius.
+in tooltips. The commit field and button are 32 px with a 7 px radius. Changes also
+carries a 28 px source row between its header and the list: a branch icon, the mode
+label (Working tree or the chosen branch), the current branch in 10 px type on the
+right and a chevron. Clicking it gives the changed-file list's place to the branch
+list: 10 px COMPARE WITH / LOCAL / REMOTE captions, 28 px rows and a check on the
+active entry, with a quiet merge-base note at the bottom. The list is inline rather
+than an anchored surface, so a branch press is an ordinary row press.
 
 Preview headers share a breadcrumb, a coloured icon and quiet controls. Edit / Diff
 uses 24 px segments in a 28 px track; save status keeps a 76 px slot with a small
@@ -138,6 +144,13 @@ closing the layout ends its timers and directory watches.
   交给 Files 视图（`shared("files.open")` 传仓库根和相对路径；终端停在子目录时 Files
   仍按仓库根预览，不改变自己的树根）。Diff 的新增/删除行用 18% 的 ansi 色铺底，
   行号右侧再放一个同色的 `+`／`−` 标记，不靠颜色也能分辨。
+  Header 下的来源行在 Working tree 与另一个分支之间切换：分支列表来自
+  `git for-each-ref`（本地在前、远端在后，隐藏当前分支和 `origin/HEAD` 这类符号引用），
+  对比使用 `git merge-base` 到 HEAD 的两点 diff，只包含已提交的历史，未提交的编辑留在
+  Working tree 模式。进入分支对比后，提交框换成一行 “Committed changes only” 注释，
+  `Files` 入口隐藏（被比较的文件可能在工作区已不存在）；两边没有共同祖先时退回比较两个
+  分支尖端并在注释里说明。切换目录会回到 Working tree；分支消失或无 HEAD 时在列表里
+  显示原因，而不是留着上一份文件。
   快捷键、侧栏或新建 Tab 改变当前终端时，也会退出工具视图。
   旧版已存在的单独工具 Tab 从普通列表中隐藏，由固定入口复用，避免丢失编辑和分栏状态。
   Files 预览标题行的 `Edit｜Diff` 分段开关把编辑器切成“变更前／变更后”两栏：左侧旧文件、
@@ -193,8 +206,9 @@ Programs run: `git` (via `exec`), `hc machine ls` (via `hc`). The quick starts a
 Herdr to run `claude --dangerously-skip-permissions`, `pi`, `lazygit` and `nvim`
 (`tab.new`'s `argv`); the mod never spawns them itself.
 
-Art: Herdr's shipped `mods/workspace-chrome/*.svg` (branch, plus, chevron-down/right,
-pin, pin-off, server, monitor, check, layers, settings), `icons/claude.svg`, `icons/pi.svg`,
+Art: Herdr's shipped `mods/workspace-chrome/*.svg` (branch, git-compare, plus,
+chevron-down/right, pin, pin-off, server, monitor, check, layers, settings),
+`icons/claude.svg`, `icons/pi.svg`,
 `icons/lazygit.svg` and `icons/nvim.svg` (the quick starts), `mods/pane/close.svg` and
 `zoom.svg` (used by `my-tabs`), `mods/files/file.svg`, `mods/changes/changes.svg`;
 `my-sidebar` carries its own `sort.svg`; `my-pane` carries its own
@@ -254,7 +268,14 @@ copies for Windows.
   out of render. Place keys are `machine + "\u0000" + folder`, not JSON, so the
   250 ms tick does no parsing; `git status` adds `-uno --no-renames` because only its
   branch lines are read, and the two `rev-parse` answers come from one process.
-  A git look that finds nothing new no longer redraws the list.
+  A git look that finds nothing new no longer redraws the list. Changes skips the
+  worktree scan entirely in branch-compare mode: HEAD, the ref list and the two
+  tree diffs are all it needs there.
+- **Async work starts from the callback's own `cx`.** A branch row used to capture the
+  render frame's `cx` in its `on_click`; the fields changed, but `refresh`'s
+  `cx.spawn` belonged to a frame that was already gone, so the list cleared and stayed
+  on Loading with no error. Pass the click event's `cx` into any action that calls
+  `refresh` or `spawn`.
 - **Do not build a row per file.** The Files tree and the changed-file list use
   `v_virtual_list`; a renderer may not register handlers or retain state, so the row
   helpers are pure and the click is the list's `on_item_click` (keyed by path). A
@@ -319,7 +340,8 @@ copies for Windows.
 
 - `./check.sh` passes: all six mods load and all six `colors.js` copies match.
 - `node --test tests/workspace-panels.test.mjs` passes, including compact toolbar
-  behaviour, mark contrast, workspace switching, legacy tabs, diff parsing and saving.
+  behaviour, mark contrast, workspace switching, legacy tabs, diff parsing, branch
+  parsing and saving.
 - The running Likeme layout reports no errors in `herdr-app status`.
 - Brand and tab bar align at 44 px. Pane / Files / Changes headers align at 36 px.
 - Spaces and Agents use 44 px rows, 26 px marks, 3 px gaps and 8 px insets.
@@ -337,6 +359,11 @@ copies for Windows.
   changes, and truncated previews remain read-only.
 - Switching views preserves the file tree and split widths. Changes can open the
   same file in Files, including a file outside the current terminal directory.
-- Empty states are consistent; a clean worktree shows All caught up.
+- Changes switches between Working tree and a branch comparison from its source row.
+  The list and whole-file diff are the merge-base→HEAD committed differences, the
+  picker lists local and remote branches with the current one hidden, and a missing
+  branch, unborn HEAD or unrelated history reports a reason instead of stale rows.
+- Empty states are consistent; a clean worktree shows All caught up, an unchanged
+  branch comparison shows No differences.
 - Removing `layouts/likeme.json` and the six installed `mods/my-*` folders leaves
   the shipped layouts available.
