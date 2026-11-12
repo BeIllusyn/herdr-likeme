@@ -32,6 +32,13 @@ Everything else — menus — is Herdr's `main` layout unchanged.
 ## Requirements
 
 - Herdr 0.1.12 or newer.
+- `omp` itself is optional: likeme always adds Herdr's program entry for it, so the
+  CLI is recognized whenever it is installed later. `LIKEME_OMP=0` opts out.
+  - likeme only adds Herdr's recognition entry; it never installs the omp CLI.
+    Install omp with the upstream method, e.g. `curl -fsSL https://omp.sh/install | sh`,
+    `brew install can1357/tap/omp`, or `bun install -g @oh-my-pi/pi-coding-agent`.
+    The upstream installer verifies the downloaded binary's SHA-256; likeme never
+    runs it.
 - Herdr's shipped mods and assets that this layout references:
   `workspace-chrome`, `pane` (the tab bar borrows its close/zoom icons),
   `menu`, `new-menu`, the program icons under `icons/` (the quick starts),
@@ -55,8 +62,26 @@ cd herdr-likeme
 ```
 
 `install.sh` copies `layouts/likeme.json` and the six mods into
-`${HERDR_APP_HOME:-~/.config/herdr-app}`, runs `herdr-app check` on every mod, and
-switches to the layout. Herdr reloads the files within a second.
+`${HERDR_APP_HOME:-~/.config/herdr-app}`, runs `herdr-app check` on every mod,
+adds Herdr's omp program entry, and switches to the layout.
+Herdr reloads the files within a second.
+
+omp registration installs the icon as `my-icons/likeme-omp.svg` and ensures a
+`programs.omp` entry in `programs.json`: a fresh file is copied from
+`extras/omp/programs.json`; an existing file is merged only when `programs.omp`
+is absent, keeping every other entry. This is unconditional: the installer does
+not check for or install the omp CLI, so Herdr recognizes omp whenever it appears
+on the login shell's `PATH` later. The merge rewrites the file as 2-space JSON
+with a trailing newline; when `programs.omp` already exists, the JSON is invalid,
+`programs` is not an object, or `programs.json` is a symlink, the file is left
+byte-identical. A symlinked `programs.json` also skips the icon.
+
+Set `LIKEME_OMP=0` to skip this recognition:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/BeIllusyn/herdr-likeme/main/install.sh | LIKEME_OMP=0 bash
+# or: export LIKEME_OMP=0 && ./install.sh
+```
 
 It **overwrites** `layouts/likeme.json` and the `mods/my-*` folders on every run
 (`rsync --delete`), so edits made directly in `~/.config/herdr-app` are replaced —
@@ -81,14 +106,17 @@ herdr-app check "$DST/mods/my-brand"
 herdr-app do layout.switch '{"name":"likeme"}'
 ```
 
+For the optional omp registration, also run `bash extras/omp/install.sh "$DST"`;
+it uses the same merge rules as the main installer.
+
 After editing a mod, run `./check.sh`: it loads all six mods and fails if their six
 `colors.js` copies drift. Shared `UI`, `TYPE` and `SIZE` tokens keep colours, text and
 component dimensions consistent.
 
-工作区入口的回归测试使用 Node.js 内置测试运行器：
+工作区入口和 omp 安装脚本的回归测试使用 Node.js 内置测试运行器：
 
 ```sh
-node --test tests/workspace-panels.test.mjs
+node --test tests/*.test.mjs
 ```
 
 Never overwrite a layout or mod you already have: rename the new one and update the
@@ -97,7 +125,8 @@ matching `"mod"` references in `likeme.json`.
 - Update: run the one-liner again, or `git pull && ./install.sh`
 - Uninstall: delete `layouts/likeme.json`, `layouts/likeme.png` (if present) and the
   `mods/my-sidebar`, `mods/my-tabs`, `mods/my-pane`, `mods/my-files`, `mods/my-changes`,
-  `mods/my-brand` folders. If you
+  `mods/my-brand` folders. Remove the `programs.omp` entry from `programs.json` and
+  `my-icons/likeme-omp.svg`; delete `programs.json` if it held only that entry. If you
   upgraded from a version before the merged sidebar, also delete the old
   `mods/my-spaces` and `mods/my-agents` folders; their code now lives inside
   `mods/my-sidebar`.

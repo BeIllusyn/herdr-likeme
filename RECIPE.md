@@ -13,6 +13,18 @@ ring.
 _A live capture: the flat rows and their space marks, the uppercase captions, the active
 tool view and its editor are the real UI._
 
+## Requirements
+
+- Herdr 0.1.12 or newer.
+- `bash`, `rsync`, `install`, `mktemp`, `stat`, `chmod` and `mv` for `install.sh`.
+- `omp` itself is optional: likeme always adds Herdr's omp program entry, so the
+  CLI is recognized whenever it is installed later. `LIKEME_OMP=0` opts out. An
+  existing `programs.json` is merged with `python3` (when it runs) or `jq`.
+  likeme only adds Herdr's recognition entry and never installs omp; use an
+  upstream method (see the upstream README; its installer verifies the binary
+  SHA-256).
+- Node.js for `node --test tests/*.test.mjs`.
+
 ## What you see
 
 The window uses the theme's `canvas` behind the layout, `chrome` for the sidebar
@@ -203,6 +215,34 @@ Herdr 保留隐藏的子视图实例，并保存 stack 的选择。
 | `my-tabs` | 32 px tabs in a 44 px bar, a grouped quick-start toolbar that shows only installed programs, fixed Files / Changes entries and a 680 px compact breakpoint. Retains tab rename, drag, close, legacy tool-tab reuse and native braille status animation. |
 | `my-pane` | A 36 px header with 6% space tint on focus, shared typography, a fixed 68 px status slot and grouped 24 px split / zoom / close controls with tooltips. Each action targets its own pane. |
 
+**omp extras** (`extras/omp/`). `install.sh` calls the standalone
+`extras/omp/install.sh "$DST"` after the mod checks. It registers Herdr's omp
+program entry unless `LIKEME_OMP=0`. It does not check for or install the omp CLI
+itself; that stays with upstream or the package manager. When it runs, it installs
+`extras/omp/omp.svg` as `$DST/my-icons/likeme-omp.svg` and ensures a
+`programs.omp` entry, using the fragment in `extras/omp/programs.json`:
+
+| File | Role |
+|---|---|
+| `omp.svg` | Upstream brand mark from `packages/collab-web/public/favicon.svg`, copied unchanged. |
+| `LICENSE` | Upstream MIT license (Mario Zechner, Can Bölük, Stencil Labs). |
+| `README.md` | Icon provenance and installer behaviour. |
+| `programs.json` | The Herdr fragment: `name`, full-colour `icon`, `tint: false`, `tile`, `color`, `run: ["omp"]`, `match: ["omp"]`. |
+| `install.sh` | Standalone registrar; takes `DST` as `$1`, defaults `${HERDR_APP_HOME:-$HOME/.config/herdr-app}`; its assets resolve from its own directory inside `$SRC`. |
+
+A fresh `programs.json` is staged with `mktemp` in the same directory, written with
+`install`, then moved into place, so a live reload never sees a partial file. An
+existing regular file is parsed and rewritten as 2-space JSON plus a trailing
+newline **only** when `programs.omp` is absent; every other key keeps its value.
+A symlinked `programs.json` is refused before the icon is copied, because writing
+through it could replace the link or edit a file outside the app home. `programs.omp`
+present, invalid JSON, a non-object top level or a non-object/null `programs`, or
+neither `python3` nor `jq` leaves the file byte-identical and exits 0. `python3`
+counts only when `python3 -c ""` runs; otherwise `jq` is tried. The merge writes a
+temp file in the same directory, keeps the original mode and uses `os.replace` /
+`mv`. The icon name is namespaced so a user's own `my-icons/omp.svg` is never
+overwritten.
+
 Herdr functions used: `spaces`, `agents`, `terminals`, `panes`, `focused`, `layout`,
 `theme`, `window`, `settings`, `keys`, `home`, `shared` / `setShared`, `setAgentOrder`,
 `run`, `openOverlay` / `closeOverlay`, `props`, `exec`, `knownAgents`, `readTextFile`,
@@ -230,6 +270,23 @@ copies for Windows.
 
 ## Watch out
 
+- **Never clobber `programs.json`.** The omp registrar writes the fragment only
+  when the file is absent, and merges only when `programs.omp` is missing. An
+  existing `programs.omp`, invalid JSON, a non-object top level or `programs`, a
+  symlinked `programs.json`, or no merge tool leaves the file byte-identical. A
+  merge is the only time formatting changes: it normalises to 2-space JSON with a
+  trailing newline and keeps the original mode. A fresh file is staged in the same
+  directory with `mktemp` + `install` and then moved into place, so Herdr's live
+  reload never reads a partial file. The `LIKEME_OMP=0` opt-out prints a line, as
+  does the symlink refusal; the helper never aborts the layout install. likeme does
+  not check for or install the omp CLI, so this entry is unconditional: Herdr marks
+  it installed itself once the CLI appears.
+- **The omp icon is namespaced.** It installs as
+  `my-icons/likeme-omp.svg`, never `my-icons/omp.svg`, so a user's own mark
+  survives updates. `extras/omp/install.sh` is called with `$DST`, while its
+  fragment and icon resolve from its own directory inside `$SRC`; both the checkout
+  and the `curl | bash` tarball modes must stay exit-0 on expected skips so the
+  layout install never aborts.
 - **Clones never update.** Herdr replaces its shipped
   `spaces`/`agents`/`tabs`/`pane` on every start; these four sources
   are frozen at 0.1.12. After a Herdr upgrade, diff each shipped `main.js` against its
@@ -364,9 +421,12 @@ copies for Windows.
 ## Done when
 
 - `./check.sh` passes: all six mods load and all six `colors.js` copies match.
-- `node --test tests/workspace-panels.test.mjs` passes, including compact toolbar
-  behaviour, mark contrast, workspace switching, legacy tabs, diff parsing, branch
-  parsing and saving.
+- `node --test tests/*.test.mjs` passes, including compact toolbar behaviour,
+  mark contrast, workspace switching, legacy tabs, diff parsing, branch parsing
+  and saving, plus the omp installer's fresh, merge/mode, existing-key, invalid
+  JSON (python and jq), non-object shapes, symlink, `LIKEME_OMP=0`, omp-absent and
+  jq-fallback cases.
+- `bash -n install.sh` and `bash -n extras/omp/install.sh` report no syntax errors.
 - The running Likeme layout reports no errors in `herdr-app status`.
 - Brand and tab bar align at 44 px. Pane / Files / Changes headers align at 36 px.
 - Spaces and Agents use 44 px rows, 26 px marks, 3 px gaps and 8 px insets.

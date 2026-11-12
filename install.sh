@@ -7,7 +7,7 @@
 # One command, always the latest main (also the update command):
 #   curl -fsSL https://raw.githubusercontent.com/BeIllusyn/herdr-likeme/main/install.sh | bash
 #
-# Environment: HERDR_APP_HOME, REPO, REF.
+# Environment: HERDR_APP_HOME, REPO, REF, LIKEME_OMP.
 set -euo pipefail
 
 REPO="${REPO:-BeIllusyn/herdr-likeme}"
@@ -67,6 +67,13 @@ for m in "${MODS[@]}"; do
     "$SRC/mods/$m/" "$DST/mods/$m/"
   herdr-app check "$DST/mods/$m"
 done
+
+# Register Herdr's omp recognition by default; LIKEME_OMP=0 opts out. It never
+# touches other program entries. The helper exits 0 for expected skips; the guard
+# keeps an unexpected failure from aborting the layout install.
+if ! LIKEME_OMP="${LIKEME_OMP:-1}" bash "$SRC/extras/omp/install.sh" "$DST"; then
+  echo "omp registration failed; continuing with the layout install" >&2
+fi
 
 if ! herdr-app do layout.switch "{\"name\":\"$LAYOUT\"}" >/dev/null; then
   echo "Files are in place, but Herdr could not switch to \"$LAYOUT\":" >&2
