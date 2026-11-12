@@ -131,14 +131,18 @@ These six are meant to be read:
   `readTextFile` / `writeTextFile` (a write only lands while the file still matches
   the text it read), and watches folders with `watchFolder`. The workspace copy also
   answers Changes' `shared("files.open")` request, opening the file and expanding its
-  folders; a file outside its tree is read from the repository root. No network.
+  folders; a file outside its tree is read from the repository root. The workspace
+  copy lists and scans only while its stack view is in front, lists expanded folders
+  a few at a time, and catches up on the first frame after it comes back. No network.
 - **`my-changes`** is a clone of the shipped changes panel. It runs read-only git
   commands (`status`, `diff`, `rev-parse`, `merge-base`, `for-each-ref`) via `exec`,
   asks for full-file context, and watches the worktree. Its header jumps between
   change blocks and hands the selected file to Files (`setShared` + `layout.select`).
   A source row can compare the current branch with another local or remote branch;
   that list comes from `for-each-ref` and the diff runs from their merge base to HEAD,
-  so uncommitted edits never enter a branch comparison. No network.
+  so uncommitted edits never enter a branch comparison. The 10 s scan and the worktree
+  watch run only while its stack view is in front; showing it again scans at once.
+  No network.
 - **`my-brand`** is a clone of the shipped brand bar and sidebar footer with the
   sidebar toggle, logo and search button removed; the footer is 28 px quiet rows over a
   hairline. No `exec`, no network.

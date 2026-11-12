@@ -19,14 +19,25 @@ const sameGit = (a, b) => a === b || Boolean(a && b &&
   a.name === b.name && a.branch === b.branch && a.ahead === b.ahead &&
   a.behind === b.behind && a.repo === b.repo && a.linked === b.linked);
 
-// Where a space is now: its first terminal's live folder, else where it was made.
-// `ps`: panes(), read once by the caller (each read copies every pane).
-function place(s, ps) {
-  const tabs = new Set((s.tabs ?? []).map((c) => c.id));
-  return ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
+// Where every space is now: its first terminal's live folder, else where it was
+// made. `ps` is the caller's single panes() snapshot. The old per-space
+// `ps.find` built a tab-id Set and scanned the pane list again for every space
+// on every 250 ms tick (and again for every render).
+function placesOf(sp, ps) {
+  const first = new Map(); // tab -> { at, cwd }: the first pane in snapshot order
+  ps.forEach((p, at) => { if (p.cwd && !first.has(p.tab)) first.set(p.tab, { at, cwd: p.cwd }); });
+  const out = new Map();
+  for (const s of sp) {
+    let pick = null;
+    for (const t of s.tabs ?? []) {
+      const p = first.get(t.id);
+      if (p && (!pick || p.at < pick.at)) pick = p;
+    }
+    out.set(s.id, keyOf(s.machine ?? null, pick?.cwd || s.folder));
+  }
+  return out;
 }
 const rowHeight = ({ tree }) => (tree ? SIZE.worktreeRow : SIZE.row);
-const where = (s, ps) => keyOf(s.machine ?? null, place(s, ps));
 const base = (path) => path.replace(/\/+$/, "").split("/").pop();
 // Changes made outside Herdr (an editor's save, a commit in another app): looked
 // for this often, in repos the list shows, while the window is in front.
@@ -102,18 +113,21 @@ export default class Spaces extends View {
   checkNew(cx) {
     const now = Date.now();
     const sp = spaces();
-    // New or renamed spaces need a colour before the first frame that shows them.
-    const own = sp.map((s) => `${s.id}:${s.name}`).join("|");
-    if (own !== this.colorSig) {
-      this.colorSig = own;
-      this.syncColors(sp);
-    }
     // Everything the list draws changes under this view without the host telling
     // it: a closed space disappears, one is renamed, the active one moves. Redraw
-    // on that change alone, not every tick. Colours only change with `own` above.
-    const sig = sp.map((s) => `${s.id}:${s.name}:${s.active ? 1 : 0}:${s.machine ?? ""}:${s.folder ?? ""}`).join("|");
+    // on that change alone, not every tick. Colours only change with id/name,
+    // which this signature already contains.
+    let sig = "";
+    for (const s of sp) sig += `${s.id}:${s.name}:${s.active ? 1 : 0}:${s.machine ?? ""}:${s.folder ?? ""}|`;
     if (sig !== this.seen) {
       this.seen = sig;
+      // New or renamed spaces need a colour before the first frame that shows them.
+      let own = "";
+      for (const s of sp) own += `${s.id}:${s.name}|`;
+      if (own !== this.colorSig) {
+        this.colorSig = own;
+        this.syncColors(sp);
+      }
       cx.notify();
     }
     for (const s of sp) if (!this.shown.has(s.id)) this.born[s.id] ??= now;
@@ -127,8 +141,8 @@ export default class Spaces extends View {
   // a machine that is back, and repos in view whose fallback is due.
   due(now, sp, ps) {
     // Moved there: what it knew of that place may be old.
-    const at = {};
-    for (const s of sp) at[s.id] = where(s, ps);
+    const places = placesOf(sp, ps), at = {};
+    for (const s of sp) at[s.id] = places.get(s.id);
     const keys = new Set();
     for (const k of Object.values(at)) if (cwdOf(k)) keys.add(k);
     const due = new Set();
@@ -328,9 +342,10 @@ export default class Spaces extends View {
   // Spaces in order, each worktree space moved under its main checkout's.
   // `sp` and `ps` are the render's snapshots: every host read copies the list.
   ordered(sp, ps) {
-    const ready = (w) => this.shown.has(w.id) || where(w, ps) in this.git || Date.now() - (this.born[w.id] ??= Date.now()) > 1500;
+    const places = placesOf(sp, ps);
+    const ready = (w) => this.shown.has(w.id) || places.get(w.id) in this.git || Date.now() - (this.born[w.id] ??= Date.now()) > 1500;
     for (const w of sp) if (!this.shown.has(w.id) && ready(w)) this.shown.add(w.id);
-    const list = sp.map((w, i) => ({ w, i, g: this.git[where(w, ps)] ?? null })).filter((r) => this.shown.has(r.w.id));
+    const list = sp.map((w, i) => ({ w, i, g: this.git[places.get(w.id)] ?? null })).filter((r) => this.shown.has(r.w.id));
     const mains = new Set(list.filter((r) => r.g && !r.g.linked).map((r) => r.g.repo));
     const nested = (r) => r.g?.linked && mains.has(r.g.repo);
     const out = [];

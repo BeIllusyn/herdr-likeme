@@ -284,6 +284,15 @@ copies for Windows.
   A git look that finds nothing new no longer redraws the list. Changes skips the
   worktree scan entirely in branch-compare mode: HEAD, the ref list and the two
   tree diffs are all it needs there.
+- **A hidden stack child does no work.** A `stack` draws only its active child, and
+  Herdr gives a block no visibility flag, so `my-files` and `my-changes` walk the
+  current layout and return from their timer, watch reaction and render-time host
+  reads while another child is in front; `render` sees the first frame where they are
+  shown again and scans at once. A watch burst is debounced 150 ms, an event that
+  lands mid-scan queues exactly one trailing scan, and Files lists expanded folders
+  four at a time. Files keeps a running row total instead of re-summing every folder
+  per load (each load was O(tree)), and measures a diff's width by walking code points
+  by index: the runtime has no `Intl`, and `for…of` allocated a string per character.
 - **Async work starts from the callback's own `cx`.** A branch row used to capture the
   render frame's `cx` in its `on_click`; the fields changed, but `refresh`'s
   `cx.spawn` belonged to a frame that was already gone, so the list cleared and stayed

@@ -1,8 +1,36 @@
 // A lazy file browser for the focused folder, with an editor and a comparison view.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, h_resizable, resizable_panel, Editor, EditorState, Scrollbar, v_virtual_list } from "gpui-base";
-import { spaces, panes, focused, props, exec, readTextFile, writeTextFile, watchFolder, theme, settings, window, shared } from "herdr";
+import { spaces, panes, focused, props, exec, readTextFile, writeTextFile, watchFolder, theme, settings, window, shared, layout } from "herdr";
 import { markColor, changeColor, withAlpha, UI, TYPE, SIZE } from "./colors.js";
+
+const MOD = "my-files";
+// How often a shown copy refreshes; a hidden one does nothing and catches up
+// from `render` when the stack shows it again.
+const POLL_MS = 10000;
+// A save is several watch events; scan once after the burst instead of once per
+// event (each scan starts shell and git processes).
+const WATCH_DEBOUNCE_MS = 150;
+
+// A stack draws one child. Herdr gives a block no "is this shown" flag, so walk
+// the current layout: only the active child of every stack is visible. Without
+// this check a Files or Changes copy behind the terminal scanned the worktree
+// every 10 s for a view nobody was looking at.
+function shownInLayout(mod) {
+  const pending = [layout()];
+  while (pending.length) {
+    const node = pending.pop();
+    if (!node || node.hidden) continue;
+    if (node.content?.mod === mod) return true;
+    if (node.type === "stack") {
+      const child = node.children?.find((c) => c.id === node.active);
+      if (child) pending.push(child);
+    } else {
+      for (const child of node.children ?? []) pending.push(child);
+    }
+  }
+  return false;
+}
 
 
 // 工作区固定视图跟随当前终端目录；旧版独立工具 Tab 保留自己的根目录和展开状态。
@@ -37,7 +65,16 @@ function relativePath(root, path) {
 }
 const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "diff.autoRefreshIndex=false"];
 const MAX_DIFF = 20000;
-const countLines = (text) => text ? text.split("\n").length - Number(text.endsWith("\n")) : 0;
+// `split("\n")` allocated the whole file again just to count lines.
+const countLines = (text) => {
+  if (!text) return 0;
+  let n = 1;
+  for (let i = text.indexOf("\n"); i !== -1; i = text.indexOf("\n", i + 1)) n++;
+  return text.endsWith("\n") ? n - 1 : n;
+};
+// `String#localeCompare` per row: this runtime has no Intl, and the list only
+// sorts the entries of one folder at a time.
+const compareNames = (a, b) => a.localeCompare(b);
 
 // 对比视图用：每行同时记下旧文件和新文件的行号，左右两栏各自取用。
 function diffRows(lines) {
@@ -96,6 +133,13 @@ export default class Files extends View {
     this.entries = new Map(); this.folders = new Set(); this.pending = new Set(); this.marks = {};
     this.flat = null;
     this.want = null;
+    // Rows currently stored across all folders: the TOTAL cap needs this sum on
+    // every folder load, and recomputing it walked the whole tree each time.
+    this.total = 0;
+    this.lastRefresh = 0;
+    this.shownBefore = false;
+    this.reload = false;
+    this.watchPending = false;
     // 布局中的固定视图跟随终端；旧版工具 Tab 仍使用打开时的目录。
     this.openedAt = props()?.cwd ?? null;
     this.workspace = Boolean(props()?.workspace);
@@ -119,7 +163,13 @@ export default class Files extends View {
     // click or scrollbar in one never lands on another's list.
     this.uid = Math.random().toString(36).slice(2, 7);
     this.refresh(cx);
-    cx.timer.every(10000, cx => this.refresh(cx));
+    cx.timer.every(POLL_MS, cx => this.refresh(cx));
+  }
+
+  // A workspace copy is drawn only while its stack shows it; the legacy tool tab
+  // is a pane, and `location` already reports null while another tab is in front.
+  visible() {
+    return !this.workspace || shownInLayout(MOD);
   }
 
   watch(root, cx) {
@@ -130,10 +180,20 @@ export default class Files extends View {
       try {
         while (this.context === context) {
           await watchFolder(root);
-          if (this.current(context)) this.refresh(cx);
+          if (this.current(context)) this.refreshSoon(cx);
         }
       }
       catch { if (this.context === context) this.watched = null; }
+    });
+  }
+
+  // Coalesce the events a save produces into one scan.
+  refreshSoon(cx) {
+    if (this.watchPending) return;
+    this.watchPending = true;
+    cx.timer.after(WATCH_DEBOUNCE_MS, cx => {
+      this.watchPending = false;
+      this.refresh(cx);
     });
   }
 
@@ -144,38 +204,69 @@ export default class Files extends View {
     return this.context === context && this.want === context.key;
   }
 
-  async loadFolder(path, context) {
+  // The listing half, so a refresh can run several folders at once.
+  async listFolder(path, context) {
     const { on, cwd: root } = context;
     const entries = await directory(path ? `${root}/${path}` : root, on);
-    if (!this.current(context) || (path && !this.folders.has(path))) return;
-    const used = [...this.entries.entries()].filter(([p]) => p !== path).reduce((n, [, e]) => n + e.length, 0);
-    this.entries.set(path, entries.slice(0, Math.max(0, Math.min(PER_FOLDER, TOTAL - used))).sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name)));
+    if (!this.current(context) || (path && !this.folders.has(path))) return null;
+    return entries;
+  }
+
+  // Keep `total` in step instead of summing every folder on each load: a deep
+  // tree made that quadratic.
+  storeFolder(path, entries) {
+    // The folder may have been folded while its listing was out.
+    if (path && !this.folders.has(path)) return;
+    const old = this.entries.get(path)?.length ?? 0;
+    const used = this.total - old;
+    const next = entries.slice(0, Math.max(0, Math.min(PER_FOLDER, TOTAL - used)))
+      .sort((a, b) => Number(b.dir) - Number(a.dir) || compareNames(a.name, b.name));
+    this.entries.set(path, next);
+    this.total += next.length - old;
     this.flat = null;
     if (entries.length > PER_FOLDER || used + entries.length > TOTAL) this.limited = true;
   }
 
+  async loadFolder(path, context) {
+    const entries = await this.listFolder(path, context);
+    if (entries) this.storeFolder(path, entries);
+  }
+
   refresh(cx, loc) {
+    // Behind another stack child nothing it loads is on screen. `render` checks
+    // `lastRefresh` when the view comes forward, so the catch-up is immediate.
+    if (!this.visible()) {
+      this.shownBefore = false;
+      return;
+    }
     // While another tab is in front, keep the folder this copy already shows.
     loc ??= location(this.tab, this.openedAt, this.workspace) ?? this.lastLoc;
     if (!loc) return;
     this.lastLoc = loc;
     const { cwd, on } = loc, next = keyOf(loc);
     this.want = next;
+    this.lastRefresh = Date.now();
     if (next !== this.context?.key) {
       if (this.context) this.saved.set(this.context.key, { folders: this.folders, file: this.file, fileRoot: this.fileRoot });
       const saved = this.saved.get(next);
       // 先用旧目录保存尚未落盘的编辑，再切换工作区的根目录。
       this.show(null, cx);
       this.context = { key: next, cwd, on }; this.root = cwd; this.on = on; this.entries = new Map(); this.folders = new Set(saved?.folders);
+      this.total = 0;
       this.pending = new Set(); this.marks = {}; this.watched = null; this.error = null; this.limited = false;
       this.loading = false; this.flat = null;
       // 旧目录的仓库根和对比结果都不能带进新目录。
       this.gitTop = null; this.diffFor = null; this.diffPairs = []; this.diffError = null; this.diffLoading = false; this.diffSeq++;
       if (saved?.file) this.show(saved.file, cx, saved.fileRoot);
     }
-    if (!cwd || this.loading) return;
+    if (!cwd || this.loading) {
+      // A change arrived while a scan was out: run one more when it finishes.
+      if (this.loading) this.reload = true;
+      return;
+    }
     const context = this.context;
     this.loading = true;
+    this.reload = false;
     this.limited = false;
     cx.spawn(async cx => {
       // The git look does not depend on the listings: start it alongside them
@@ -196,9 +287,26 @@ export default class Files extends View {
         } catch { return { found: {}, root: null }; }
       })();
       try {
-        for (const path of ["", ...this.folders]) {
-          if (!this.current(context)) return;
-          await this.loadFolder(path, context);
+        // The expanded folders are independent reads: four shells at a time
+        // instead of one after another (a deep tree was latency-bound).
+        const paths = ["", ...this.folders];
+        const listed = new Map();
+        let at = 0;
+        const worker = async () => {
+          while (at < paths.length) {
+            const path = paths[at++];
+            if (!this.current(context)) return;
+            const entries = await this.listFolder(path, context);
+            if (entries) listed.set(path, entries);
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(4, paths.length) }, worker));
+        if (!this.current(context)) return;
+        // Store in tree order so the row cap and the tree do not depend on
+        // which listing happened to finish first.
+        for (const path of paths) {
+          const entries = listed.get(path);
+          if (entries) this.storeFolder(path, entries);
         }
         const look = await git;
         if (!this.current(context)) return;
@@ -206,7 +314,15 @@ export default class Files extends View {
         // 对比模式在等仓库根：拿到了就补上这一份。
         if (this.diffMode && this.file && this.diffFor !== this.file) this.loadDiff(cx);
       } catch (e) { if (this.current(context)) this.error = String(e); }
-      finally { if (this.context === context) this.loading = false; cx.notify(); }
+      finally {
+        if (this.context === context) this.loading = false;
+        cx.notify();
+        // The watch fired while this scan was out; take one more look.
+        if (this.reload) {
+          this.reload = false;
+          this.refresh(cx);
+        }
+      }
     });
   }
 
@@ -214,6 +330,7 @@ export default class Files extends View {
     if (this.folders.has(path)) {
       for (const folder of [...this.folders]) if (folder === path || folder.startsWith(path + "/")) {
         this.folders.delete(folder);
+        this.total -= this.entries.get(folder)?.length ?? 0;
         this.entries.delete(folder);
       }
     } else {
@@ -396,17 +513,24 @@ export default class Files extends View {
   measureDiff() {
     const charW = TYPE.small * 0.65;
     // 东亚宽字符、全角符号和 emoji 占两格。
-    const wide = (ch) => {
-      const c = ch.codePointAt(0);
-      return c > 0xffff
-        || (c >= 0x1100 && c <= 0x115f) || (c >= 0x2e80 && c <= 0xa4cf)
-        || (c >= 0xac00 && c <= 0xd7a3) || (c >= 0xf900 && c <= 0xfaff)
-        || (c >= 0xfe30 && c <= 0xfe6f) || (c >= 0xff00 && c <= 0xff60)
-        || (c >= 0xffe0 && c <= 0xffe6);
-    };
+    const wide = (c) => c > 0xffff
+      || (c >= 0x1100 && c <= 0x115f) || (c >= 0x2e80 && c <= 0xa4cf)
+      || (c >= 0xac00 && c <= 0xd7a3) || (c >= 0xf900 && c <= 0xfaff)
+      || (c >= 0xfe30 && c <= 0xfe6f) || (c >= 0xff00 && c <= 0xff60)
+      || (c >= 0xffe0 && c <= 0xffe6);
+    // 按码点走，不 `for…of`：每行创建字符对象的分配在 2 万行的对比里很贵。
     const span = (text) => {
       let n = 0;
-      for (const ch of text) n += ch === "\t" ? 4 : wide(ch) ? 2 : 1;
+      for (let i = 0; i < text.length; i++) {
+        const code = text.charCodeAt(i);
+        if (code === 9) n += 4;
+        else if (code < 0x80) n += 1;
+        else {
+          const cp = code >= 0xd800 && code <= 0xdbff ? text.codePointAt(i) : code;
+          if (cp > 0xffff) i++;
+          n += wide(cp) ? 2 : 1;
+        }
+      }
       return n;
     };
     let left = 0, right = 0;
@@ -554,14 +678,22 @@ export default class Files extends View {
       const at = panes().find(p => p.pane === f.pane);
       if (!this.workspace && at && !at.terminal && at.mod === "my-files") this.tab = f.tab;
     }
-    const now = location(this.tab, this.openedAt, this.workspace);
+    // Nothing read from the host is drawn while another stack child is in
+    // front; reading it there only copied lists and started no useful work.
+    const shown = this.visible();
+    const now = shown ? location(this.tab, this.openedAt, this.workspace) : null;
     if (now) this.lastLoc = now;
     const loc = now ?? this.lastLoc;
     if (loc) {
       const next = keyOf(loc);
       this.want = next;
+      const stale = Date.now() - this.lastRefresh >= (this.shownBefore ? POLL_MS : 1000);
       if (next !== this.context?.key) this.refresh(cx, loc);
+      // Hidden while its timer ran (or just came forward): catch up at once,
+      // then let the 10 s timer keep it fresh.
+      else if (shown && stale) this.refresh(cx, loc);
     }
+    this.shownBefore = shown;
     // 先只登记请求，等这一帧画完再打开文件，避免在 render 里改宿主状态。
     this.takeOpenRequest(cx);
     const t = theme();

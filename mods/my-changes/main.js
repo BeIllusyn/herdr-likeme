@@ -1,7 +1,32 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, h_resizable, resizable_panel, InputState, Input, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
-import { spaces, panes, focused, props, exec, readTextFile, watchFolder, theme, settings, run, setShared, shared } from "herdr";
+import { spaces, panes, focused, props, exec, readTextFile, watchFolder, theme, settings, run, setShared, shared, layout } from "herdr";
 import { markColor, changeColor, withAlpha, UI, TYPE, SIZE } from "./colors.js";
+
+const MOD = "my-changes";
+// The scan interval for a shown copy; hidden copies catch up from `render`.
+const POLL_MS = 10000;
+// A save is several watch events; scan once after the burst.
+const WATCH_DEBOUNCE_MS = 150;
+
+// A stack draws one child. Herdr gives a block no "is this shown" flag, so walk
+// the current layout: only the active child of every stack is visible. A hidden
+// Changes copy used to run git status/diff/for-each-ref every 10 s.
+function shownInLayout(mod) {
+  const pending = [layout()];
+  while (pending.length) {
+    const node = pending.pop();
+    if (!node || node.hidden) continue;
+    if (node.content?.mod === mod) return true;
+    if (node.type === "stack") {
+      const child = node.children?.find((c) => c.id === node.active);
+      if (child) pending.push(child);
+    } else {
+      for (const child of node.children ?? []) pending.push(child);
+    }
+  }
+  return false;
+}
 
 
 // 工作区固定视图跟随当前终端目录；旧版独立工具 Tab 保留自己的根目录和选中文件。
@@ -29,7 +54,13 @@ const keyOf = (loc) => JSON.stringify(loc);
 // Reads write nothing under .git (no index refresh or lock, no fsmonitor cookie):
 // the folder watch would see it, and every refresh would start the next one.
 const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "diff.autoRefreshIndex=false"];
-const countLines = (text) => text ? text.split("\n").length - Number(text.endsWith("\n")) : 0;
+// `split("\n")` allocated the whole file again just to count lines.
+const countLines = (text) => {
+  if (!text) return 0;
+  let n = 1;
+  for (let i = text.indexOf("\n"); i !== -1; i = text.indexOf("\n", i + 1)) n++;
+  return text.endsWith("\n") ? n - 1 : n;
+};
 
 // Numbers each diff line once, so a frame only draws the rows on screen.
 function diffRows(lines) {
@@ -135,8 +166,18 @@ export default class Changes extends View {
     // Several copies can be open, one per tab: keep their element ids apart so a
     // click or scrollbar in one never lands on another's list.
     this.uid = Math.random().toString(36).slice(2, 7);
+    this.refreshedAt = 0;
+    this.shownBefore = false;
+    this.reload = false;
+    this.watchPending = false;
     this.refresh(cx);
-    cx.timer.every(10000, (cx) => this.refresh(cx));
+    cx.timer.every(POLL_MS, (cx) => this.refresh(cx));
+  }
+
+  // A workspace copy is drawn only while its stack shows it; the legacy tool tab
+  // is a pane, and `location` already reports null while another tab is in front.
+  visible() {
+    return !this.workspace || shownInLayout(MOD);
   }
 
   watch(root, cx) {
@@ -146,9 +187,19 @@ export default class Changes extends View {
       try {
         while (this.watched === root) {
           await watchFolder(root);
-          if (this.watched === root) this.refresh(cx);
+          if (this.watched === root) this.refreshSoon(cx);
         }
       } catch { this.watched = null; }
+    });
+  }
+
+  // Coalesce the events a save produces into one scan.
+  refreshSoon(cx) {
+    if (this.watchPending) return;
+    this.watchPending = true;
+    cx.timer.after(WATCH_DEBOUNCE_MS, (cx) => {
+      this.watchPending = false;
+      this.refresh(cx);
     });
   }
 
@@ -167,6 +218,12 @@ export default class Changes extends View {
   }
 
   refresh(cx, loc, context) {
+    // Behind another stack child nothing here is on screen. `render` checks
+    // `refreshedAt` when the view comes forward, so the catch-up is immediate.
+    if (!this.visible()) {
+      this.shownBefore = false;
+      return;
+    }
     // While another tab is in front, keep the folder this copy already shows.
     loc ??= location(this.tab, this.openedAt, this.workspace) ?? this.lastLoc;
     if (!loc) return;
@@ -175,7 +232,12 @@ export default class Changes extends View {
     // The mode is part of the identity: switching to a branch (or back to the
     // working tree) empties the list and scans again.
     context ??= `${folder}|${this.compareRef ?? this.compare ?? ""}`;
-    if (this.loading || this.busy) return;
+    this.refreshedAt = Date.now();
+    if (this.loading || this.busy) {
+      // A change arrived while a scan or a commit was out; scan once more after.
+      this.reload = true;
+      return;
+    }
     const { cwd, on } = loc;
     if (context !== this.context) {
       this.context = context; this.root = null; this.files = []; this.open = null;
@@ -184,6 +246,7 @@ export default class Changes extends View {
     }
     if (!cwd) return;
     this.loading = true;
+    this.reload = false;
     cx.spawn(async (cx) => {
       try {
         const top = await exec("git", ["rev-parse", "--show-toplevel"], { cwd, on });
@@ -277,7 +340,14 @@ export default class Changes extends View {
           if (picked && this.context === context) this.scroll.scroll_to_item(0);
         }
       } catch (e) { if (this.context === context) this.error = String(e); }
-      finally { this.loading = false; cx.notify(); }
+      finally {
+        this.loading = false;
+        cx.notify();
+        if (this.reload) {
+          this.reload = false;
+          this.refresh(cx);
+        }
+      }
     });
   }
 
@@ -318,7 +388,13 @@ export default class Changes extends View {
   setLines(lines) {
     this.rows = diffRows(lines);
     this.changes = changeStarts(this.rows);
-    this.diffWidth = Math.max(300, ...lines.map(line => line.length * TYPE.small * 0.65 + 72));
+    // `Math.max(300, ...lines.map(...))` built a second array of every row.
+    let width = 300;
+    for (const line of lines) {
+      const w = line.length * TYPE.small * 0.65 + 72;
+      if (w > width) width = w;
+    }
+    this.diffWidth = width;
   }
 
   pick(path, cx) {
@@ -482,19 +558,26 @@ export default class Changes extends View {
       const at = panes().find(p => p.pane === f.pane);
       if (!this.workspace && at && !at.terminal && at.mod === "my-changes") this.tab = f.tab;
     }
-    const now = location(this.tab, this.openedAt, this.workspace);
+    // Nothing read from the host is drawn while another stack child is in
+    // front, and the hidden copy must not start a scan from a render either.
+    const shown = this.visible();
+    const now = shown ? location(this.tab, this.openedAt, this.workspace) : null;
     if (now) this.lastLoc = now;
     const loc = now ?? this.lastLoc;
-    if (loc) {
+    if (shown && loc) {
       // A different folder also clears any branch comparison (place does that),
       // so the mode is read after it.
       const next = `${this.place(loc)}|${this.compareRef ?? this.compare ?? ""}`;
+      const stale = Date.now() - this.refreshedAt >= (this.shownBefore ? POLL_MS : 1000);
       // While a load or commit is out, the context is cleared as soon as the
       // place changes: results for the old folder are then discarded even though
       // the new refresh cannot start until the old one finishes.
       if (next !== this.context && (this.loading || this.busy)) this.context = null;
       if (next !== this.context) this.refresh(cx, loc, next);
+      // Hidden while the timer ran (or just came forward): catch up at once.
+      else if (stale) this.refresh(cx, loc, next);
     }
+    this.shownBefore = shown;
     const t = theme(), add = this.files.reduce((n, f) => n + f.add, 0), del = this.files.reduce((n, f) => n + f.del, 0);
     const enabled = Boolean(this.message.trim() && this.root && !this.busy && !this.loading);
     const filesId = `changes-files-${this.uid}`, diffId = `changes-diff-${this.uid}`;

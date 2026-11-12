@@ -305,6 +305,29 @@ for (const [mod, name] of [["my-files", "Files"], ["my-changes", "Changes"]]) {
   });
 }
 
+for (const mod of ["my-files", "my-changes"]) {
+  test(`${mod} 只在 stack 显示自己时刷新`, () => {
+    const stack = {
+      type: "stack", id: "work-body", active: "main",
+      children: [
+        { id: "main", type: "block", content: { tab: "active" } },
+        { id: "files", type: "block", content: { mod: "my-files" } },
+        { id: "changes", type: "block", content: { mod: "my-changes" } },
+      ],
+    };
+    const doc = { type: "row", children: [{ type: "column", children: [stack] }] };
+    const { shownInLayout } = load(`mods/${mod}/main.js`, "shownInLayout", { layout: () => doc });
+    // Another stack child is in front, or the whole column is hidden: no scan.
+    assert.equal(shownInLayout(mod), false);
+    stack.active = mod === "my-files" ? "files" : "changes";
+    assert.equal(shownInLayout(mod), true);
+    // A sibling view is shown, not this one.
+    assert.equal(shownInLayout(mod === "my-files" ? "my-changes" : "my-files"), false);
+    doc.children[0].hidden = true;
+    assert.equal(shownInLayout(mod), false);
+  });
+}
+
 test("Changes 把连续的新增/删除行归为一个变动块", () => {
   const { changeStarts } = load("mods/my-changes/main.js", "changeStarts", {});
   const rows = [
