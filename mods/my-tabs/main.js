@@ -1,16 +1,35 @@
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, panes, focused, run, openOverlay, theme, window, shared, layout, settings, exec } from "herdr";
+import { spaces, panes, focused, run, openOverlay, theme, window, shared, layout, settings, exec, knownAgents } from "herdr";
 import { markColor, withAlpha, UI, TYPE, SIZE } from "./colors.js";
 
-// The quick starts, in a fixed order. Each one runs the command it is checked
-// against, so the bar only offers programs this machine actually has.
-const STARTS = [
-  { id: "start-claude", label: "Claude Code", icon: "icons/claude.svg", tint: false, command: "claude", argv: ["claude", "--dangerously-skip-permissions"] },
-  { id: "start-pi", label: "Pi", icon: "icons/pi.svg", tint: true, command: "pi", argv: ["pi"] },
-  { id: "start-lazygit", label: "Lazygit", icon: "icons/lazygit.svg", tint: true, command: "lazygit", argv: ["lazygit"] },
-  { id: "start-nvim", label: "Neovim", icon: "icons/nvim.svg", tint: true, command: "nvim", argv: ["nvim"] },
+// Agents that keep the first slots, and the one start that wants its own
+// arguments rather than the program table's `run`.
+const LEADING = ["claude", "pi"];
+const ARGV = { claude: ["claude", "--dangerously-skip-permissions"] };
+
+// Tools Herdr does not list with a `run`, so `knownAgents` cannot answer for
+// them: the bar checks their command on PATH instead.
+const TOOLS = [
+  { key: "lazygit", label: "Lazygit", icon: "icons/lazygit.svg", tint: true, command: "lazygit", argv: ["lazygit"] },
+  { key: "nvim", label: "Neovim", icon: "icons/nvim.svg", tint: true, command: "nvim", argv: ["nvim"] },
 ];
+
+// Until `knownAgents` answers (or when it cannot), the PATH check still keeps
+// the original four starts honest.
+const FALLBACK = [
+  { key: "claude", label: "Claude Code", icon: "icons/claude.svg", tint: false, command: "claude", argv: ARGV.claude },
+  { key: "pi", label: "Pi", icon: "icons/pi.svg", tint: true, command: "pi", argv: ["pi"] },
+  ...TOOLS,
+];
+
+// What the bar shows now, so a check only redraws when it changed.
+function signature(agents, hidden) {
+  return JSON.stringify([
+    agents ? [...agents.values()].map(a => [a.key, a.name, a.icon, a.tint, a.run]) : null,
+    [...hidden].sort(),
+  ]);
+}
 
 // Which of `commands` this machine can start. `command -v` also sees shell
 // functions, and Herdr's `exec` carries the user's login PATH, so a Homebrew or
@@ -52,8 +71,10 @@ export default class Tabs extends View {
     this.pressed = null;
     this.over = null;
     this.compact = false;
-    // Commands this machine does not have: their quick starts are hidden.
-    // Empty until the first answer, so the bar never drops a button it has.
+    // The agents this machine has (`knownAgents`, null until it answers) and
+    // the tool commands PATH is missing. Both start empty, so the bar never
+    // drops a button the first check has not covered yet.
+    this.agents = null;
     this.hidden = new Set();
     this.checking = false;
     this.ready = this.check(cx);
@@ -65,16 +86,26 @@ export default class Tabs extends View {
     if (this.checking) return;
     this.checking = true;
     try {
-      const found = await installed(STARTS.map(s => s.command));
-      const hidden = STARTS.filter(s => !found.has(s.command)).map(s => s.command);
-      // Only redraw when a button actually appears or goes away.
-      if (hidden.length !== this.hidden.size || hidden.some(c => !this.hidden.has(c))) {
-        this.hidden = new Set(hidden);
-        cx.notify();
+      const before = signature(this.agents, this.hidden);
+      try {
+        // Herdr's own answer, for every agent its program table can start:
+        // the same list (and the same login-shell check) its menus use.
+        if (typeof knownAgents === "function") {
+          const list = await knownAgents();
+          this.agents = new Map(list.filter(a => a.installed).map(a => [a.key, a]));
+        }
+      } catch {
+        // Keep the last answer; while there is none, the PATH fallback below
+        // still decides the original four.
       }
-    } catch {
-      // Herdr does not cache a failed check, so the next one asks again. Until
-      // it answers, keep showing what the last one (or the bar) offered.
+      try {
+        const found = await installed(FALLBACK.map(s => s.command));
+        this.hidden = new Set(FALLBACK.filter(s => !found.has(s.command)).map(s => s.command));
+      } catch {
+        // Herdr does not cache a failed check, so the next one asks again.
+        // Until it answers, keep showing what the last one (or the bar) offered.
+      }
+      if (signature(this.agents, this.hidden) !== before) cx.notify();
     } finally {
       this.checking = false;
     }
@@ -257,10 +288,25 @@ export default class Tabs extends View {
     const newTab = ghostAction("tab-new", "New tab", div().text_size(17).line_height("18px").child("+"), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }));
     // One-click starts beside the +, using the program table's own icons: the
     // shipped tinted glyphs inherit the button's colour, Claude's stays orange.
-    const launch = (id, label, icon, tint, argv) => ghostAction(id, label, tint ? svg(icon).size(14).flex_none() : image(icon).size(14), () => { showMain(); run("tab.new", { space: space?.id, argv }); });
-    const launches = STARTS
-      .filter(s => !this.hidden.has(s.command))
-      .map(s => launch(s.id, s.label, s.icon, s.tint, s.argv));
+    const launch = (key, label, icon, tint, argv) => ghostAction(`start-${key}`, label, tint ? svg(icon).size(14).flex_none() : image(icon).size(14), () => { showMain(); run("tab.new", { space: space?.id, argv }); });
+    const launches = [];
+    if (this.agents) {
+      // Every agent Herdr can start, installed only. The leading two keep
+      // their slots; the rest arrive in Herdr's own (most picked first) order.
+      const add = (a) => launches.push(launch(a.key, a.name, a.icon ?? "icons/agent.svg", a.icon ? a.tint : true, ARGV[a.key] ?? a.run));
+      for (const key of LEADING) {
+        const a = this.agents.get(key);
+        if (a) add(a);
+      }
+      for (const a of this.agents.values()) if (!LEADING.includes(a.key)) add(a);
+    } else {
+      for (const s of FALLBACK) if (!this.hidden.has(s.command)) launches.push(launch(s.key, s.label, s.icon, s.tint, s.argv));
+    }
+    // Lazygit and Neovim have no `run` in the program table, so `knownAgents`
+    // never lists them: PATH decides. (The fallback above already added them.)
+    if (this.agents) for (const s of TOOLS) {
+      if (!this.agents.has(s.key) && !this.hidden.has(s.command)) launches.push(launch(s.key, s.label, s.icon, s.tint, s.argv));
+    }
     return h_flex().id("tabs-bar").size_full().min_w(0).gap(8).pl(left).pr(8).items_center()
       .on_size_change((size, cx) => {
         const compact = size.width < 680;

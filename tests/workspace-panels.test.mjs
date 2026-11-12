@@ -39,7 +39,12 @@ function find(root, id) {
   }
 }
 
-function fixture({ legacy = false, available = ["claude", "pi", "lazygit", "nvim"], fail = false, platform = "macos" } = {}) {
+const AGENTS = [
+  { key: "claude", name: "Claude Code", icon: "icons/claude.svg", tint: false, run: ["claude"], installed: true },
+  { key: "pi", name: "Pi", icon: "icons/pi.svg", tint: true, run: ["pi"], installed: true },
+];
+
+function fixture({ legacy = false, available = ["claude", "pi", "lazygit", "nvim"], agents = AGENTS, agentsFail = false, fail = false, platform = "macos" } = {}) {
   const layout = JSON.parse(read("layouts/likeme.json"));
   const body = layout.children.find(n => n.id === "work").children.find(n => n.id === "work-body");
   const tabs = [{ id: "one", name: "1", active: true }, { id: "two", name: "2", active: false }];
@@ -68,6 +73,10 @@ function fixture({ legacy = false, available = ["claude", "pi", "lazygit", "nvim
       if (fail) throw new Error("no shell");
       if (command === "where") return { code: available.includes(args[0]) ? 0 : 1, stdout: "", stderr: "" };
       return { code: 0, stdout: available.map(c => `${c}\n`).join(""), stderr: "" };
+    },
+    knownAgents: async () => {
+      if (agentsFail) throw new Error("no agents");
+      return agents;
     },
     // The tab bar imports these from colors.js; the loader strips imports, so
     // the fixture hands the mod the real tokens.
@@ -237,13 +246,38 @@ test("加号保留菜单行为，快捷启动先返回终端再创建普通 Tab"
 });
 
 test("快捷启动只显示这台机器装了的命令", async () => {
-  const f = fixture({ available: ["claude", "nvim"] });
+  const f = fixture({
+    agents: [{ ...AGENTS[0] }, { ...AGENTS[1], installed: false }],
+    available: ["nvim"],
+  });
   await f.view.ready;
   assert.deepEqual(find(f.render(), "tab-launches").nodes.map(n => n.key), ["start-claude", "start-nvim"]);
 });
 
-test("安装检测失败时保留全部快捷启动，不误藏入口", async () => {
-  const f = fixture({ fail: true });
+test("knownAgents 里已安装的其他 agent 自动出现，未安装的不出现", async () => {
+  const f = fixture({
+    agents: [
+      ...AGENTS,
+      { key: "codex", name: "Codex", icon: "icons/codex.svg", tint: false, run: ["codex", "--no-daemon"], installed: true },
+      { key: "gemini", name: "Gemini", icon: "icons/gemini.svg", tint: true, run: ["gemini"], installed: false },
+    ],
+  });
+  await f.view.ready;
+  assert.deepEqual(find(f.render(), "tab-launches").nodes.map(n => n.key), [
+    "start-claude", "start-pi", "start-codex", "start-lazygit", "start-nvim",
+  ]);
+  // 启动参数取程序表的 run；Claude 的入口仍带自己的参数。
+  f.click("start-codex");
+  assert.deepEqual(f.commands.at(-1), { name: "tab.new", args: { space: "space", argv: ["codex", "--no-daemon"] } });
+  f.click("start-claude");
+  assert.deepEqual(f.commands.at(-1), {
+    name: "tab.new",
+    args: { space: "space", argv: ["claude", "--dangerously-skip-permissions"] },
+  });
+});
+
+test("安装检测失败时回退到 PATH 并保留全部快捷启动", async () => {
+  const f = fixture({ agentsFail: true, fail: true });
   await f.view.ready;
   assert.deepEqual(find(f.render(), "tab-launches").nodes.map(n => n.key), [
     "start-claude", "start-pi", "start-lazygit", "start-nvim",
@@ -251,7 +285,7 @@ test("安装检测失败时保留全部快捷启动，不误藏入口", async ()
 });
 
 test("Windows 用 where 判断安装", async () => {
-  const f = fixture({ platform: "windows", available: ["pi"] });
+  const f = fixture({ platform: "windows", agentsFail: true, available: ["pi"] });
   await f.view.ready;
   assert.deepEqual(find(f.render(), "tab-launches").nodes.map(n => n.key), ["start-pi"]);
 });

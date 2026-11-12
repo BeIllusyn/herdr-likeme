@@ -115,13 +115,14 @@ These six are meant to be read:
   15 s, and watches local git repos with `watchFolder`. The agents half uses Herdr's
   live agent/terminal data. Both use shipped SVGs; it reads git metadata and the local
   machine list and sends nothing over the network.
-- **`my-tabs`** uses Herdr's live tab/pane data and shipped SVGs. Its four quick
-  starts ask Herdr (`tab.new`) to open Claude Code, Pi, Lazygit or Neovim in a new
-  tab; one appears only while its command answers a PATH check (`sh -c` here,
-  `where` on Windows) once a minute, so a machine without it never offers it.
-  Files／Changes 固定入口使用 `layout.select` 切换工作区内容，不创建或关闭
-  Tab；升级前已存在的工具 Tab 会保留并由固定入口复用。Mod 只为安装检查运行 `exec`，
-  不使用网络。
+- **`my-tabs`** uses Herdr's live tab/pane data and shipped SVGs. Its quick
+  starts are every agent Herdr can start and this machine has (`knownAgents`,
+  the same list its menus use, so an installed Codex, Gemini or a custom
+  programs.json entry appears on its own), plus Lazygit and Neovim, whose
+  command is checked on PATH once a minute. Claude starts with
+  `--dangerously-skip-permissions`. Files／Changes 固定入口使用 `layout.select`
+  切换工作区内容，不创建或关闭 Tab；升级前已存在的工具 Tab 会保留并由固定入口复用。
+  Mod 只为安装检查运行 `exec`，不使用网络。
 - **`my-pane`** is a clone of the shipped pane header; it reads the same live pane
   data, mixes 6 % of the space's colour into the focused header and colours its icon,
   and carries its own split/zoom/close SVGs. No `exec`, no network.

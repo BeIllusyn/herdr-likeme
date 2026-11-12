@@ -68,8 +68,8 @@ The 30 px elapsed-time / pin slot stays fixed, as does the status area.
 **Tabs.** Tabs are 32 px high with a 7 px radius, 10 px horizontal padding, 12 px
 labels and 4 px gaps. Selection is the shared neutral fill and a semibold name.
 Close buttons rest at 40% opacity (70% active), with red hover feedback. The 28 px
-New tab button follows the tabs, then the quick starts this machine has (Claude
-Code, Pi, Lazygit, Neovim) in a group behind a short hairline. Files / Changes stay fixed at the right with 14 px icons. Below 680 px of
+New tab button follows the tabs, then the agents this machine has, plus Lazygit and
+Neovim, in a group behind a short hairline. Files / Changes stay fixed at the right with 14 px icons. Below 680 px of
 bar width, their labels collapse; tooltips and actions remain available. Size
 notifications redraw only when crossing that threshold. The scroll thumb appears
 on hover. Status slots remain 16 px so status turns do not change tab widths.
@@ -131,13 +131,13 @@ closing the layout ends its timers and directory watches.
   will land on, double-click renames, right-click opens the tab menu, every close
   button closes its own tab. A tab still named by its number is shown by what it runs,
   so "1" becomes the folder or program name; renaming a tab always wins. The `+` opens
-  Herdr's `new-menu` popup, and the one-click starts this machine has follow it
-  (Claude Code, Pi, Lazygit, Neovim): each runs `tab.new` with its `argv`, so Herdr
-  opens a tab in the focused folder, and each uses the program table's own icon
-  (`icons/claude.svg` as a full-colour image, the rest as tinted glyphs). Claude
-  starts with `--dangerously-skip-permissions`, so it never stops for a permission
-  prompt. A start is offered only while its command answers a PATH check (`sh -c
-  "command -v …"` here, `where` on Windows) once a minute; a failed check keeps the
+  Herdr's `new-menu` popup, and the one-click starts this machine has follow it.
+  The agents come from `knownAgents()` — Herdr's own list of what the program table
+  can start, installed only — so Codex, Gemini or a custom `programs.json` entry
+  shows up on its own, with the table's `run` and icon. Claude and Pi keep the first
+  slots; Claude still starts with `--dangerously-skip-permissions`. Lazygit and
+  Neovim have no `run` in the table, so their command is checked on PATH (`sh -c
+  "command -v …"` here, `where` on Windows) once a minute. A failed check keeps the
   last answer rather than hiding entries.
 - **Pane header.** Click focuses the pane. Only the focused header is mixed with 6 % of
   the space's colour, brightens its title to `foreground`/600 and takes the space colour
@@ -205,7 +205,7 @@ Herdr 保留隐藏的子视图实例，并保存 stack 的选择。
 
 Herdr functions used: `spaces`, `agents`, `terminals`, `panes`, `focused`, `layout`,
 `theme`, `window`, `settings`, `keys`, `home`, `shared` / `setShared`, `setAgentOrder`,
-`run`, `openOverlay` / `closeOverlay`, `props`, `exec`, `readTextFile`,
+`run`, `openOverlay` / `closeOverlay`, `props`, `exec`, `knownAgents`, `readTextFile`,
 `writeTextFile`, `hc`, `watchFolder`, `localStorage`.
 
 Commands used: `space.select`, `space.move`, `space.new`, `tab.new`, `tab.select`,
@@ -214,9 +214,10 @@ Commands used: `space.select`, `space.move`, `space.new`, `tab.new`, `tab.select
 `window.maximize`, `window.close`, `app.palette`.
 
 Programs run: `git` (via `exec`), `hc machine ls` (via `hc`), and `sh -c "command -v …"`
-(via `exec`; `where` on Windows) to decide which quick starts to show. The quick
-starts ask Herdr to run `claude --dangerously-skip-permissions`, `pi`, `lazygit` and
-`nvim` (`tab.new`'s `argv`); the mod never spawns them itself.
+(via `exec`; `where` on Windows) to decide whether Lazygit and Neovim are there.
+`knownAgents()` supplies every other agent's installed flag. The quick starts ask
+Herdr to run the agents' `run` (Claude with `--dangerously-skip-permissions`) and
+`lazygit` / `nvim` (`tab.new`'s `argv`); the mod never spawns them itself.
 
 Art: Herdr's shipped `mods/workspace-chrome/*.svg` (branch, git-compare, plus,
 chevron-down/right, pin, pin-off, server, monitor, check, layers, settings),
