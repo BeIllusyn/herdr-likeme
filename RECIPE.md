@@ -305,7 +305,10 @@ copies for Windows.
 - **The diff is the whole file.** `git diff -U1000000` makes every unchanged line
   context, cut at 20,000 rows and 4,000 characters per line. The header's `↑`／`↓`
   walk the contiguous `+`／`-` blocks (`changeStarts`); `v_virtual_list` is driven by a
-  `VirtualListScrollHandle` created in `init`. The Files button writes
+  `VirtualListScrollHandle` created in `init`. Changes measures its longest line in
+  display cells (tab 4, full-width 2) for the horizontal scroll range, so a CJK or
+  emoji line is not cut short; that width is a floor, and a wider panel stretches
+  every row to its own edge. The Files button writes
   `shared("files.open") = { root, path, at }` and selects the `files` stack view;
   `my-files` accepts the request only in the workspace copy and ignores anything older
   than 30 s, because `shared.json` survives a restart. Files' own `Diff` toggle runs

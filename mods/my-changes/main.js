@@ -62,6 +62,26 @@ const countLines = (text) => {
   return text.endsWith("\n") ? n - 1 : n;
 };
 
+// 制表符按四格、全角字符和 emoji 按两格计宽。按字符串长度量宽度时，中文行
+// 会被低估近一半，即使面板已经很宽也仍被省略号截断。
+function textCells(text) {
+  let n = 0;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code === 9) n += 4;
+    else if (code < 0x80) n += 1;
+    else {
+      const cp = code >= 0xd800 && code <= 0xdbff ? text.codePointAt(i) : code;
+      if (cp > 0xffff) i++;
+      n += (cp > 0xffff || (cp >= 0x1100 && cp <= 0x115f) || (cp >= 0x2e80 && cp <= 0xa4cf)
+        || (cp >= 0xac00 && cp <= 0xd7a3) || (cp >= 0xf900 && cp <= 0xfaff)
+        || (cp >= 0xfe30 && cp <= 0xfe6f) || (cp >= 0xff00 && cp <= 0xff60)
+        || (cp >= 0xffe0 && cp <= 0xffe6)) ? 2 : 1;
+    }
+  }
+  return n;
+}
+
 // Numbers each diff line once, so a frame only draws the rows on screen.
 function diffRows(lines) {
   let old = 0, next = 0;
@@ -389,9 +409,11 @@ export default class Changes extends View {
     this.rows = diffRows(lines);
     this.changes = changeStarts(this.rows);
     // `Math.max(300, ...lines.map(...))` built a second array of every row.
+    // The width is a floor for horizontal scrolling; once the panel is wider,
+    // the rows stretch to it, so a line ellipsizes only when it truly does not fit.
     let width = 300;
     for (const line of lines) {
-      const w = line.length * TYPE.small * 0.65 + 72;
+      const w = textCells(line) * TYPE.small * 0.65 + 72;
       if (w > width) width = w;
     }
     this.diffWidth = width;
@@ -478,7 +500,7 @@ export default class Changes extends View {
       .on_click((_e, cx) => { this.pickerOpen = !this.pickerOpen; cx.notify(); })
       .child(svg(comparing ? "mods/workspace-chrome/branch.svg" : "mods/workspace-chrome/git-compare.svg").size(12).flex_none().text_color(comparing ? accent : t.muted))
       .child(div().flex_1().min_w(0).truncate().text_size(TYPE.small).font_weight(comparing ? 600 : 400).text_color(comparing ? t.foreground : t.muted).child(comparing ? this.compare : "Working tree"))
-      .when(Boolean(this.current), (el) => el.child(div().flex_none().min_w(0).max_w(104).truncate().text_size(TYPE.label).text_color(t.dim).child(comparing ? `vs ${this.current}` : this.current)))
+      .when(Boolean(this.current), (el) => el.child(div().min_w(0).truncate().text_size(TYPE.label).text_color(t.dim).tooltip(comparing ? `vs ${this.current}` : this.current).child(comparing ? `vs ${this.current}` : this.current)))
       .child(svg("mods/workspace-chrome/chevron-down.svg").size(10).flex_none().text_color(t.dim));
   }
 
@@ -499,7 +521,7 @@ export default class Changes extends View {
     const caption = (label, right) => h_flex().h(26).flex_none().px(7).gap(6).items_center()
       .child(div().text_size(TYPE.label).font_weight(600).text_color(t.muted).child(label))
       .child(div().flex_1())
-      .when(Boolean(right), (el) => el.child(div().max_w(132).min_w(0).truncate().text_size(TYPE.label).text_color(t.dim).child(right)));
+      .when(Boolean(right), (el) => el.child(div().min_w(0).truncate().text_size(TYPE.label).text_color(t.dim).tooltip(right).child(right)));
     return v_flex().flex_1().min_h(0).overflow_y_scrollbar().gap(1)
       .child(caption("COMPARE WITH", this.current))
       .child(row("worktree", "Working tree", !this.compare, "mods/changes/changes.svg", (cx) => this.setBase(null, cx)))
@@ -532,7 +554,7 @@ export default class Changes extends View {
         .text_size(TYPE.label).font_weight(600).text_color(status).child(f.status))
       .child(h_flex().flex_1().min_w(0).gap(6).items_center()
         .child(div().flex_1().min_w(0).truncate().text_size(TYPE.small).font_weight(on ? 600 : 400).text_color(on ? t.foreground : t.muted).child(name))
-        .when(Boolean(dir), (e) => e.child(div().max_w(80).min_w(0).truncate().text_size(TYPE.label).text_color(t.dim).child(dir))))
+        .when(Boolean(dir), (e) => e.child(div().min_w(0).truncate().text_size(TYPE.label).text_color(t.dim).child(dir))))
       .when(f.add > 0, (e) => e.child(div().text_size(TYPE.label).text_color(t.ansi2).child(`+${f.add}`)))
       .when(f.del > 0, (e) => e.child(div().text_size(TYPE.label).text_color(t.ansi1).child(`−${f.del}`)));
   }
@@ -654,7 +676,7 @@ export default class Changes extends View {
       .child(svg("mods/my-changes/changes.svg").size(13).flex_none().text_color(accent))
       .child(h_flex().flex_1().min_w(0).items_center()
         .when(Boolean(dir), (el) => el.child(div().min_w(0).truncate().text_size(TYPE.meta).text_color(t.muted).child(dir)))
-        .child(div().min_w(0).max_w(260).truncate().text_size(TYPE.small).font_weight(600).text_color(t.foreground).tooltip(this.open ?? "").child(leaf)))
+        .child(div().min_w(0).truncate().text_size(TYPE.small).font_weight(600).text_color(t.foreground).tooltip(this.open ?? "").child(leaf)))
       .child(h_flex().flex_none().gap(2).p(2).rounded(7).bg(withAlpha(t.foreground, UI.subtle))
         .child(diffButton("prev", "↑", "Previous change", this.changes.length > 0, () => this.step(-1, cx)))
         .child(diffButton("next", "↓", "Next change", this.changes.length > 0, () => this.step(1, cx))))

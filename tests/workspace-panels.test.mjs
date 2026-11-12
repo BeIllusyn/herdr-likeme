@@ -357,6 +357,16 @@ test("Changes 用整个文件作为 diff 上下文", async () => {
   assert.deepEqual(Array.from(changes.changes), [1]);
 });
 
+test("Changes 按显示格数测量 diff 宽度，中文长行不会因低估而截断", () => {
+  const { Changes } = load("mods/my-changes/main.js", "Changes", { TYPE });
+  const changes = new Changes();
+  const line = "+" + "中".repeat(120);
+  changes.setLines([line]);
+  const cell = TYPE.small * 0.65;
+  // 120 个全角字符占 240 格；按 UTF-16 长度只量出 120 格时，面板再宽也放不下。
+  assert.ok(changes.diffWidth >= 240 * cell);
+});
+
 test("Changes 列出本地与远端分支，跳过符号引用并标出当前分支", () => {
   const { branchEntries } = load("mods/my-changes/main.js", "branchEntries", {});
   const branches = branchEntries([
