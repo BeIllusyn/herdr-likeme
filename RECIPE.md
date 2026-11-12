@@ -98,7 +98,10 @@ uses 24 px segments in a 28 px track; save status keeps a 76 px slot with a smal
 status dot. Changes groups its previous / next controls. Both diff views use 12 px
 monospace text and 22 px rows, with room for five-digit line numbers and coloured
 addition / deletion signs. Both diff views use the same 18% wash; the side-by-side
-comparison keeps it on the changed half under 28 px BEFORE / AFTER captions.
+comparison keeps it on the changed half under 28 px BEFORE / AFTER captions, and
+its halves scroll horizontally on their own: line numbers and signs stay pinned,
+and the divider between them drags to set each half's width. A long line is read
+in full instead of being ellipsized.
 
 Empty previews share a 40 px rounded icon tile, a 13 px title and 11 px guidance.
 Changes shows All caught up only after a successful refresh finds a clean tree.
@@ -158,6 +161,8 @@ closing the layout ends its timers and directory watches.
   旧版已存在的单独工具 Tab 从普通列表中隐藏，由固定入口复用，避免丢失编辑和分栏状态。
   Files 预览标题行的 `Edit｜Diff` 分段开关把编辑器切成“变更前／变更后”两栏：左侧旧文件、
   右侧工作区文件，删除/新增各占半边并带底色，未跟踪文件整份算新增；点 `Edit` 回到编辑器。
+  两栏各自水平滚动（行号和 +/- 固定在原处），中间的分割线可以拖动来调整左右宽度，
+  长行不再被省略号截断。
 - Everything else (the palette, dialogs and notifications) is unchanged from `main`.
 
 ## Built from

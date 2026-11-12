@@ -387,10 +387,11 @@ test("Files 把 diff 行配成变更前/后的两栏", () => {
 test("Files 的对比模式读取整个文件的 diff", async () => {
   const calls = [];
   const { Files } = load("mods/my-files/main.js", "Files", {
+    TYPE,
     exec: async (_cmd, args) => {
       calls.push(args);
       if (args[0] === "rev-parse") return { code: 0, stdout: "abc", stderr: "" };
-      return { code: 0, stderr: "", stdout: "@@ -1,1 +1,1 @@\n-a\n+b\n" };
+      return { code: 0, stderr: "", stdout: "@@ -1,1 +1,1 @@\n-a-long-line\n+b\n" };
     },
   });
   const tasks = [];
@@ -399,18 +400,24 @@ test("Files 的对比模式读取整个文件的 diff", async () => {
   Object.assign(files, {
     root: "/repo", fileRoot: "/repo", file: "a.txt", gitTop: "/repo", on: null,
     context: "ctx", diffMode: true, marks: { "/repo/a.txt": "M" }, diffSeq: 0,
+    diffX: { left: 200, right: 300 }, diffText: { left: 1, right: 1 },
   });
   files.loadDiff(cx);
+  // 换文件后两栏都回到最左边，并按新内容重新量宽度。
+  assert.deepEqual({ ...files.diffX }, { left: 0, right: 0 });
   await tasks[0](cx);
   assert.ok(calls.some(args => args.includes("-U1000000")));
   assert.equal(files.diffPairs.length, 1);
-  assert.equal(files.diffPairs[0].left.text, "a");
+  assert.equal(files.diffPairs[0].left.text, "a-long-line");
   assert.equal(files.diffPairs[0].right.text, "b");
+  assert.equal(files.diffText.left, Math.ceil(11 * TYPE.small * 0.65));
+  assert.ok(files.diffText.left > files.diffText.right);
 });
 
-test("Files 的并排对比行给删除/新增半边着色", () => {
+test("Files 的并排对比行给删除/新增半边着色，长行不省略、按侧偏移", () => {
   const { Files } = load("mods/my-files/main.js", "Files", { div: element, h_flex: element, withAlpha, UI, TYPE, SIZE });
   const files = new Files();
+  Object.assign(files, { splitFrac: 0.5, compareW: 800, diffX: { left: 30, right: 0 }, diffText: { left: 1000, right: 600 } });
   const theme = { ansi1: "#e06c75", ansi2: "#98c379", dim: "#999999", border: "#333333" };
   const row = files.compareRow({
     left: { kind: "-", oldNumber: 2, text: "old" },
@@ -418,6 +425,64 @@ test("Files 的并排对比行给删除/新增半边着色", () => {
   }, theme);
   assert.equal(row.nodes[0].styles.bg, `#e06c75${UI.diff}`);
   assert.equal(row.nodes[2].styles.bg, `#98c379${UI.diff}`);
+  // 左栏是固定的百分比宽度，右栏吃掉剩余空间。
+  assert.equal(row.nodes[0].styles.w, "50%");
+  assert.ok("flex_none" in row.nodes[0].styles);
+  assert.ok("flex_1" in row.nodes[2].styles);
+  // 行号槽留在原处，文字按本侧距离平滑左移，并且不再用省略号截断。
+  const left = row.nodes[0].nodes;
+  assert.equal(left[0].styles.w, 36);
+  assert.equal(left[2].nodes[0].styles.ml, -30);
+  assert.equal(left[2].nodes[0].styles.w, 1000);
+  assert.equal(left[2].nodes[0].styles.truncate, undefined);
+  assert.equal(row.nodes[2].nodes[2].nodes[0].styles.ml, 0);
+  assert.equal(row.nodes[2].nodes[2].nodes[0].styles.w, 600);
+});
+
+test("Files 水平滚轮只滚指针所在的一栏，位移和方向与宿主一致", () => {
+  const { Files } = load("mods/my-files/main.js", "Files", {});
+  const files = new Files();
+  Object.assign(files, { splitFrac: 0.5, compareW: 800, diffX: { left: 0, right: 0 }, diffText: { left: 1000, right: 1000 } });
+  let stopped = 0, notified = 0;
+  const cx = { stop_propagation: () => stopped++, notify: () => notified++ };
+  const wheel = (delta, x, modifiers = {}) => files.scrollDiff({ delta, modifiers, bounds: { width: 800 }, local_position: { x, y: 10 } }, cx);
+  // 向左滑（delta.x < 0）把这一栏的内容向右推：看后面的文字。
+  wheel({ x: -120, y: 0 }, 100);
+  assert.deepEqual({ ...files.diffX }, { left: 120, right: 0 });
+  wheel({ x: -40, y: 0 }, 600);
+  assert.deepEqual({ ...files.diffX }, { left: 120, right: 40 });
+  // 正的 delta 回退，但不会越过左边界。
+  wheel({ x: 400, y: 0 }, 100);
+  assert.equal(files.diffX.left, 0);
+  // 只滚垂直方向时不动水平位置，也不拦事件。
+  wheel({ x: 0, y: -30 }, 100);
+  assert.equal(files.diffX.left, 0);
+  assert.equal(stopped, 3);
+  // Shift+滚轮：向下滚（delta.y < 0）等同于向右看。
+  wheel({ x: 0, y: -50 }, 100, { shift: true });
+  assert.equal(files.diffX.left, 50);
+  // 最远不超过这一栏最长行减去可见文字宽度的距离。
+  wheel({ x: -99999, y: 0 }, 100);
+  assert.equal(files.diffX.left, files.diffMaxX("left"));
+  assert.equal(notified, 5);
+});
+
+test("Files 的中缝可以拖动，两边至少留出可读宽度", () => {
+  const { Files } = load("mods/my-files/main.js", "Files", {});
+  const files = new Files();
+  Object.assign(files, { splitFrac: 0.5, compareW: 800, diffX: { left: 300, right: 0 }, diffText: { left: 500, right: 500 } });
+  let notified = 0;
+  const cx = { stop_propagation() {}, notify: () => notified++ };
+  files.startSplit({ position: { x: 400, y: 10 } }, cx);
+  assert.deepEqual({ ...files.splitDrag }, { x: 400, frac: 0.5 });
+  files.dragSplit({ position: { x: 300, y: 10 } }, cx);
+  assert.equal(files.splitFrac, 0.375);
+  // 拖过头时停在最小宽度（140 px 或 40% 中较小的那个比例）。
+  files.dragSplit({ position: { x: -1000, y: 10 } }, cx);
+  assert.equal(files.splitFrac, 140 / 800);
+  files.endSplit(cx);
+  assert.equal(files.splitDrag, null);
+  assert.equal(notified, 4);
 });
 
 test("Files 收到 Changes 的打开请求时展开父目录；跨目录时按仓库根预览", () => {

@@ -109,6 +109,10 @@ export default class Files extends View {
     // 预览可以切成“变更前/后”并排对比；gitTop 由刷新时的 git 探测填入。
     this.gitTop = null; this.diffMode = false; this.diffFor = null; this.diffPairs = [];
     this.diffError = null; this.diffLoading = false; this.diffSeq = 0;
+    // 并排对比：中缝可拖动，左右两栏各自记住水平滚动距离；行号槽固定不动，
+    // 所以最长的行也能滚到末尾。compareW 是内容区宽度，拖动时用来换算比例。
+    this.splitFrac = 0.5; this.splitDrag = null; this.compareW = 0;
+    this.diffX = { left: 0, right: 0 }; this.diffText = { left: 0, right: 0 };
     const f = focused(), at = f?.pane ? panes().find(p => p.pane === f.pane) : null;
     if (!this.workspace && at && !at.terminal && at.mod === "my-files") this.tab = f.tab;
     // Several copies can be open, one per tab: keep their element ids apart so a
@@ -266,6 +270,7 @@ export default class Files extends View {
     this.original = null; this.dirty = false; this.saving = false; this.saveError = null; this.editable = false;
     // 对比结果属于上一个文件；切换后清空，打开模式下再读这一份。
     this.diffFor = null; this.diffPairs = []; this.diffError = null; this.diffLoading = false;
+    this.diffX = { left: 0, right: 0 }; this.diffText = { left: 0, right: 0 };
     if (!path || !cx) return;
     if (this.diffMode && this.gitTop) this.loadDiff(cx);
     const context = this.context, root = this.fileRoot, on = this.on;
@@ -328,6 +333,7 @@ export default class Files extends View {
     const rel = relativePath(this.gitTop, `${root}/${path}`);
     const cwd = this.gitTop, on = this.on, context = this.context, seq = ++this.diffSeq;
     this.diffFor = path; this.diffPairs = []; this.diffError = null; this.diffLoading = true;
+    this.diffX = { left: 0, right: 0 }; this.diffText = { left: 0, right: 0 };
     if (!rel) { this.diffLoading = false; this.diffError = "This file is outside the repository"; return; }
     cx.spawn(async cx => {
       let lines = null, error = null;
@@ -355,6 +361,7 @@ export default class Files extends View {
       else {
         const shown = lines.slice(0, MAX_DIFF).map(line => line.length > 4000 ? line.slice(0, 4000) + "… (line truncated)" : line);
         this.diffPairs = diffPairs(diffRows(shown));
+        this.measureDiff();
         if (lines.length > MAX_DIFF) this.diffPairs.push({ note: `… comparison truncated at ${MAX_DIFF} lines` });
       }
       cx.notify();
@@ -364,19 +371,102 @@ export default class Files extends View {
   // 并排对比的一行：左侧是旧文件，右侧是新文件；变化的半边用底色和符号标出。
   compareRow(pair, t) {
     if (pair.note) return div().w_full().h(SIZE.diffRow).flex_none().px(12).truncate().text_color(t.muted).child(pair.note);
-    const cell = (row, tint, number) => h_flex().flex_1().min_w(0).h_full().gap(6).items_center().px(6)
-      .when(Boolean(row) && Boolean(tint), (e) => e.bg(tint))
+    return h_flex().w_full().h(SIZE.diffRow).flex_none()
+      .child(this.compareCell(pair.left, pair.left?.kind === "-" ? withAlpha(t.ansi1, UI.diff) : null, pair.left?.oldNumber, "left", t, `${this.splitFrac * 100}%`))
+      .child(div().w(1).flex_none().bg(withAlpha(t.foreground, UI.field)))
+      .child(this.compareCell(pair.right, pair.right?.kind === "+" ? withAlpha(t.ansi2, UI.diff) : null, pair.right?.newNumber, "right", t, null));
+  }
+
+  // 一侧的格子：行号和 +/- 槽固定，只有文字按该侧自己的水平偏移滚动并被裁剪。
+  // 文字不换行也不省略，长行滚到头就能看到末尾。
+  compareCell(row, tint, number, side, t, width) {
+    const x = Math.min(this.diffX[side], this.diffMaxX(side));
+    return h_flex().h_full().min_w(0).items_center().gap(6).pl(6).pr(6)
+      .when(Boolean(row) && Boolean(tint), (el) => el.bg(tint))
+      .when(Boolean(width), (el) => el.w(width).flex_none())
+      .when(!width, (el) => el.flex_1())
       .child(div().w(36).flex_none().text_right().text_size(TYPE.meta).text_color(t.dim).child(row && number !== undefined ? String(number) : ""))
       .child(div().w(8).flex_none().text_size(TYPE.meta).text_color(row?.kind === "-" ? t.ansi1 : row?.kind === "+" ? t.ansi2 : t.dim).child(row?.kind === "-" ? "−" : row?.kind === "+" ? "+" : ""))
-      .child(div().flex_1().min_w(0).truncate().child(row?.text ?? ""));
-    return h_flex().w_full().h(SIZE.diffRow).flex_none()
-      .child(pair.left?.kind === "-"
-        ? cell(pair.left, withAlpha(t.ansi1, UI.diff), pair.left.oldNumber)
-        : cell(pair.left, null, pair.left?.oldNumber))
-      .child(div().w(1).flex_none().bg(withAlpha(t.foreground, UI.field)))
-      .child(pair.right?.kind === "+"
-        ? cell(pair.right, withAlpha(t.ansi2, UI.diff), pair.right.newNumber)
-        : cell(pair.right, null, pair.right?.newNumber));
+      .child(div().flex_1().min_w(0).h_full().overflow_hidden()
+        .child(div().w(this.diffText[side]).h_full().ml(0 - x).whitespace_nowrap().flex().items_center().child(row?.text ?? "")));
+  }
+
+  // 每侧最长一行的像素宽度：水平滚动能走多远由它和面板宽度决定。
+  // 制表符按四个字符、全角字符按两个字符估宽，比按字符串长度更接近实际排版。
+  measureDiff() {
+    const charW = TYPE.small * 0.65;
+    // 东亚宽字符、全角符号和 emoji 占两格。
+    const wide = (ch) => {
+      const c = ch.codePointAt(0);
+      return c > 0xffff
+        || (c >= 0x1100 && c <= 0x115f) || (c >= 0x2e80 && c <= 0xa4cf)
+        || (c >= 0xac00 && c <= 0xd7a3) || (c >= 0xf900 && c <= 0xfaff)
+        || (c >= 0xfe30 && c <= 0xfe6f) || (c >= 0xff00 && c <= 0xff60)
+        || (c >= 0xffe0 && c <= 0xffe6);
+    };
+    const span = (text) => {
+      let n = 0;
+      for (const ch of text) n += ch === "\t" ? 4 : wide(ch) ? 2 : 1;
+      return n;
+    };
+    let left = 0, right = 0;
+    for (const pair of this.diffPairs) {
+      if (pair.note) continue;
+      left = Math.max(left, span(pair.left?.text ?? ""));
+      right = Math.max(right, span(pair.right?.text ?? ""));
+    }
+    this.diffText = { left: Math.ceil(left * charW), right: Math.ceil(right * charW) };
+  }
+
+  // 一行文字左侧固定占 68 px：左右内边距 12、行号 36、符号 8、两道间距 12。
+  diffMaxX(side) {
+    if (!this.compareW) return 0;
+    const left = this.compareW * this.splitFrac;
+    const width = side === "left" ? left : this.compareW - left - 1;
+    return Math.max(0, this.diffText[side] - Math.max(40, width - 68));
+  }
+
+  // 水平滚动：指针在哪一栏就滚哪一栏；Shift+滚轮也当作水平滚动。
+  // 方向与宿主一致：正的 delta 让内容向右回退。
+  scrollDiff(event, cx) {
+    let delta = event.delta?.x ?? 0;
+    if (!delta && event.modifiers?.shift) delta = event.delta?.y ?? 0;
+    if (!delta) return;
+    const width = event.bounds?.width || this.compareW;
+    if (!width) return;
+    const side = (event.local_position?.x ?? 0) < width * this.splitFrac ? "left" : "right";
+    const at = Math.max(0, Math.min(this.diffX[side] - delta, this.diffMaxX(side)));
+    if (at === this.diffX[side]) return;
+    this.diffX[side] = at;
+    cx.stop_propagation();
+    cx.notify();
+  }
+
+  // 拖动中缝：从按下处起算位移，按内容区宽度换成比例；两边都留出可读宽度。
+  startSplit(event, cx) {
+    this.splitDrag = { x: event.position.x, frac: this.splitFrac };
+    cx.stop_propagation();
+    cx.notify();
+  }
+
+  dragSplit(event, cx) {
+    const drag = this.splitDrag;
+    if (!drag || !this.compareW) return;
+    const min = Math.min(0.4, 140 / this.compareW);
+    const frac = Math.min(1 - min, Math.max(min, drag.frac + (event.position.x - drag.x) / this.compareW));
+    if (Math.abs(frac - this.splitFrac) < 0.002) return;
+    this.splitFrac = frac;
+    // 变宽的一侧可能让另一侧原来的滚动距离超出新上限。
+    this.diffX.left = Math.min(this.diffX.left, this.diffMaxX("left"));
+    this.diffX.right = Math.min(this.diffX.right, this.diffMaxX("right"));
+    cx.stop_propagation();
+    cx.notify();
+  }
+
+  endSplit(cx) {
+    if (!this.splitDrag) return;
+    this.splitDrag = null;
+    cx.notify();
   }
 
   // Changes 把要打开的文件放进 shared：只有工作区固定视图响应，旧版工具 Tab
@@ -543,16 +633,46 @@ export default class Files extends View {
         .child(div().size(4).flex_none().rounded_full().bg(this.saveError ? t.ansi1 : this.dirty || this.saving ? t.working : withAlpha(t.ansi2, UI.dotSoft)))
         .child(this.saveError ? "Save failed" : this.saving ? "Saving…" : this.dirty ? "Save" : "Saved")));
 
-    const compareHeader = h_flex().h(28).flex_none().px(12).text_size(TYPE.label).font_weight(600).text_color(t.muted)
+    // 表头也按中缝分成两段，拖动后仍与左右两栏对齐。
+    const compareHeader = h_flex().h(28).flex_none().text_size(TYPE.label).font_weight(600).text_color(t.muted)
       .bg(withAlpha(t.foreground, UI.subtle)).border_b(1).border_color(withAlpha(t.foreground, UI.lineSoft))
-      .child(div().flex_1().child("BEFORE"))
+      .child(div().w(`${this.splitFrac * 100}%`).flex_none().pl(12).child("BEFORE"))
       .child(div().w(1).flex_none().bg(withAlpha(t.foreground, UI.field)))
       .child(div().flex_1().pl(8).child("AFTER"));
 
-    const compareBody = div().relative().flex_1().min_h(0).font_family(settings().font_family ?? "JetBrains Mono").text_size(TYPE.small)
+    const compareBody = div().id(`files-compare-body-${this.uid}`).relative().flex_1().min_h(0)
+      .font_family(settings().font_family ?? "JetBrains Mono").text_size(TYPE.small)
+      // 内容区宽度随预览面板变化；水平滚动的上限和中缝拖动都按它换算。
+      .on_size_change((size, cx) => {
+        if (Math.abs(size.width - this.compareW) < 1) return;
+        this.compareW = size.width;
+        // 面板变窄后原来的水平滚动距离可能超出新的上限，收回来看得见的位置。
+        this.diffX.left = Math.min(this.diffX.left, this.diffMaxX("left"));
+        this.diffX.right = Math.min(this.diffX.right, this.diffMaxX("right"));
+        cx.notify();
+      })
+      .on_scroll_wheel((event, cx) => this.scrollDiff(event, cx))
+      .on_mouse_move((event, cx) => this.dragSplit(event, cx))
+      .on_mouse_up("left", (_event, cx) => this.endSplit(cx))
+      .on_mouse_down_out((_event, cx) => this.endSplit(cx))
       .child(v_virtual_list(compareId, this.diffPairs.length, SIZE.diffRow, (i) => String(i),
         (range) => this.diffPairs.slice(range.start, range.end).map((pair) => this.compareRow(pair, t))).size_full())
-      .child(Scrollbar.vertical(compareId).absolute().inset_0());
+      .child(Scrollbar.vertical(compareId).absolute().inset_0())
+      // 中缝的抓取带：7 px 宽，盖在 1 px 分割线上，悬停和拖动时给出提示。
+      .child(div().absolute().top(0).bottom(0).left(`${this.splitFrac * 100}%`).ml(-3).w(7)
+        .cursor_col_resize()
+        .when(Boolean(this.splitDrag), (el) => el.bg(withAlpha(t.foreground, UI.active)))
+        .when(!this.splitDrag, (el) => el.hover((s) => s.bg(withAlpha(t.foreground, UI.hover))))
+        .on_mouse_down("left", (event, cx) => this.startSplit(event, cx))
+        .on_mouse_move((event, cx) => this.dragSplit(event, cx))
+        .on_mouse_up("left", (_event, cx) => this.endSplit(cx)))
+      // 拖动时盖住整个内容区，指针离开中缝也能继续拖动，直到松开左键。
+      .when(Boolean(this.splitDrag), (el) => el.child(
+        div().absolute().inset_0().cursor_col_resize()
+          .on_mouse_down("left", (_event, cx) => this.endSplit(cx))
+          .on_mouse_move((event, cx) => this.dragSplit(event, cx))
+          .on_mouse_up("left", (_event, cx) => this.endSplit(cx))
+          .on_mouse_down_out((_event, cx) => this.endSplit(cx))));
 
     const diffPane = this.diffMode
       ? v_flex().flex_1().min_w(0).min_h(0)
