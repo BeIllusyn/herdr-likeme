@@ -371,6 +371,11 @@ copies for Windows.
   `v_virtual_list`; a renderer may not register handlers or retain state, so the row
   helpers are pure and the click is the list's `on_item_click` (keyed by path). A
   non-virtualized tree built up to 5,000 elements on every render.
+- **A virtual row with a hover style needs its own `.id()`.** Hover styles repaint only
+  when their element has GPUI element state to report the pointer entering or leaving;
+  a row built without an id has none, so the highlight freezes on the first hovered row
+  until some other event redraws the view. The wrapper's `on_item_click` key is not the
+  row's identity: put `id(...)` on the row the renderer returns.
 - **The diff is the whole file.** `git diff -U1000000` makes every unchanged line
   context, cut at 20,000 rows and 4,000 characters per line. The header's `↑`／`↓`
   walk the contiguous `+`／`-` blocks (`changeStarts`); `v_virtual_list` is driven by a

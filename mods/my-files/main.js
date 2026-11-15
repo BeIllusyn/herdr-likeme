@@ -660,7 +660,9 @@ export default class Files extends View {
   fileRow(r, t, accent) {
     const selected = this.file === r.path && !r.dir;
     const markTint = changeColor(r.mark);
-    return h_flex().h(SIZE.listRow).flex_none().pl(6 + r.depth * 14).pr(8).gap(7).items_center().rounded(SIZE.radius).cursor_pointer()
+    // 显式 id 让行拥有稳定的 element state：GPUI 只在有 state 的 hover 元素上
+    // 注册“进入/离开即重绘”的监听，否则高亮会停在第一次悬停的行上。
+    return h_flex().id(`file-${r.path}`).h(SIZE.listRow).flex_none().pl(6 + r.depth * 14).pr(8).gap(7).items_center().rounded(SIZE.radius).cursor_pointer()
       .when(selected, el => el.bg(t.selected))
       .when(!selected, el => el.hover(s => s.bg(t.hover)))
       .child(r.dir ? svg(`mods/my-files/chevron-${r.open ? "down" : "right"}.svg`).size(10).flex_none().text_color(t.dim) : div().w(10).flex_none())
