@@ -1,7 +1,7 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, h_resizable, resizable_panel, InputState, Input, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { spaces, panes, focused, props, exec, readTextFile, watchFolder, theme, settings, run, setShared, shared, layout } from "herdr";
-import { markColor, changeColor, withAlpha, UI, TYPE, SIZE } from "./colors.js";
+import { markColor, changeColor, withAlpha, UI, SCM, TYPE, SIZE } from "./colors.js";
 
 const MOD = "my-changes";
 // The scan interval for a shown copy; hidden copies catch up from `render`.
@@ -494,8 +494,8 @@ export default class Changes extends View {
     const comparing = Boolean(this.compare);
     return h_flex().id(`changes-source-${this.uid}`).w_full().h(SIZE.listRow).px(7).gap(6).items_center().rounded(SIZE.radius)
       .cursor_pointer()
-      .when(this.pickerOpen, (el) => el.bg(withAlpha(t.foreground, UI.active)))
-      .when(!this.pickerOpen, (el) => el.hover((s) => s.bg(withAlpha(t.foreground, UI.hover))))
+      .when(this.pickerOpen, (el) => el.bg(t.selected))
+      .when(!this.pickerOpen, (el) => el.hover((s) => s.bg(t.hover)))
       .tooltip(this.pickerOpen ? "Choose the branch to compare with" : comparing ? `Comparing with ${this.compare}` : "Compare the current branch with another branch")
       .on_click((_e, cx) => { this.pickerOpen = !this.pickerOpen; cx.notify(); })
       .child(svg(comparing ? "mods/workspace-chrome/branch.svg" : "mods/workspace-chrome/git-compare.svg").size(12).flex_none().text_color(comparing ? accent : t.muted))
@@ -511,13 +511,13 @@ export default class Changes extends View {
     const local = others.filter((b) => b.local), remote = others.filter((b) => !b.local);
     const row = (key, label, selected, icon, action) => h_flex().id(`changes-branch-${this.uid}-${key}`)
       .h(SIZE.listRow).flex_none().px(7).gap(7).items_center().rounded(5).cursor_pointer()
-      .when(selected, (el) => el.bg(withAlpha(t.foreground, UI.active)))
-      .when(!selected, (el) => el.hover((s) => s.bg(withAlpha(t.foreground, UI.hover))))
+      .when(selected, (el) => el.bg(t.selected))
+      .when(!selected, (el) => el.hover((s) => s.bg(t.hover)))
       // 用点击事件自带的 cx：refresh 要用它启动异步任务，旧的 render cx 不算数。
       .on_click((_e, cx) => { action(cx); this.pickerOpen = false; cx.notify(); })
-      .child(svg(icon).size(12).flex_none().text_color(selected ? accent : t.muted))
-      .child(div().flex_1().min_w(0).truncate().text_size(TYPE.small).text_color(selected ? t.foreground : t.muted).child(label))
-      .when(selected, (el) => el.child(svg("mods/workspace-chrome/check.svg").size(12).flex_none().text_color(accent)));
+      .child(svg(icon).size(12).flex_none().text_color(selected ? t.accent_foreground : t.muted))
+      .child(div().flex_1().min_w(0).truncate().text_size(TYPE.small).text_color(selected ? t.accent_foreground : t.muted).child(label))
+      .when(selected, (el) => el.child(svg("mods/workspace-chrome/check.svg").size(12).flex_none().text_color(t.accent_foreground)));
     const caption = (label, right) => h_flex().h(26).flex_none().px(7).gap(6).items_center()
       .child(div().text_size(TYPE.label).font_weight(600).text_color(t.muted).child(label))
       .child(div().flex_1())
@@ -544,19 +544,19 @@ export default class Changes extends View {
   fileRow(f, t, accent) {
     const parts = f.path.split("/"), name = parts.pop();
     const dir = parts.length ? parts.join("/") + "/" : "";
-    const status = changeColor(f.status, t);
+    const status = changeColor(f.status);
     const on = this.open === f.path;
     return h_flex().h(SIZE.listRow).flex_none().px(8).gap(7).items_center().rounded(SIZE.radius).cursor_pointer().tooltip(f.path)
-      .when(on, (e) => e.bg(withAlpha(t.foreground, UI.active)))
-      .when(!on, (s) => s.hover((e) => e.bg(withAlpha(t.foreground, UI.hover))))
+      .when(on, (e) => e.bg(t.selected))
+      .when(!on, (s) => s.hover((e) => e.bg(t.hover)))
       .child(h_flex().size(18).flex_none().rounded(4).items_center().justify_center()
         .bg(withAlpha(status, UI.tint)).border(1).border_color(withAlpha(status, UI.tintEdge))
         .text_size(TYPE.label).font_weight(600).text_color(status).child(f.status))
       .child(h_flex().flex_1().min_w(0).gap(6).items_center()
-        .child(div().flex_1().min_w(0).truncate().text_size(TYPE.small).font_weight(on ? 600 : 400).text_color(on ? t.foreground : t.muted).child(name))
-        .when(Boolean(dir), (e) => e.child(div().min_w(0).truncate().text_size(TYPE.label).text_color(t.dim).child(dir))))
-      .when(f.add > 0, (e) => e.child(div().text_size(TYPE.label).text_color(t.ansi2).child(`+${f.add}`)))
-      .when(f.del > 0, (e) => e.child(div().text_size(TYPE.label).text_color(t.ansi1).child(`−${f.del}`)));
+        .child(div().flex_1().min_w(0).truncate().text_size(TYPE.small).font_weight(on ? 600 : 400).text_color(on ? t.accent_foreground : t.foreground).child(name))
+        .when(Boolean(dir), (e) => e.child(div().min_w(0).truncate().text_size(TYPE.label).text_color(on ? withAlpha(t.accent_foreground, "b3") : t.muted).child(dir))))
+      .when(f.add > 0, (e) => e.child(div().text_size(TYPE.label).text_color(SCM.added).child(`+${f.add}`)))
+      .when(f.del > 0, (e) => e.child(div().text_size(TYPE.label).text_color(SCM.deleted).child(`−${f.del}`)));
   }
 
   diffRow({ kind, number, text }, t) {
@@ -565,10 +565,10 @@ export default class Changes extends View {
     // The tint and the coloured sign keep changes readable without a gutter
     // line and without relying on hue alone.
     return h_flex().w_full().h(SIZE.diffRow).flex_none().gap(8)
-      .when(add, (e) => e.bg(withAlpha(t.ansi2, UI.diff)))
-      .when(del, (e) => e.bg(withAlpha(t.ansi1, UI.diff)))
+      .when(add, (e) => e.bg(withAlpha(SCM.diffAdd, UI.diff)))
+      .when(del, (e) => e.bg(withAlpha(SCM.diffDel, UI.diff)))
       .child(div().w(40).flex_none().text_right().text_size(TYPE.meta).text_color(t.dim).child(number === undefined ? "" : String(number)))
-      .child(div().w(8).flex_none().text_size(TYPE.meta).text_color(add ? t.ansi2 : del ? t.ansi1 : t.dim).child(add ? "+" : del ? "−" : ""))
+      .child(div().w(8).flex_none().text_size(TYPE.meta).text_color(add ? SCM.added : del ? SCM.deleted : t.dim).child(add ? "+" : del ? "−" : ""))
       .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(text));
   }
 
@@ -615,7 +615,7 @@ export default class Changes extends View {
     const diffButton = (id, label, tip, on, action) => h_flex().id(`changes-${id}-${this.uid}`).h(SIZE.control).min_w(SIZE.control).flex_none().px(7).rounded(5).justify_center().items_center()
       .text_size(TYPE.meta).font_weight(500)
       .text_color(on ? t.muted : t.dim).opacity(on ? 1 : 0.55)
-      .when(on, (el) => el.cursor_pointer().hover((s) => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground)))
+      .when(on, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground)))
       .tooltip(tip)
       .on_click((_e, cx) => { if (on) action(cx); })
       .child(label);
@@ -628,8 +628,8 @@ export default class Changes extends View {
           .child(div().text_size(TYPE.label).font_weight(600).text_color(t.muted).child("CHANGES"))
           .child(h_flex().h(16).flex_none().px(5).rounded(4).bg(withAlpha(t.foreground, UI.subtle)).items_center().text_size(TYPE.label).text_color(t.muted).child(String(this.files.length)))
           .child(div().flex_1())
-          .when(add > 0, (el) => el.child(div().text_size(TYPE.meta).text_color(t.ansi2).child(`+${add}`)))
-          .when(del > 0, (el) => el.child(div().text_size(TYPE.meta).text_color(t.ansi1).child(`−${del}`))))
+          .when(add > 0, (el) => el.child(div().text_size(TYPE.meta).text_color(SCM.added).child(`+${add}`)))
+          .when(del > 0, (el) => el.child(div().text_size(TYPE.meta).text_color(SCM.deleted).child(`−${del}`))))
         .when(Boolean(this.root), (el) => el.child(
           h_flex().flex_none().px(SIZE.inset).pt(SIZE.inset).pb(2).child(this.sourceRow(t, accent))))
         .child(v_flex().id(`changes-list-${this.uid}`).flex_1().min_h(0).p(SIZE.inset)
@@ -647,11 +647,11 @@ export default class Changes extends View {
             div().px(8).py(10).text_size(TYPE.meta).line_height("15px").text_color(t.dim)
               .child(this.error || (this.loading ? "Loading changes…" : this.root ? (this.compare ? `No differences from ${this.compare}` : "No uncommitted changes") : "No folder")))))
         .when(this.limited, (el) => el.child(div().px(12).pb(6).text_size(TYPE.label).text_color(t.dim).child("Showing the first 1,000 changed files")))
-        .when(Boolean(this.note), (el) => el.child(div().px(12).pb(6).text_size(TYPE.label).line_height("13px").text_color(t.ansi1).child(this.note)))
+        .when(Boolean(this.note), (el) => el.child(div().px(12).pb(6).text_size(TYPE.label).line_height("13px").text_color(t.blocked).child(this.note)))
         .when(!this.compare, (el) => el.child(v_flex().flex_none().p(10).gap(8).border_t(1).border_color(withAlpha(t.foreground, UI.lineSoft))
           .child(div().id(`commit-message-${this.uid}`).w_full().h(32).px(10).flex().items_center().rounded(SIZE.radius)
-            .bg(t.background)
-            .border(1).border_color(this.typing ? withAlpha(accent, UI.ring) : withAlpha(t.foreground, UI.field))
+            .bg(t.input)
+            .border(1).border_color(this.typing ? withAlpha(accent, UI.ring) : t.border)
             .cursor_text().on_mouse_down("left", (_e, cx) => cx.stop_propagation())
             .child(Input.new(this.input).h_full().text_size(TYPE.small).text_color(t.foreground)))
           .child(div().id(`commit-${this.uid}`).w_full().h(32).flex().items_center().justify_center().rounded(SIZE.radius)

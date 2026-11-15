@@ -189,7 +189,7 @@ export default class Agents extends View {
         .rounded(5)
         .items_center()
         .text_color(t.foreground)
-        .hover((el) => el.bg(withAlpha(t.foreground, UI.hover)))
+        .hover((el) => el.bg(t.hover))
         .on_click(() => {
           setShared("agents.sort", s.id);
           closeOverlay(this.overlay);
@@ -257,14 +257,14 @@ export default class Agents extends View {
       .items_center()
       .rounded(5)
       .text_size(TYPE.small)
-      .when(on, (el) => el.bg(withAlpha(t.foreground, UI.active)))
-      .when(!on, (el) => el.hover((s) => s.bg(withAlpha(t.foreground, UI.hover))))
+      .when(on, (el) => el.bg(t.selected))
+      .when(!on, (el) => el.hover((s) => s.bg(t.hover)))
       .on_click(() => this.peek(k.address))
       .children(s.lines.map(l => div().self_start().mt(-5).w(10).h(16).mr(3).flex_none()
         .when(Boolean(l), el => el.border_l(1).border_color(withAlpha(t.foreground, UI.line)))
         .when(l === "└" || l === "├", el => el.border_b(1).rounded_bl(5))))
       .when(Boolean(pic), el => el.child(div().mr(7).child(pic)))
-      .child(div().flex_1().truncate().text_color(on ? t.foreground : t.muted).child(k.name || k.template || k.program?.name || k.address))
+      .child(div().flex_1().truncate().text_color(on ? t.accent_foreground : t.muted).child(k.name || k.template || k.program?.name || k.address))
       .child(this.status(t, { status: st }, compact));
   }
 
@@ -343,7 +343,7 @@ export default class Agents extends View {
         .font_semibold()
         .text_color(open ? t.dim : (t[STATUS_OF_RANK[rankOf(a)] ?? top] ?? t.dim))
         .cursor_pointer()
-        .hover((s) => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground))
+        .hover((s) => s.bg(t.hover).text_color(t.foreground))
         .on_click((_e, cx) => {
           cx.stop_propagation();
           open ? this.folded.add(a.address) : this.folded.delete(a.address);
@@ -402,7 +402,7 @@ export default class Agents extends View {
         .rounded(3)
         .text_color(t.dim)
         .cursor_pointer()
-        .hover((s) => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground))
+        .hover((s) => s.bg(t.hover).text_color(t.foreground))
         .tooltip(isPinned ? "Unpin" : "Pin to the top")
         .on_click((_e, cx) => {
           cx.stop_propagation();
@@ -421,8 +421,8 @@ export default class Agents extends View {
         .items_center()
         .gap(8)
         .rounded(SIZE.radius)
-        .when(a.focused, (el) => el.bg(withAlpha(t.foreground, UI.active)))
-        .when(!a.focused, (el) => el.hover((s) => s.bg(withAlpha(t.foreground, UI.hover))))
+        .when(a.focused, (el) => el.bg(t.selected))
+        .when(!a.focused, (el) => el.hover((s) => s.bg(t.hover)))
         .cursor_pointer()
         .on_hover((on, cx) => {
           // Only a change of which row is hovered needs a redraw; the event also
@@ -446,7 +446,7 @@ export default class Agents extends View {
             .min_w(0)
             .gap(1)
             .child(div().min_w(0).truncate().text_size(TYPE.body).line_height("15px").font_weight(a.focused ? 600 : 500)
-              .text_color(idle ? t.muted : t.foreground).tooltip(top).child(top))
+              .text_color(a.focused ? t.accent_foreground : idle ? t.muted : t.foreground).tooltip(top).child(top))
             .when(Boolean(under) || Boolean(machine), el => el.child(
               h_flex()
                 .min_w(0)
@@ -454,7 +454,7 @@ export default class Agents extends View {
                 .gap(5)
                 .text_size(TYPE.meta)
                 .line_height("14px")
-                .text_color(t.muted)
+                .text_color(a.focused ? withAlpha(t.accent_foreground, "cc") : t.muted)
                 .when(Boolean(fill) && Boolean(under), el => el.child(div().size(4).rounded_full().flex_none().bg(withAlpha(fill, UI.dot))))
                 .when(Boolean(under), el => el.child(div().min_w(0).truncate().tooltip(under).child(under)))
                 .when(Boolean(under) && Boolean(machine), el => el.child(div().flex_none().child("·")))
@@ -465,7 +465,7 @@ export default class Agents extends View {
         // A fixed slot for the pin and the elapsed time: hovering must not move the row.
         .child(div().w(30).flex_none().h_full().flex().items_center().justify_end()
           .when(this.hovered === a.address, el => el.child(pin))
-          .when(this.hovered !== a.address && Boolean(when), el => el.child(div().text_size(TYPE.meta).text_color(t.dim).child(duration(now - when)))))
+          .when(this.hovered !== a.address && Boolean(when), el => el.child(div().text_size(TYPE.meta).text_color(a.focused ? withAlpha(t.accent_foreground, "b3") : t.dim).child(duration(now - when)))))
         .child(div().min_w(18).flex_none().h_full().flex().items_center().justify_end().child(this.status(t, { status: mark }, byPriority && !isPinned)));
     };
 
@@ -497,7 +497,7 @@ export default class Agents extends View {
         .text_size(byPriority ? TYPE.label : TYPE.meta)
         .font_weight(600)
         .cursor_pointer()
-        .hover((s) => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground))
+        .hover((s) => s.bg(t.hover).text_color(t.foreground))
         .on_click((_e, cx) => {
           open ? this.folded.add(g.id) : this.folded.delete(g.id);
           cx.notify();
@@ -558,7 +558,7 @@ export default class Agents extends View {
               .justify_center()
               .rounded(5)
               .text_color(t.muted)
-              .hover((s) => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground))
+              .hover((s) => s.bg(t.hover).text_color(t.foreground))
               .on_click(() => openOverlay({ mod: "my-sidebar", kind: "popup", width: 200, height: 140, props: { sortMenu: true } }))
               .tooltip(`Sort agents: ${sort.label}`)
               .child(svg(sort.icon).size(13)),

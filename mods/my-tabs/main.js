@@ -120,7 +120,7 @@ export default class Tabs extends View {
     const body = nodes["work-body"], sidebar = nodes.sidebar;
     const stop = (_e, cx) => cx.stop_propagation();
     const button = (id, label, action) => div().id(id).size(24).flex_none().flex().items_center().justify_center().rounded(5).text_color(t.muted)
-      .hover(s => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground))
+      .hover(s => s.bg(t.hover).text_color(t.foreground))
       .on_mouse_down("left", stop).on_click(action).child(label);
     // A tab still named by its number shows what it runs; a name the person gave
     // it always wins (`named`). Keep the labels distinct when two tabs share a
@@ -183,11 +183,11 @@ export default class Tabs extends View {
       const name = labels.get(c.id), active = c.active && !panelOpen;
       return h_flex().id(`tab-${c.id}`).relative().h(32).rounded(SIZE.radius).px(10).gap(7).items_center().flex_none().text_size(TYPE.small).cursor_pointer()
         .when(active, el => el
-          .bg(withAlpha(t.foreground, UI.active))
+          .bg(t.background)
           .text_color(t.foreground))
         .when(!active, el => el
           .text_color(t.muted)
-          .hover(s => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground)))
+          .hover(s => s.bg(t.hover).text_color(t.foreground)))
         .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.pressed = i; this.over = i; if (e.click_count === 2) run("tab.rename", { id: c.id }); })
         .on_mouse_move((_e, cx) => {
           if (this.pressed === null || this.over === i) return;
@@ -221,7 +221,7 @@ export default class Tabs extends View {
           .when(c.status === "working", el => el.child(div().text_size(14).line_height("14px").text_color(t.working).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 80)))
           .when(c.status === "blocked" || c.status === "done", el => el.child(div().size(5).rounded_full().bg(t[c.status]))))
         .child(div().id(`close-${c.id}`).size(14).flex().flex_none().items_center().justify_center().rounded(3).text_color(t.muted)
-          .opacity(active ? 0.7 : 0.4).tooltip("Close tab").hover(s => s.bg(withAlpha(t.ansi1, UI.hover)).text_color(t.ansi1).opacity(1))
+          .opacity(active ? 0.7 : 0.4).tooltip("Close tab").hover(s => s.bg(withAlpha(t.blocked, UI.hover)).text_color(t.blocked).opacity(1))
           .on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/pane/close.svg").size(10)));
     };
     // macOS draws the traffic lights over the window's top-left corner. While the
@@ -242,12 +242,12 @@ export default class Tabs extends View {
       return h_flex().id(`panel-${id}`).h(SIZE.button).rounded(6).px(this.compact ? 8 : 9).gap(6).flex_none().items_center()
         .cursor_pointer().tooltip(label).text_size(TYPE.small).font_weight(on ? 600 : 500)
         .when(on, el => el
-          .bg(withAlpha(t.foreground, UI.active))
-          .text_color(t.foreground)
-          .hover(s => s.bg(withAlpha(t.foreground, UI.active))))
+          .bg(t.selected)
+          .text_color(t.accent_foreground)
+          .hover(s => s.bg(t.selected)))
         .when(!on, el => el
           .text_color(t.muted)
-          .hover(s => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground)))
+          .hover(s => s.bg(t.hover).text_color(t.foreground)))
         .on_mouse_down("left", stop)
         .on_click(() => {
           // 点击时重读布局，连续点击也只切换视图，不创建或关闭 Tab。
@@ -282,7 +282,7 @@ export default class Tabs extends View {
     // borders; only the pointer lifts them out of the bar.
     const ghostAction = (id, tip, child, action) => div().id(id).size(SIZE.button).rounded(6).flex_none().flex().items_center().justify_center()
       .cursor_pointer().text_color(t.muted).tooltip(tip)
-      .hover(s => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground)).on_mouse_down("left", stop)
+      .hover(s => s.bg(t.hover).text_color(t.foreground)).on_mouse_down("left", stop)
       .on_click(action)
       .child(child);
     const newTab = ghostAction("tab-new", "New tab", div().text_size(17).line_height("18px").child("+"), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }));

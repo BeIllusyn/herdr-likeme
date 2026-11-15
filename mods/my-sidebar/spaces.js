@@ -385,7 +385,7 @@ export default class Spaces extends View {
       const rebuilt = this.rebuilt(machine) || !!repair;
       const folded = this.folded.has(m);
       const head = h_flex().id(`machine-${m ?? "local"}`).h(26).flex_none().px(8).gap(6).items_center().rounded(5).text_size(TYPE.label).font_semibold().text_color(t.muted)
-        .cursor_pointer().hover(s => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.muted))
+        .cursor_pointer().hover(s => s.bg(t.hover).text_color(t.muted))
         .on_click((_e, cx) => {
           folded ? this.folded.delete(m) : this.folded.add(m);
           localStorage.setItem("likeme.machines.folded", JSON.stringify([...this.folded]));
@@ -401,12 +401,12 @@ export default class Spaces extends View {
               .tooltip(repair?.error || "This machine was rebuilt or replaced. Click to connect to the new one.")
               .on_click((_e, cx) => { cx.stop_propagation(); this.reconnect(machine, cx); })
               .child(repair?.busy ? "Connecting…" : "Connect"))))
-          .when(connected, el => el.child(div().id(`machine-add-${m ?? "local"}`).flex_none().px(3).rounded(3).hover(s => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground))
+          .when(connected, el => el.child(div().id(`machine-add-${m ?? "local"}`).flex_none().px(3).rounded(3).hover(s => s.bg(t.hover).text_color(t.foreground))
             .on_click((_e, cx) => { cx.stop_propagation(); run("space.new", { machine: m ?? "" }); }).child("+")))
           .child(div().size(5).rounded_full().flex_none().bg(connected ? t.ansi2 : t.dim))
           .child(svg(`mods/workspace-chrome/chevron-${folded ? "right" : "down"}.svg`).size(10).flex_none()));
       const empty = h_flex().id(`machine-new-${m ?? "local"}`).h(32).flex_none().px(8).gap(7).items_center().rounded(6)
-        .text_size(TYPE.small).text_color(t.dim).hover(s => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground))
+        .text_size(TYPE.small).text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground))
         .on_click(() => run("space.new", { machine: m ?? "" }))
         .child(div().w(24).flex_none().flex().items_center().justify_center().child(svg("mods/workspace-chrome/plus.svg").size(11)))
         .child("New space there");
@@ -432,8 +432,8 @@ export default class Spaces extends View {
       .flex_none()
       .justify_center()
       .rounded(SIZE.radius)
-      .when(on, (el) => el.bg(withAlpha(t.foreground, UI.active)))
-      .when(!on, (el) => el.hover((s) => s.bg(withAlpha(t.foreground, UI.hover))))
+      .when(on, (el) => el.bg(t.selected))
+      .when(!on, (el) => el.hover((s) => s.bg(t.hover)))
       .when(this.pressed === i && this.over !== i, (el) => el.opacity(0.45))
       .when(this.pressed !== null && this.over === i && this.pressed !== i, (el) => el.child(
         div().absolute().left(4).right(4).h(2).rounded(1).bg(t.accent)
@@ -487,7 +487,7 @@ export default class Spaces extends View {
               .min_w(0)
               .gap(1)
               .child(div().min_w(0).truncate().text_size(TYPE.body).line_height("15px")
-                .font_weight(on ? 600 : 500).text_color(t.foreground).child(w.name))
+                .font_weight(on ? 600 : 500).text_color(on ? t.accent_foreground : t.foreground).child(w.name))
               .when(Boolean(g), el => el.child(
                 h_flex()
                   .min_w(0)
@@ -495,11 +495,11 @@ export default class Spaces extends View {
                   .gap(4)
                   .text_size(TYPE.meta)
                   .line_height("14px")
-                  .text_color(t.muted)
-                  .child(svg("mods/workspace-chrome/branch.svg").size(10).flex_none().text_color(t.dim))
+                  .text_color(on ? withAlpha(t.accent_foreground, "cc") : t.muted)
+                  .child(svg("mods/workspace-chrome/branch.svg").size(10).flex_none().text_color(on ? withAlpha(t.accent_foreground, "cc") : t.dim))
                   .child(div().min_w(0).truncate().child(g.branch ?? "detached"))
-                  .when(g.ahead > 0, el => el.child(div().flex_none().text_color(t.ansi2).child(`↑${g.ahead}`)))
-                  .when(g.behind > 0, el => el.child(div().flex_none().text_color(t.ansi1).child(`↓${g.behind}`))),
+                  .when(g.ahead > 0, el => el.child(div().flex_none().text_color(on ? t.accent_foreground : t.ansi2).child(`↑${g.ahead}`)))
+                  .when(g.behind > 0, el => el.child(div().flex_none().text_color(on ? t.accent_foreground : t.ansi1).child(`↓${g.behind}`))),
               )),
           ),
       );
@@ -510,7 +510,7 @@ export default class Spaces extends View {
   ghost(t) {
     return h_flex().id("space-new-hint").h(32).flex_none().px(8).gap(8).rounded(SIZE.radius)
       .text_size(TYPE.small).text_color(t.muted).items_center().cursor_pointer()
-      .hover(s => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground))
+      .hover(s => s.bg(t.hover).text_color(t.foreground))
       .on_click(() => run("space.new"))
       .child(h_flex().size(SIZE.mark).flex_none().items_center().justify_center().child(svg("mods/workspace-chrome/plus.svg").size(12)))
       .child("New space");
@@ -546,7 +546,7 @@ export default class Spaces extends View {
           .child(h_flex().min_w(18).h(16).px(5).rounded(5).items_center().justify_center()
             .bg(withAlpha(t.foreground, UI.subtle)).text_size(TYPE.label).text_color(t.muted).child(String(sp.length))))
         .child(div().id("space-new").size(SIZE.control).flex_none().flex().items_center().justify_center().rounded(5).cursor_pointer().tooltip("New space")
-          .text_color(t.muted).hover(s => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground))
+          .text_color(t.muted).hover(s => s.bg(t.hover).text_color(t.foreground))
           .on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(12))))
       .child(v_flex().px(SIZE.inset).pb(embedded ? 8 : 16).gap(3)
         .when(!embedded, el => el.flex_1().min_h(0).overflow_y_scrollbar().mode("hover"))

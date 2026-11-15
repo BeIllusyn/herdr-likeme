@@ -7,7 +7,7 @@ import { withAlpha, UI, TYPE, SIZE } from "./colors.js";
 export default class Brand extends View {
   footer(t) {
     const row = (id, icon, label, action) => h_flex().id(id).h(SIZE.button).px(8).gap(8).items_center().rounded(SIZE.radius)
-      .text_color(t.muted).hover(s => s.bg(withAlpha(t.foreground, UI.hover)).text_color(t.foreground)).cursor_pointer()
+      .text_color(t.muted).hover(s => s.bg(t.hover).text_color(t.foreground)).cursor_pointer()
       .on_click(action).child(svg(`mods/workspace-chrome/${icon}.svg`).size(14).flex_none()).child(label);
     return v_flex().size_full().p(SIZE.inset).gap(4).text_size(TYPE.small)
       .border_t(1).border_r(1).border_color(withAlpha(t.foreground, UI.lineSoft))

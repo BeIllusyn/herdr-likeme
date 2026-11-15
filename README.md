@@ -1,12 +1,14 @@
 # Likeme
 
-A Herdr layout built on top of the shipped `main` layout with a **Graphite** design: one
-neutral, layered workspace where the only colour is each space's own and it appears as a
-mark, never as a line — a solid monogram on the selected space, a tinted tile behind the
-focused agent's icon, a coloured glyph in the active tab and the focused pane, and a small
-dot on an agent's space line. Rows are flat, section labels are uppercase micro-type, and
-regions meet on hairlines instead of card borders. Panes fill the work area edge to edge,
-and the working spinner is a gold braille character instead of a rotating ring.
+A Herdr layout built on top of the shipped `main` layout with **VS Code 2026 Dark**'s
+palette and a **Graphite** structure: `#121314` terminals under `#191A1B` chrome,
+`#2A2B2C` hairlines and VS Code's teal for focus, while selection is a quiet raised
+neutral and each space's own colour stays a mark, never a line — a solid monogram on the
+selected space, a tinted tile behind the focused agent's icon, a coloured glyph in the
+active tab and the focused pane, and a small dot on an agent's space line. Rows are flat, section labels are uppercase
+micro-type, and regions meet on hairlines instead of card borders. Panes fill the work area
+edge to edge, and the working spinner is a gold braille character instead of a rotating
+ring.
 
 Built from Herdr `main` @ 0.1.12 (`cloned_from` in `layouts/likeme.json`).
 
@@ -20,11 +22,11 @@ the active tool view and its editor are the real UI._
 | Area | Change |
 |---|---|
 | **Sidebar** | One scrolling column for Spaces and Agents, with a scrollbar visible on hover. The 32 px section captions use 10 px labels and small neutral count chips; 44 px rows, 26 px marks and 3 px gaps give both lists the same rhythm. Both retained views check live data every 250 ms (1 s in the background) and redraw only when it changes. |
-| **Spaces** | A tinted monogram, a 13 px project name and an 11 px branch with a small branch icon and ahead/behind counts. Selection uses a neutral fill and a solid space mark; its text automatically chooses dark or white ink for contrast. Worktrees sit under their checkout with a branch glyph that shares the checkout title's column, their own names stepping one glyph further in. A 32 px New space action ends the list. |
+| **Spaces** | A tinted monogram, a 13 px project name and an 11 px branch with a small branch icon and ahead/behind counts. Selection uses 2026 Dark's raised neutral list fill while its text and icons turn white, and the space mark stays solid; its ink automatically chooses dark or white for contrast. Worktrees sit under their checkout with a branch glyph that shares the checkout title's column, their own names stepping one glyph further in. A 32 px New space action ends the list. |
 | **Agents** | The agent's title leads, with its space underneath and a small space-coloured dot. The focused row uses the same selection as Spaces and a tinted icon tile. Sub-agent rows are 26 px. Working, Needs you, Done and Idle remain visible; elapsed time and pin share a fixed slot. Priority keeps its section headers; Grouped hides a redundant single-space header. |
 | **Tabs** | A 44 px bar with 32 px tabs, 12 px labels and 4 px gaps. Quick starts are grouped behind a short hairline after `+`: every installed agent Herdr can start, with Claude Code (`--dangerously-skip-permissions`) and Pi leading, plus Lazygit and Neovim. Files / Changes stay fixed at the right, switch the workspace without creating tabs, and collapse to icons with tooltips below 680 px of bar width. Existing standalone tool tabs are reused. Tabs keep drag, rename, zoom and close actions; close buttons brighten on hover. |
 | **Panes** | Edge-to-edge terminals and 1 px split gaps. The 36 px header matches Files / Changes; focus adds a 6% space tint, a 13 px semibold title and a coloured program icon. Folder text is 11 px, the fixed status slot is 68 px, and split / zoom / close controls are grouped 24 px buttons with tooltips. Close actions use a red hover state. |
-| **Files / Changes** | Matching 260 px initial list widths, 36 px headers and 28 px file rows. Filenames lead in Changes, with quieter directory context, one colour per A / D / U / M status across both views, tinted and edged status tiles, and full-path tooltips. File previews keep the editor and optimistic auto-save, with a fixed-width save indicator and a larger Edit / Diff switch. Full-file diffs and before/after comparisons use 12 px type, 22 px rows, the same 18% add/remove wash, and coloured `+` / `−` signs. The before/after divider drags to set each half's width, and each half scrolls horizontally on its own with line numbers and signs pinned, so a long line is read in full instead of being ellipsized. Change navigation is grouped in the header. Lists remain virtualized, and switching views preserves folders and split widths. Both views share the same empty-state styling; a clean worktree shows All caught up. A source row above the changed files switches between the working tree and another local or remote branch: the chosen branch is compared from its merge base to HEAD (committed changes only), drives the same list and whole-file diff, and replaces the commit box with a quiet note. |
+| **Files / Changes** | Matching 260 px initial list widths, 36 px headers and 28 px file rows. Filenames lead in Changes, with quieter directory context, one colour per A / D / U / M status across both views, tinted and edged status tiles, and full-path tooltips. File previews keep the editor and optimistic auto-save, with a fixed-width save indicator and a larger Edit / Diff switch. Full-file diffs and before/after comparisons use 12 px type, 22 px rows, VS Code's green and red diff inks over a 15% wash, syntax colours from 2026 Dark, and coloured `+` / `−` signs. The before/after divider drags to set each half's width, and each half scrolls horizontally on its own with line numbers and signs pinned, so a long line is read in full instead of being ellipsized. Change navigation is grouped in the header. Lists remain virtualized, and switching views preserves folders and split widths. Both views share the same empty-state styling; a clean worktree shows All caught up. A source row above the changed files switches between the working tree and another local or remote branch: the chosen branch is compared from its merge base to HEAD (committed changes only), drives the same list and whole-file diff, and replaces the commit box with a quiet note. |
 | **Brand bar** | A 44 px empty window-drag surface, aligned with the tab bar, and a 76 px footer with 28 px Settings / Add machine rows. The footer, sidebar and brand share a continuous, faint right-hand divider. |
 
 Everything else — menus — is Herdr's `main` layout unchanged.
@@ -63,10 +65,16 @@ cd herdr-likeme
 ./install.sh
 ```
 
-`install.sh` copies `layouts/likeme.json` and the six mods into
-`${HERDR_APP_HOME:-~/.config/herdr-app}`, runs `herdr-app check` on every mod,
-adds Herdr's omp and fx program entries, and switches to the layout.
-Herdr reloads the files within a second.
+`install.sh` copies `layouts/likeme.json`, the six mods and
+`themes/vscode-2026-dark.json` into `${HERDR_APP_HOME:-~/.config/herdr-app}`, runs
+`herdr-app check` on every mod, adds Herdr's omp and fx program entries, switches to the
+layout and selects the theme. Herdr reloads the files within a second.
+
+The theme is an ordinary Herdr theme file: it names the terminal background, foreground,
+selection, cursor and 16 ANSI colours, and overrides the panel palette (`surface`,
+`chrome`, `hover`, `selected`, `border`, `input`, `accent`, the agent states). Edit
+`themes/vscode-2026-dark.json` to taste, or point the layout's root `theme` at another
+theme; `install.sh` replaces the file on the next run.
 
 omp registration installs the icon as `my-icons/likeme-omp.svg` and ensures a
 `programs.omp` entry in `programs.json`: a fresh file is copied from
@@ -89,11 +97,11 @@ curl -fsSL https://raw.githubusercontent.com/BeIllusyn/herdr-likeme/main/install
 # or: export LIKEME_FX=0 && ./install.sh
 ```
 
-It **overwrites** `layouts/likeme.json` and the `mods/my-*` folders on every run
-(`rsync --delete`), so edits made directly in `~/.config/herdr-app` are replaced —
-copy them back to the repo first. It never touches your other layouts, mods, spaces
-or terminals. The one-line form always fetches the current `REF` (default `main`);
-the checkout form uses the files in that checkout.
+It **overwrites** `layouts/likeme.json`, `themes/vscode-2026-dark.json` and the
+`mods/my-*` folders on every run (`rsync --delete`), so edits made directly in
+`~/.config/herdr-app` are replaced — copy them back to the repo first. It never touches
+your other layouts, themes, mods, spaces or terminals. The one-line form always fetches
+the current `REF` (default `main`); the checkout form uses the files in that checkout.
 
 Manual install:
 
@@ -101,6 +109,7 @@ Manual install:
 DST=~/.config/herdr-app
 
 cp layouts/likeme.json "$DST/layouts/"
+cp themes/vscode-2026-dark.json "$DST/themes/"
 cp -R mods/my-sidebar mods/my-tabs mods/my-pane mods/my-files mods/my-changes mods/my-brand "$DST/mods/"
 
 herdr-app check "$DST/mods/my-sidebar"
@@ -110,6 +119,7 @@ herdr-app check "$DST/mods/my-files"
 herdr-app check "$DST/mods/my-changes"
 herdr-app check "$DST/mods/my-brand"
 herdr-app do layout.switch '{"name":"likeme"}'
+herdr-app do app.theme '{"name":"vscode-2026-dark"}'
 ```
 
 For the optional program registrations, also run `bash extras/omp/install.sh "$DST"`
@@ -130,7 +140,8 @@ Never overwrite a layout or mod you already have: rename the new one and update 
 matching `"mod"` references in `likeme.json`.
 
 - Update: run the one-liner again, or `git pull && ./install.sh`
-- Uninstall: delete `layouts/likeme.json`, `layouts/likeme.png` (if present) and the
+- Uninstall: delete `layouts/likeme.json`, `layouts/likeme.png` (if present),
+  `themes/vscode-2026-dark.json` and the
   `mods/my-sidebar`, `mods/my-tabs`, `mods/my-pane`, `mods/my-files`, `mods/my-changes`,
   `mods/my-brand` folders. Remove the `programs.omp` and `programs.fx` entries from
   `programs.json` and `my-icons/likeme-omp.svg` / `my-icons/likeme-fx.svg`; delete

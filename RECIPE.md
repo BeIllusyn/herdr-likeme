@@ -1,12 +1,13 @@
 # Likeme
 
-A Herdr layout built on `main` with a **Graphite** design: a neutral, layered workspace
-where each space's colour appears only as a mark — a solid monogram on the selected space,
-a tinted tile behind the focused agent's icon, a coloured glyph in the active tab and the
-focused pane, a dot on an agent's space line. Rows are flat, section labels are uppercase
-micro-type, and regions meet on hairlines instead of card borders. Panes fill the work area
-edge to edge, and the working spinner is a gold braille text spinner instead of a rotating
-ring.
+A Herdr layout built on `main` with **VS Code 2026 Dark** colours and a **Graphite**
+structure: `#121314` terminals under `#191A1B` chrome, `#2A2B2C` hairlines, VS Code's teal
+for focus and a raised neutral for selection, and each space's colour appearing only as a mark — a solid
+monogram on the selected space, a tinted tile behind the focused agent's icon, a coloured
+glyph in the active tab and the focused pane, a dot on an agent's space line. Rows are
+flat, section labels are uppercase micro-type, and regions meet on hairlines instead of
+card borders. Panes fill the work area edge to edge, and the working spinner is a gold
+braille text spinner instead of a rotating ring.
 
 ![Likeme](preview.png)
 
@@ -29,14 +30,17 @@ tool view and its editor are the real UI._
 
 The window uses the theme's `canvas` behind the layout, `chrome` for the sidebar
 and tab bar, `surface` for headers and file lists, and `background` for terminals
-and previews. Regions meet on faint 1 px hairlines. All colours follow the active
-light or dark theme, including space marks from the theme's ANSI palette.
+and previews. Regions meet on faint 1 px hairlines. The shipped theme is
+`themes/vscode-2026-dark.json`: VS Code's `#121314` terminals under `#191A1B` chrome,
+`#2A2B2C` borders, `#BFBFBF` text and `#3994BC` teal accent. The mods read every colour
+from `theme()`, so pointing the layout at another theme re-skins them; space marks
+come from that theme's ANSI palette.
 
 The design system is `colors.js`, copied identically into all six mods. `UI` holds
-the neutral ladder — subtle 3.1%, hover 5.1%, active 9%, line 7.8%, field 6.3%,
-soft line 4.7% — and the semantic washes: tint 11.8% with a 22% edge, badge 12.2%,
-diff 18%, focused tile 18%, dots at 80% / 60%, and a 70% focus ring. `changeColor()`
-gives A / D / U / M one hue in both Files and Changes. `TYPE` sets labels to 10 px,
+the neutral ladder — subtle 5.9%, hover 10.8%, active 18%, line 10.2%, field 7.1%,
+soft line 5.9% — and the semantic washes: tint 11.8% with a 22% edge, badge 12.2%,
+diff 15%, focused tile 15%, dots at 80% / 60%, and a 70% focus ring. `changeColor()`
+gives A / D / U / M VS Code's git decoration inks in both Files and Changes. `TYPE` sets labels to 10 px,
 metadata to 11 px, small text to 12 px and row / pane titles to 13 px. `SIZE` sets
 the shared dimensions:
 
@@ -64,7 +68,7 @@ The right divider continues through the brand, list and footer.
 
 **Spaces.** A 26 px rounded monogram sits before a 13 px project name and an 11 px
 branch line. The branch icon, ahead and behind counts stay quiet. A selected row
-uses the neutral active fill and a solid monogram; `markInk()` chooses dark or
+uses the raised neutral selected fill with white text and a solid monogram; `markInk()` chooses dark or
 white lettering from the fill's luminance. Worktrees carry no tree line: a
 14 px branch glyph takes the column where a space's name starts, so the glyph
 and the checkout's title share a vertical line, and the worktree's own name and
@@ -78,7 +82,7 @@ rows are 26 px with 12 px names. Group captions retain a 5 px status / space dot
 The 30 px elapsed-time / pin slot stays fixed, as does the status area.
 
 **Tabs.** Tabs are 32 px high with a 7 px radius, 10 px horizontal padding, 12 px
-labels and 4 px gaps. Selection is the shared neutral fill and a semibold name.
+labels and 4 px gaps. Selection is 2026 Dark's raised neutral fill with white text and a semibold name.
 Close buttons rest at 40% opacity (70% active), with red hover feedback. The 28 px
 New tab button follows the tabs, then the agents this machine has, plus Lazygit and
 Neovim, in a group behind a short hairline. Files / Changes stay fixed at the right with 14 px icons. Below 680 px of
@@ -109,7 +113,7 @@ Preview headers share a breadcrumb, a coloured icon and quiet controls. Edit / D
 uses 24 px segments in a 28 px track; save status keeps a 76 px slot with a small
 status dot. Changes groups its previous / next controls. Both diff views use 12 px
 monospace text and 22 px rows, with room for five-digit line numbers and coloured
-addition / deletion signs. Both diff views use the same 18% wash; the side-by-side
+addition / deletion signs. Both diff views use the same 15% wash in VS Code's green and red; the side-by-side
 comparison keeps it on the changed half under 28 px BEFORE / AFTER captions, and
 its halves scroll horizontally on their own: line numbers and signs stay pinned,
 and the divider between them drags to set each half's width. A long line is read
@@ -126,7 +130,7 @@ closing the layout ends its timers and directory watches.
   `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` every 80 ms. Blocked: a `NEEDS YOU` pill edged in its own
   colour (a bare `!` inside a group whose header already says it). Idle: a quiet 6 px
   ring. Done: a 5 px dot. A space's and a tab's status is their most urgent agent's.
-- **Spaces.** Click selects: the active row takes a 9 % neutral fill and its monogram
+- **Spaces.** Click selects: the active row takes 2026 Dark's raised neutral fill, its text turns white and its monogram
   fills solid, while a resting row lifts to 5.1 % under the pointer. Drag a row to
   reorder inside its machine; the accent line shows where it lands. Right-click opens
   Herdr's `menu` with the `space` context. Worktrees sort under their checkout and hang
@@ -138,7 +142,7 @@ closing the layout ends its timers and directory watches.
   the terminal label). The chevron folds sub-agents. The header icon opens the sort
   popup (Priority / Grouped by space). Group headers and machine headers fold; Priority's
   section headers stay visible even when only one section has agents.
-- **Tabs.** Click selects; the active tab is a 9 % neutral pill with a 600 name and its
+- **Tabs.** Click selects; the active tab is the darker editor background with normal text, a 600 name and its
   tinted program icon in the space's colour. Drag reorders (`tab.move`) with an accent line on the edge it
   will land on, double-click renames, right-click opens the tab menu, every close
   button closes its own tab. A tab still named by its number is shown by what it runs,
@@ -163,7 +167,7 @@ closing the layout ends its timers and directory watches.
   Diff 覆盖整个文件（`git diff -U1000000`，未改动的行也作为上下文，最多 20,000 行）；
   右侧标题行显示文件路径，`↑`／`↓` 在连续的新增/删除块之间跳转，`Files` 把同一个文件
   交给 Files 视图（`shared("files.open")` 传仓库根和相对路径；终端停在子目录时 Files
-  仍按仓库根预览，不改变自己的树根）。Diff 的新增/删除行用 18% 的 ansi 色铺底，
+  仍按仓库根预览，不改变自己的树根）。Diff 的新增/删除行用 15% 的 VS Code diff 色（#2EA043／#F85149）铺底，
   行号右侧再放一个同色的 `+`／`−` 标记，不靠颜色也能分辨。
   Header 下的来源行在 Working tree 与另一个分支之间切换：分支列表来自
   `git for-each-ref`（本地在前、远端在后，隐藏当前分支和 `origin/HEAD` 这类符号引用），
@@ -186,7 +190,7 @@ closing the layout ends its timers and directory watches.
 "0.1.12"}`):
 
 ```
-root row (canvas, titlebar none, traffic_lights [12,16], terminal_padding [0,0], no divider)
+root row (theme vscode-2026-dark, canvas, titlebar none, traffic_lights [12,16], terminal_padding [0,0], no divider)
 ├─ sidebar column (268px, min 222, max 480, background chrome, resizable false)
 │  ├─ brand block (44px, my-brand, window_drag; empty drag surface)
 │  ├─ sidebar-list block (weight 1, min 90, mod my-sidebar)
@@ -207,11 +211,19 @@ Herdr 保留隐藏的子视图实例，并保存 stack 的选择。
 `props.workspace` 让两种工具跟随当前终端目录；旧版独立工具 Tab 不带此标志，仍保留原目录，
 入口会优先复用它们而不强行关闭。
 
+**Theme** (`themes/vscode-2026-dark.json`). An ordinary Herdr theme file: the
+terminal `background`, `foreground`, `selection`, `cursor` and 16-colour `ansi` table
+are VS Code's terminal palette; `colors` overrides the panel palette with `#191A1B`
+chrome and surface, `#121314` terminals and editor wells, `#2A2B2C` borders, `#242526`
+raised chips, `#2A2B2C` hover, `#37383A` selected, `#3994BC` accent and the working /
+blocked / done / idle states. The layout's root `"theme"` names it, and `install.sh` also selects it through
+`app.theme`, because a picker choice wins over the layout.
+
 **Mods.**
 
 | Mod | Role |
 |---|---|
-| `my-sidebar` | Retained Spaces and Agents views in one scroll. Uses the shared 44 px row and 26 px mark scale, count chips, a neutral selection, worktree / sub-agent trees and a sort popup. Git and background polling behaviour is unchanged. |
+| `my-sidebar` | Retained Spaces and Agents views in one scroll. Uses the shared 44 px row and 26 px mark scale, count chips, 2026 Dark's raised neutral selection, worktree / sub-agent trees and a sort popup. Git and background polling behaviour is unchanged. |
 | `my-tabs` | 32 px tabs in a 44 px bar, a grouped quick-start toolbar that shows only installed programs, fixed Files / Changes entries and a 680 px compact breakpoint. Retains tab rename, drag, close, legacy tool-tab reuse and native braille status animation. |
 | `my-pane` | A 36 px header with 6% space tint on focus, shared typography, a fixed 68 px status slot and grouped 24 px split / zoom / close controls with tooltips. Each action targets its own pane. |
 
@@ -384,11 +396,11 @@ copies for Windows.
 - Heights are fixed by `SIZE`: 44 px agent/space rows, 40 px worktree rows, 26 px
   sub-agent rows, 32 px tabs in a 44 px bar, 28 px file rows and 22 px diff rows.
   Update the virtual list row height along with its renderer when changing density.
-- The neutral steps are the foreground colour at low alpha (`UI.subtle` 3.1 %,
-  `hover` 5.1 %, `active` 9 %, `line` 7.8 %, `field` 6.3 %, `lineSoft` 4.7 %), so they read
-  identically on `chrome`, `surface` and `background` and follow a light theme. The
-  semantic washes — `tint` 11.8 % (with a 22 % `tintEdge`), `badge` 12.2 %, `diff` 18 %
-  and `tile` 18 % — are declared once as well, so a status tile, a `NEEDS YOU` pill and
+- The neutral steps are the foreground colour at low alpha (`UI.subtle` 3.9 %,
+  `hover` 6.3 %, `active` 13.7 %, `line` 10.2 %, `field` 7.1 %, `lineSoft` 3.5 %), so they read
+  identically on `chrome`, `surface` and `background` and follow the theme. The
+  semantic washes — `tint` 11.8 % (with a 22 % `tintEdge`), `badge` 12.2 %, `diff` 15 %
+  and `tile` 15 % — are declared once as well, so a status tile, a `NEEDS YOU` pill and
   an added or removed line all take their tint from the same table. A space colour only
   ever appears as a solid monogram, a tinted icon tile, a coloured glyph, a resting tint
   or a dot — never as a full row fill and never as a rail or underline. The tab status
@@ -410,7 +422,7 @@ copies for Windows.
 - On macOS the empty brand block leaves room for the traffic lights; the tab bar does
   not need to, because the sidebar is always expanded.
 - The pane and header surface is the theme's `surface`, and the focused header's tint
-  mixes against it, so the layout follows both light and dark themes; a 2.5% foreground tint is
+  mixes against it, so the layout follows whatever theme it is pointed at; a 2.5% foreground tint is
   the fallback for a focused space with no colour.
 - `line_height` takes a bare number as a multiplier (`1.45`), not pixels. The two-line
   rows use `"15px"` / `"14px"`; `line_height(16)` would make each line 16× tall.
@@ -431,8 +443,8 @@ copies for Windows.
 - Brand and tab bar align at 44 px. Pane / Files / Changes headers align at 36 px.
 - Spaces and Agents use 44 px rows, 26 px marks, 3 px gaps and 8 px insets.
   Worktree and sub-agent rows use 40 px and 26 px respectively.
-- Hover, selection, count chips, muted metadata and tooltips remain readable in
-  dark and light themes. Solid monograms choose contrasting dark or white text.
+- Hover, selection, count chips, muted metadata and tooltips remain readable on
+  the 2026 Dark palette. Solid monograms choose contrasting dark or white text.
 - Files and Changes stay fixed at the right of the tab bar, collapse to icons
   below 680 px of bar width and keep working without creating or closing tabs.
 - Working, blocked, done and idle marks remain visible in the relevant lists;

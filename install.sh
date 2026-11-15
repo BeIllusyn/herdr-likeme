@@ -53,9 +53,11 @@ if [ -z "$SRC" ]; then
   SRC="$TMP"
 fi
 
-mkdir -p "$DST/layouts" "$DST/mods"
+mkdir -p "$DST/layouts" "$DST/mods" "$DST/themes"
 
 install -m 644 "$SRC/layouts/$LAYOUT.json" "$DST/layouts/$LAYOUT.json"
+install -m 644 "$SRC/themes/vscode-2026-dark.json" "$DST/themes/vscode-2026-dark.json"
+rm -f "$DST/themes/vscode-dark-modern.json"
 if [ -f "$SRC/layouts/$LAYOUT.png" ]; then
   install -m 644 "$SRC/layouts/$LAYOUT.png" "$DST/layouts/$LAYOUT.png"
 fi
@@ -84,6 +86,11 @@ if ! herdr-app do layout.switch "{\"name\":\"$LAYOUT\"}" >/dev/null; then
   echo "Files are in place, but Herdr could not switch to \"$LAYOUT\":" >&2
   herdr-app status >&2 || true
   exit 1
+fi
+
+# The layout names the theme too; the picker is what actually wins, so set it.
+if ! herdr-app do app.theme '{"name":"vscode-2026-dark"}' >/dev/null; then
+  echo "Layout installed, but Herdr could not select the vscode-2026-dark theme" >&2
 fi
 
 echo "Installed \"$LAYOUT\" into $DST."

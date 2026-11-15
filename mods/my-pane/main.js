@@ -21,7 +21,7 @@ export default class Pane extends View {
   button(t, id, glyph, tip, command, args, danger = false) {
     return div().id(id).size(SIZE.control).flex_none().flex().items_center().justify_center().rounded(5)
       .text_color(t.muted).cursor_pointer().tooltip(tip)
-      .hover(s => s.bg(withAlpha(danger ? t.ansi1 : t.foreground, UI.hover)).text_color(danger ? t.ansi1 : t.foreground))
+      .hover(s => s.bg(danger ? withAlpha(t.blocked, UI.hover) : t.hover).text_color(danger ? t.blocked : t.foreground))
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_click((_e, cx) => { cx.stop_propagation(); run(command, args); })
       .child(svg(`mods/my-pane/${glyph}.svg`).size(13));

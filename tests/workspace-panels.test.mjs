@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
-import { changeColor, markColor, markInk, withAlpha, UI, TYPE, SIZE } from "../mods/my-sidebar/colors.js";
+import { changeColor, markColor, markInk, withAlpha, UI, SCM, SYNTAX, TYPE, SIZE } from "../mods/my-sidebar/colors.js";
 
 const read = file => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 
@@ -64,7 +64,7 @@ function fixture({ legacy = false, available = ["claude", "pi", "lazygit", "nvim
       const pane = panes.find(p => p.tab === tab?.id);
       return { space: space.id, tab: tab?.id, pane: pane?.pane, cwd: pane?.cwd };
     },
-    theme: () => ({ raised: "#222222", muted: "#999999", foreground: "#ffffff", chrome: "#111111" }),
+    theme: () => ({ raised: "#222222", muted: "#999999", foreground: "#ffffff", chrome: "#111111", selected: "#37383a", hover: "#2a2b2c" }),
     window: () => ({ platform, titlebar: "none" }),
     settings: () => ({ zoom: 1 }), shared: () => undefined,
     // The quick-start check: a failed look at the shell, or the commands the
@@ -80,7 +80,7 @@ function fixture({ legacy = false, available = ["claude", "pi", "lazygit", "nvim
     },
     // The tab bar imports these from colors.js; the loader strips imports, so
     // the fixture hands the mod the real tokens.
-    markColor, withAlpha, UI, TYPE, SIZE,
+    markColor, withAlpha, UI, SCM, SYNTAX, TYPE, SIZE,
     openOverlay: spec => commands.push({ name: "overlay", args: spec }),
     run(name, args) {
       commands.push({ name, args: JSON.parse(JSON.stringify(args)) });
@@ -115,23 +115,21 @@ test("窄窗口收起工具文字，入口仍可点击，跨过宽度阈值时�
 });
 
 test("空间标记在明暗底色上自动选择可读的文字颜色", () => {
-  assert.equal(markInk("#ffffff"), "#101114");
-  assert.equal(markInk("#56b6c2"), "#101114");
+  assert.equal(markInk("#ffffff"), "#121314");
+  assert.equal(markInk("#56b6c2"), "#121314");
   assert.equal(markInk("#101114"), "#ffffff");
   assert.equal(markInk("#243764"), "#ffffff");
   // A stored ANSI name resolves through the fallback table before it is read.
-  assert.equal(markInk("ansi6"), "#101114");
-  assert.equal(markInk(null), "#101114");
+  assert.equal(markInk("ansi6"), "#121314");
+  assert.equal(markInk(null), "#121314");
 });
 
 test("空间与改动状态共用一套可辨识的颜色", () => {
-  const t = { ansi1: "#red", ansi2: "#green", ansi3: "#sand", ansi5: "#mauve", muted: "#muted" };
-  assert.equal(changeColor("A", t), "#green");
-  assert.equal(changeColor("D", t), "#red");
-  assert.equal(changeColor("U", t), "#mauve");
-  assert.equal(changeColor("M", t), "#sand");
-  assert.equal(changeColor("?", t), "#sand");
-  assert.equal(changeColor("A", { muted: "#muted" }), "#muted");
+  assert.equal(changeColor("A"), SCM.added);
+  assert.equal(changeColor("D"), SCM.deleted);
+  assert.equal(changeColor("U"), SCM.untracked);
+  assert.equal(changeColor("M"), SCM.modified);
+  assert.equal(changeColor("?"), SCM.modified);
 });
 
 test("中性刻度逐级增强，线条分为三档", () => {
@@ -176,7 +174,7 @@ test("连续点击和切换工具只选择工作区视图，不增加或关闭 T
   const tabEl = find(f.render(), "tab-one");
   const panelBg = panelEl?.styles?.bg ?? "";
   const tabBg = tabEl?.styles?.bg ?? "";
-  assert.equal(panelBg, withAlpha("#ffffff", UI.active));
+  assert.equal(panelBg, f.host.theme().selected);
   // While a tool view is open no tab carries the selection.
   assert.equal(tabBg, "");
 });
@@ -509,16 +507,16 @@ test("Files 的对比模式读取整个文件的 diff", async () => {
 });
 
 test("Files 的并排对比行给删除/新增半边着色，长行不省略、按侧偏移", () => {
-  const { Files } = load("mods/my-files/main.js", "Files", { div: element, h_flex: element, withAlpha, UI, TYPE, SIZE });
+  const { Files } = load("mods/my-files/main.js", "Files", { div: element, h_flex: element, withAlpha, UI, SCM, TYPE, SIZE });
   const files = new Files();
   Object.assign(files, { splitFrac: 0.5, compareW: 800, diffX: { left: 30, right: 0 }, diffText: { left: 1000, right: 600 } });
-  const theme = { ansi1: "#e06c75", ansi2: "#98c379", dim: "#999999", border: "#333333" };
+  const theme = { dim: "#999999", border: "#333333", blocked: "#f85149", working: "#e2c08d" };
   const row = files.compareRow({
     left: { kind: "-", oldNumber: 2, text: "old" },
     right: { kind: "+", newNumber: 2, text: "new" },
   }, theme);
-  assert.equal(row.nodes[0].styles.bg, `#e06c75${UI.diff}`);
-  assert.equal(row.nodes[2].styles.bg, `#98c379${UI.diff}`);
+  assert.equal(row.nodes[0].styles.bg, `${SCM.diffDel}${UI.diff}`);
+  assert.equal(row.nodes[2].styles.bg, `${SCM.diffAdd}${UI.diff}`);
   // 左栏是固定的百分比宽度，右栏吃掉剩余空间。
   assert.equal(row.nodes[0].styles.w, "50%");
   assert.ok("flex_none" in row.nodes[0].styles);
