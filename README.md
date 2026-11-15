@@ -22,7 +22,7 @@ the active tool view and its editor are the real UI._
 | **Sidebar** | One scrolling column for Spaces and Agents, with a scrollbar visible on hover. The 32 px section captions use 10 px labels and small neutral count chips; 44 px rows, 26 px marks and 3 px gaps give both lists the same rhythm. Both retained views check live data every 250 ms (1 s in the background) and redraw only when it changes. |
 | **Spaces** | A tinted monogram, a 13 px project name and an 11 px branch with a small branch icon and ahead/behind counts. Selection uses a neutral fill and a solid space mark; its text automatically chooses dark or white ink for contrast. Worktrees sit under their checkout with a branch glyph that shares the checkout title's column, their own names stepping one glyph further in. A 32 px New space action ends the list. |
 | **Agents** | The agent's title leads, with its space underneath and a small space-coloured dot. The focused row uses the same selection as Spaces and a tinted icon tile. Sub-agent rows are 26 px. Working, Needs you, Done and Idle remain visible; elapsed time and pin share a fixed slot. Priority keeps its section headers; Grouped hides a redundant single-space header. |
-| **Tabs** | A 44 px bar with 32 px tabs, 12 px labels and 4 px gaps. Quick starts are grouped behind a short hairline after `+`: Claude Code (`--dangerously-skip-permissions`), Pi, Lazygit and Neovim. Files / Changes stay fixed at the right, switch the workspace without creating tabs, and collapse to icons with tooltips below 680 px of bar width. Existing standalone tool tabs are reused. Tabs keep drag, rename, zoom and close actions; close buttons brighten on hover. |
+| **Tabs** | A 44 px bar with 32 px tabs, 12 px labels and 4 px gaps. Quick starts are grouped behind a short hairline after `+`: every installed agent Herdr can start, with Claude Code (`--dangerously-skip-permissions`) and Pi leading, plus Lazygit and Neovim. Files / Changes stay fixed at the right, switch the workspace without creating tabs, and collapse to icons with tooltips below 680 px of bar width. Existing standalone tool tabs are reused. Tabs keep drag, rename, zoom and close actions; close buttons brighten on hover. |
 | **Panes** | Edge-to-edge terminals and 1 px split gaps. The 36 px header matches Files / Changes; focus adds a 6% space tint, a 13 px semibold title and a coloured program icon. Folder text is 11 px, the fixed status slot is 68 px, and split / zoom / close controls are grouped 24 px buttons with tooltips. Close actions use a red hover state. |
 | **Files / Changes** | Matching 260 px initial list widths, 36 px headers and 28 px file rows. Filenames lead in Changes, with quieter directory context, one colour per A / D / U / M status across both views, tinted and edged status tiles, and full-path tooltips. File previews keep the editor and optimistic auto-save, with a fixed-width save indicator and a larger Edit / Diff switch. Full-file diffs and before/after comparisons use 12 px type, 22 px rows, the same 18% add/remove wash, and coloured `+` / `−` signs. The before/after divider drags to set each half's width, and each half scrolls horizontally on its own with line numbers and signs pinned, so a long line is read in full instead of being ellipsized. Change navigation is grouped in the header. Lists remain virtualized, and switching views preserves folders and split widths. Both views share the same empty-state styling; a clean worktree shows All caught up. A source row above the changed files switches between the working tree and another local or remote branch: the chosen branch is compared from its merge base to HEAD (committed changes only), drives the same list and whole-file diff, and replaces the commit box with a quiet note. |
 | **Brand bar** | A 44 px empty window-drag surface, aligned with the tab bar, and a 76 px footer with 28 px Settings / Add machine rows. The footer, sidebar and brand share a continuous, faint right-hand divider. |
@@ -32,13 +32,15 @@ Everything else — menus — is Herdr's `main` layout unchanged.
 ## Requirements
 
 - Herdr 0.1.12 or newer.
-- `omp` itself is optional: likeme always adds Herdr's program entry for it, so the
-  CLI is recognized whenever it is installed later. `LIKEME_OMP=0` opts out.
-  - likeme only adds Herdr's recognition entry; it never installs the omp CLI.
+- `omp` and `fx` themselves are optional: likeme always adds Herdr's program
+  entries for them, so each CLI is recognized whenever it is installed later.
+  `LIKEME_OMP=0` and `LIKEME_FX=0` opt out.
+  - likeme only adds Herdr's recognition entries; it never installs either CLI.
     Install omp with the upstream method, e.g. `curl -fsSL https://omp.sh/install | sh`,
-    `brew install can1357/tap/omp`, or `bun install -g @oh-my-pi/pi-coding-agent`.
-    The upstream installer verifies the downloaded binary's SHA-256; likeme never
-    runs it.
+    `brew install can1357/tap/omp`, or `bun install -g @oh-my-pi/pi-coding-agent`
+    (its installer verifies the downloaded binary's SHA-256). Install fx with
+    `curl -fsSL https://fx.sh/setup.sh | bash` (it lands in `~/.local/bin`).
+    likeme never runs either installer.
 - Herdr's shipped mods and assets that this layout references:
   `workspace-chrome`, `pane` (the tab bar borrows its close/zoom icons),
   `menu`, `new-menu`, the program icons under `icons/` (the quick starts),
@@ -63,7 +65,7 @@ cd herdr-likeme
 
 `install.sh` copies `layouts/likeme.json` and the six mods into
 `${HERDR_APP_HOME:-~/.config/herdr-app}`, runs `herdr-app check` on every mod,
-adds Herdr's omp program entry, and switches to the layout.
+adds Herdr's omp and fx program entries, and switches to the layout.
 Herdr reloads the files within a second.
 
 omp registration installs the icon as `my-icons/likeme-omp.svg` and ensures a
@@ -76,11 +78,15 @@ with a trailing newline; when `programs.omp` already exists, the JSON is invalid
 `programs` is not an object, or `programs.json` is a symlink, the file is left
 byte-identical. A symlinked `programs.json` also skips the icon.
 
-Set `LIKEME_OMP=0` to skip this recognition:
+The same registration runs for fx: `extras/fx/install.sh` installs
+`my-icons/likeme-fx.svg` and ensures a `programs.fx` entry, with the same merge
+rules and the same guarantees. `LIKEME_FX=0` skips it.
+
+Set `LIKEME_OMP=0` or `LIKEME_FX=0` to skip either recognition:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/BeIllusyn/herdr-likeme/main/install.sh | LIKEME_OMP=0 bash
-# or: export LIKEME_OMP=0 && ./install.sh
+curl -fsSL https://raw.githubusercontent.com/BeIllusyn/herdr-likeme/main/install.sh | LIKEME_OMP=0 LIKEME_FX=0 bash
+# or: export LIKEME_FX=0 && ./install.sh
 ```
 
 It **overwrites** `layouts/likeme.json` and the `mods/my-*` folders on every run
@@ -106,14 +112,15 @@ herdr-app check "$DST/mods/my-brand"
 herdr-app do layout.switch '{"name":"likeme"}'
 ```
 
-For the optional omp registration, also run `bash extras/omp/install.sh "$DST"`;
-it uses the same merge rules as the main installer.
+For the optional program registrations, also run `bash extras/omp/install.sh "$DST"`
+and `bash extras/fx/install.sh "$DST"`; they use the same merge rules as the main
+installer.
 
 After editing a mod, run `./check.sh`: it loads all six mods and fails if their six
 `colors.js` copies drift. Shared `UI`, `TYPE` and `SIZE` tokens keep colours, text and
 component dimensions consistent.
 
-工作区入口和 omp 安装脚本的回归测试使用 Node.js 内置测试运行器：
+工作区入口以及 omp／fx 安装脚本的回归测试使用 Node.js 内置测试运行器：
 
 ```sh
 node --test tests/*.test.mjs
@@ -125,8 +132,9 @@ matching `"mod"` references in `likeme.json`.
 - Update: run the one-liner again, or `git pull && ./install.sh`
 - Uninstall: delete `layouts/likeme.json`, `layouts/likeme.png` (if present) and the
   `mods/my-sidebar`, `mods/my-tabs`, `mods/my-pane`, `mods/my-files`, `mods/my-changes`,
-  `mods/my-brand` folders. Remove the `programs.omp` entry from `programs.json` and
-  `my-icons/likeme-omp.svg`; delete `programs.json` if it held only that entry. If you
+  `mods/my-brand` folders. Remove the `programs.omp` and `programs.fx` entries from
+  `programs.json` and `my-icons/likeme-omp.svg` / `my-icons/likeme-fx.svg`; delete
+  `programs.json` if it held only those entries. If you
   upgraded from a version before the merged sidebar, also delete the old
   `mods/my-spaces` and `mods/my-agents` folders; their code now lives inside
   `mods/my-sidebar`.

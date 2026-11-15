@@ -1,0 +1,17 @@
+{
+  "programs": {
+    "fx": {
+      "name": "fx",
+      "icon": "my-icons/likeme-fx.svg",
+      "tint": true,
+      "tile": "#1c1d21",
+      "color": "#ffffff",
+      "run": [
+        "fx"
+      ],
+      "match": [
+        "fx"
+      ]
+    }
+  }
+}

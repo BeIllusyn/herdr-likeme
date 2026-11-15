@@ -7,7 +7,7 @@
 # One command, always the latest main (also the update command):
 #   curl -fsSL https://raw.githubusercontent.com/BeIllusyn/herdr-likeme/main/install.sh | bash
 #
-# Environment: HERDR_APP_HOME, REPO, REF, LIKEME_OMP.
+# Environment: HERDR_APP_HOME, REPO, REF, LIKEME_OMP, LIKEME_FX.
 set -euo pipefail
 
 REPO="${REPO:-BeIllusyn/herdr-likeme}"
@@ -73,6 +73,11 @@ done
 # keeps an unexpected failure from aborting the layout install.
 if ! LIKEME_OMP="${LIKEME_OMP:-1}" bash "$SRC/extras/omp/install.sh" "$DST"; then
   echo "omp registration failed; continuing with the layout install" >&2
+fi
+
+# Register Herdr's fx recognition the same way; LIKEME_FX=0 opts out.
+if ! LIKEME_FX="${LIKEME_FX:-1}" bash "$SRC/extras/fx/install.sh" "$DST"; then
+  echo "fx registration failed; continuing with the layout install" >&2
 fi
 
 if ! herdr-app do layout.switch "{\"name\":\"$LAYOUT\"}" >/dev/null; then
