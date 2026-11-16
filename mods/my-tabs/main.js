@@ -174,17 +174,19 @@ export default class Tabs extends View {
       if (programUse.get(p) === 1) return [e.c.id, p];
       return [e.c.id, `${p} ${e.i + 1}`];
     }));
-    // A tab is a quiet pill, not a card: the selected one takes a slightly
-    // stronger neutral fill, a heavier name, and its tinted program icon takes
-    // the space's colour — the same "selection by mark" language as the rows.
+    // A tab is a quiet pill, not a card: the selected one takes the same raised
+    // neutral fill as a selected row, with contrasting ink, a heavier name and
+    // its tinted program icon in the space's colour — the same "selection by
+    // mark" language as the rows. Using the editor background here left the
+    // selected tab nearly invisible on 2026 Light's #FAFAFD chrome.
     const fillRaw = markColor((shared("space.colors") ?? {})[space?.id], t);
     const fill = fillRaw ? fillRaw.slice(0, 7) : null;
     const item = ({ c, i, program }) => {
       const name = labels.get(c.id), active = c.active && !panelOpen;
       return h_flex().id(`tab-${c.id}`).relative().h(32).rounded(SIZE.radius).px(10).gap(7).items_center().flex_none().text_size(TYPE.small).cursor_pointer()
         .when(active, el => el
-          .bg(t.background)
-          .text_color(t.foreground))
+          .bg(t.selected)
+          .text_color(selectedInk(t)))
         .when(!active, el => el
           .text_color(t.muted)
           .hover(s => s.bg(t.hover).text_color(t.foreground)))

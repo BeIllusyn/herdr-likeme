@@ -147,7 +147,7 @@ closing the layout ends its timers and directory watches.
   the terminal label). The chevron folds sub-agents. The header icon opens the sort
   popup (Priority / Grouped by space). Group headers and machine headers fold; Priority's
   section headers stay visible even when only one section has agents.
-- **Tabs.** Click selects; the active tab is the darker editor background with normal text, a 600 name and its
+- **Tabs.** Click selects; the active tab takes the theme's raised neutral fill with contrasting ink, a 600 name and its
   tinted program icon in the space's colour. Drag reorders (`tab.move`) with an accent line on the edge it
   will land on, double-click renames, right-click opens the tab menu, every close
   button closes its own tab. A tab still named by its number is shown by what it runs,
