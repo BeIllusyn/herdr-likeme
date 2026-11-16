@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
-import { changeColor, markColor, markInk, withAlpha, UI, SCM, SYNTAX, TYPE, SIZE } from "../mods/my-sidebar/colors.js";
+import { changeColor, markColor, markInk, selectedInk, scmColors, syntaxColors, isLight, withAlpha, UI, SCM, SYNTAX, TYPE, SIZE } from "../mods/my-sidebar/colors.js";
 
 const read = file => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 
@@ -80,7 +80,7 @@ function fixture({ legacy = false, available = ["claude", "pi", "lazygit", "nvim
     },
     // The tab bar imports these from colors.js; the loader strips imports, so
     // the fixture hands the mod the real tokens.
-    markColor, withAlpha, UI, SCM, SYNTAX, TYPE, SIZE,
+    markColor, selectedInk, withAlpha, UI, SCM, SYNTAX, TYPE, SIZE,
     openOverlay: spec => commands.push({ name: "overlay", args: spec }),
     run(name, args) {
       commands.push({ name, args: JSON.parse(JSON.stringify(args)) });
@@ -130,6 +130,29 @@ test("空间与改动状态共用一套可辨识的颜色", () => {
   assert.equal(changeColor("U"), SCM.untracked);
   assert.equal(changeColor("M"), SCM.modified);
   assert.equal(changeColor("?"), SCM.modified);
+});
+
+test("亮色主题换上 2026 Light 的语法、diff 与选中文字颜色", () => {
+  const light = { background: "#ffffff", selected: "#d6d6d8" };
+  const dark = { background: "#121314", selected: "#37383a" };
+  assert.equal(isLight(light), true);
+  assert.equal(isLight(dark), false);
+  // A partial theme without a background keeps the dark tables the mods
+  // showed before the light theme shipped.
+  assert.equal(isLight({ selected: "#d6d6d8" }), false);
+  assert.equal(scmColors(light).added, "#587c0c");
+  assert.equal(scmColors(light).diffDel, "#ad0707");
+  assert.equal(changeColor("A", light), "#587c0c");
+  assert.equal(changeColor("D", light), "#ad0707");
+  assert.equal(syntaxColors(light).keyword, "#cf222e");
+  assert.equal(syntaxColors(light).comment, "#6e7781");
+  assert.equal(syntaxColors(dark).keyword, "#ff7b72");
+  // Selected rows take white ink on the dark fill and near-black on the light
+  // one, so an accent_foreground that must stay white for accent buttons is
+  // never used as body text on a raised neutral.
+  assert.equal(selectedInk(light), "#121314");
+  assert.equal(selectedInk(dark), "#ffffff");
+  assert.equal(selectedInk({}), "#ffffff");
 });
 
 test("中性刻度逐级增强，线条分为三档", () => {
@@ -507,7 +530,7 @@ test("Files 的对比模式读取整个文件的 diff", async () => {
 });
 
 test("Files 的并排对比行给删除/新增半边着色，长行不省略、按侧偏移", () => {
-  const { Files } = load("mods/my-files/main.js", "Files", { div: element, h_flex: element, withAlpha, UI, SCM, TYPE, SIZE });
+  const { Files } = load("mods/my-files/main.js", "Files", { div: element, h_flex: element, withAlpha, UI, scmColors, selectedInk, TYPE, SIZE });
   const files = new Files();
   Object.assign(files, { splitFrac: 0.5, compareW: 800, diffX: { left: 30, right: 0 }, diffText: { left: 1000, right: 600 } });
   const theme = { dim: "#999999", border: "#333333", blocked: "#f85149", working: "#e2c08d" };

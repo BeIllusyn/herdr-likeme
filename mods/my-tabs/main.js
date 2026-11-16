@@ -1,7 +1,7 @@
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, panes, focused, run, openOverlay, theme, window, shared, layout, settings, exec, knownAgents } from "herdr";
-import { markColor, withAlpha, UI, TYPE, SIZE } from "./colors.js";
+import { markColor, selectedInk, withAlpha, UI, TYPE, SIZE } from "./colors.js";
 
 // Agents that keep the first slots, and the one start that wants its own
 // arguments rather than the program table's `run`.
@@ -243,7 +243,7 @@ export default class Tabs extends View {
         .cursor_pointer().tooltip(label).text_size(TYPE.small).font_weight(on ? 600 : 500)
         .when(on, el => el
           .bg(t.selected)
-          .text_color(t.accent_foreground)
+          .text_color(selectedInk(t))
           .hover(s => s.bg(t.selected)))
         .when(!on, el => el
           .text_color(t.muted)

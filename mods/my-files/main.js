@@ -2,7 +2,7 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, h_resizable, resizable_panel, Editor, EditorState, Scrollbar, v_virtual_list } from "gpui-base";
 import { spaces, panes, focused, props, exec, readTextFile, writeTextFile, watchFolder, theme, settings, window, shared, layout } from "herdr";
-import { markColor, changeColor, withAlpha, UI, SYNTAX, SCM, TYPE, SIZE } from "./colors.js";
+import { markColor, changeColor, withAlpha, selectedInk, syntaxColors, scmColors, UI, TYPE, SIZE } from "./colors.js";
 
 const MOD = "my-files";
 // How often a shown copy refreshes; a hidden one does nothing and catches up
@@ -404,7 +404,7 @@ export default class Files extends View {
         this.code = EditorState.new({ language: LANG[ext] ?? ext, readonly: !editable,
           value: editable ? text : text.slice(0, 400000) + "\n… (file truncated)",
           font_family: settings().font_family, font_size: 12,
-          syntax: SYNTAX });
+          syntax: syntaxColors(t) });
         if (editable) {
           // Coalesce keystrokes: one write after a pause, plus one on blur,
           // submit, file switch or close.
@@ -488,22 +488,24 @@ export default class Files extends View {
   // 并排对比的一行：左侧是旧文件，右侧是新文件；变化的半边用底色和符号标出。
   compareRow(pair, t) {
     if (pair.note) return div().w_full().h(SIZE.diffRow).flex_none().px(12).truncate().text_color(t.muted).child(pair.note);
+    const scm = scmColors(t);
     return h_flex().w_full().h(SIZE.diffRow).flex_none()
-      .child(this.compareCell(pair.left, pair.left?.kind === "-" ? withAlpha(SCM.diffDel, UI.diff) : null, pair.left?.oldNumber, "left", t, `${this.splitFrac * 100}%`))
+      .child(this.compareCell(pair.left, pair.left?.kind === "-" ? withAlpha(scm.diffDel, UI.diff) : null, pair.left?.oldNumber, "left", t, `${this.splitFrac * 100}%`))
       .child(div().w(1).flex_none().bg(withAlpha(t.foreground, UI.field)))
-      .child(this.compareCell(pair.right, pair.right?.kind === "+" ? withAlpha(SCM.diffAdd, UI.diff) : null, pair.right?.newNumber, "right", t, null));
+      .child(this.compareCell(pair.right, pair.right?.kind === "+" ? withAlpha(scm.diffAdd, UI.diff) : null, pair.right?.newNumber, "right", t, null));
   }
 
   // 一侧的格子：行号和 +/- 槽固定，只有文字按该侧自己的水平偏移滚动并被裁剪。
   // 文字不换行也不省略，长行滚到头就能看到末尾。
   compareCell(row, tint, number, side, t, width) {
     const x = Math.min(this.diffX[side], this.diffMaxX(side));
+    const scm = scmColors(t);
     return h_flex().h_full().min_w(0).items_center().gap(6).pl(6).pr(6)
       .when(Boolean(row) && Boolean(tint), (el) => el.bg(tint))
       .when(Boolean(width), (el) => el.w(width).flex_none())
       .when(!width, (el) => el.flex_1())
       .child(div().w(36).flex_none().text_right().text_size(TYPE.meta).text_color(t.dim).child(row && number !== undefined ? String(number) : ""))
-      .child(div().w(8).flex_none().text_size(TYPE.meta).text_color(row?.kind === "-" ? SCM.deleted : row?.kind === "+" ? SCM.added : t.dim).child(row?.kind === "-" ? "−" : row?.kind === "+" ? "+" : ""))
+      .child(div().w(8).flex_none().text_size(TYPE.meta).text_color(row?.kind === "-" ? scm.deleted : row?.kind === "+" ? scm.added : t.dim).child(row?.kind === "-" ? "−" : row?.kind === "+" ? "+" : ""))
       .child(div().flex_1().min_w(0).h_full().overflow_hidden()
         .child(div().w(this.diffText[side]).h_full().ml(0 - x).whitespace_nowrap().flex().items_center().child(row?.text ?? "")));
   }
@@ -659,16 +661,17 @@ export default class Files extends View {
   // click), and it is rebuilt only while its row is on screen.
   fileRow(r, t, accent) {
     const selected = this.file === r.path && !r.dir;
-    const markTint = changeColor(r.mark);
+    const markTint = changeColor(r.mark, t);
+    const ink = selectedInk(t);
     // 显式 id 让行拥有稳定的 element state：GPUI 只在有 state 的 hover 元素上
     // 注册“进入/离开即重绘”的监听，否则高亮会停在第一次悬停的行上。
     return h_flex().id(`file-${r.path}`).h(SIZE.listRow).flex_none().pl(6 + r.depth * 14).pr(8).gap(7).items_center().rounded(SIZE.radius).cursor_pointer()
       .when(selected, el => el.bg(t.selected))
       .when(!selected, el => el.hover(s => s.bg(t.hover)))
       .child(r.dir ? svg(`mods/my-files/chevron-${r.open ? "down" : "right"}.svg`).size(10).flex_none().text_color(t.dim) : div().w(10).flex_none())
-      .child(svg(`mods/my-files/${r.dir ? "folder" : "file"}.svg`).size(13).flex_none().text_color(selected ? t.accent_foreground : t.muted))
+      .child(svg(`mods/my-files/${r.dir ? "folder" : "file"}.svg`).size(13).flex_none().text_color(selected ? ink : t.muted))
       .child(div().flex_1().min_w(0).truncate().text_size(TYPE.small).font_weight(selected ? 600 : 400)
-        .text_color(selected ? t.accent_foreground : t.foreground).child(r.name))
+        .text_color(selected ? ink : t.foreground).child(r.name))
       .when(Boolean(r.mark), el => el.child(div().w(10).flex_none().text_size(TYPE.label).font_weight(600).text_color(markTint).child(r.mark)));
   }
 
@@ -714,7 +717,7 @@ export default class Files extends View {
     const dir = parts.length ? parts.join("/") + "/" : "";
     const segment = (id, label, on, enabled, tip, action) => h_flex().id(id).h(SIZE.control).flex_none().px(9).rounded(5).items_center()
       .text_size(TYPE.meta).font_weight(600)
-      .when(on, (el) => el.bg(t.selected).text_color(t.accent_foreground))
+      .when(on, (el) => el.bg(t.selected).text_color(selectedInk(t)))
       .when(!on, (el) => el.text_color(enabled ? t.muted : t.dim))
       .when(enabled && !on, (el) => el.cursor_pointer().hover((s) => s.text_color(t.foreground)))
       .when(enabled, (el) => el.tooltip(tip).on_click(action))
@@ -764,7 +767,7 @@ export default class Files extends View {
         .when(this.dirty, (e) => e.cursor_pointer().hover((s) => s.text_color(t.foreground)))
         .when(Boolean(this.saveError), (e) => e.tooltip(this.saveError))
         .on_click((_e, cx) => this.save(cx))
-        .child(div().size(4).flex_none().rounded_full().bg(this.saveError ? t.blocked : this.dirty || this.saving ? t.working : withAlpha(SCM.added, UI.dotSoft)))
+        .child(div().size(4).flex_none().rounded_full().bg(this.saveError ? t.blocked : this.dirty || this.saving ? t.working : withAlpha(scmColors(t).added, UI.dotSoft)))
         .child(this.saveError ? "Save failed" : this.saving ? "Saving…" : this.dirty ? "Save" : "Saved")));
 
     // 表头也按中缝分成两段，拖动后仍与左右两栏对齐。

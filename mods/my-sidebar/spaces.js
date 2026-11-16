@@ -6,7 +6,7 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window } from "herdr";
-import { markColor, markInk, withAlpha, UI, TYPE, SIZE } from "./colors.js";
+import { markColor, markInk, selectedInk, withAlpha, UI, TYPE, SIZE } from "./colors.js";
 import { backgroundTick } from "./util.js";
 
 // A place key is machine + NUL + folder: neither part can contain NUL, so the
@@ -418,6 +418,7 @@ export default class Spaces extends View {
   row({ w, i, g, tree }, t, fillOf) {
     const on = w.active;
     const fill = fillOf(w.id);
+    const ink = selectedInk(t);
     // A flat row on the graphite: selection is a slightly stronger neutral
     // fill, and the space's own mark wakes up — its monogram turns solid and
     // its branch glyph takes the colour. Resting rows keep the colour only in
@@ -487,7 +488,7 @@ export default class Spaces extends View {
               .min_w(0)
               .gap(1)
               .child(div().min_w(0).truncate().text_size(TYPE.body).line_height("15px")
-                .font_weight(on ? 600 : 500).text_color(on ? t.accent_foreground : t.foreground).child(w.name))
+                .font_weight(on ? 600 : 500).text_color(on ? ink : t.foreground).child(w.name))
               .when(Boolean(g), el => el.child(
                 h_flex()
                   .min_w(0)
@@ -495,11 +496,11 @@ export default class Spaces extends View {
                   .gap(4)
                   .text_size(TYPE.meta)
                   .line_height("14px")
-                  .text_color(on ? withAlpha(t.accent_foreground, "cc") : t.muted)
-                  .child(svg("mods/workspace-chrome/branch.svg").size(10).flex_none().text_color(on ? withAlpha(t.accent_foreground, "cc") : t.dim))
+                  .text_color(on ? withAlpha(ink, "cc") : t.muted)
+                  .child(svg("mods/workspace-chrome/branch.svg").size(10).flex_none().text_color(on ? withAlpha(ink, "cc") : t.dim))
                   .child(div().min_w(0).truncate().child(g.branch ?? "detached"))
-                  .when(g.ahead > 0, el => el.child(div().flex_none().text_color(on ? t.accent_foreground : t.ansi2).child(`↑${g.ahead}`)))
-                  .when(g.behind > 0, el => el.child(div().flex_none().text_color(on ? t.accent_foreground : t.ansi1).child(`↓${g.behind}`))),
+                  .when(g.ahead > 0, el => el.child(div().flex_none().text_color(on ? ink : t.ansi2).child(`↑${g.ahead}`)))
+                  .when(g.behind > 0, el => el.child(div().flex_none().text_color(on ? ink : t.ansi1).child(`↓${g.behind}`))),
               )),
           ),
       );

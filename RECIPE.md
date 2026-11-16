@@ -1,7 +1,8 @@
 # Likeme
 
-A Herdr layout built on `main` with **VS Code 2026 Dark** colours and a **Graphite**
-structure: `#121314` terminals under `#191A1B` chrome, `#2A2B2C` hairlines, VS Code's teal
+A Herdr layout built on `main` with **VS Code 2026 Dark** colours — and a matching
+**2026 Light** theme — plus a **Graphite** structure: `#121314` terminals under `#191A1B`
+chrome, `#2A2B2C` hairlines, VS Code's teal
 for focus and a raised neutral for selection, and each space's colour appearing only as a mark — a solid
 monogram on the selected space, a tinted tile behind the focused agent's icon, a coloured
 glyph in the active tab and the focused pane, a dot on an agent's space line. Rows are
@@ -30,17 +31,20 @@ tool view and its editor are the real UI._
 
 The window uses the theme's `canvas` behind the layout, `chrome` for the sidebar
 and tab bar, `surface` for headers and file lists, and `background` for terminals
-and previews. Regions meet on faint 1 px hairlines. The shipped theme is
-`themes/vscode-2026-dark.json`: VS Code's `#121314` terminals under `#191A1B` chrome,
-`#2A2B2C` borders, `#BFBFBF` text and `#3994BC` teal accent. The mods read every colour
-from `theme()`, so pointing the layout at another theme re-skins them; space marks
-come from that theme's ANSI palette.
+and previews. Regions meet on faint 1 px hairlines. Two themes ship:
+`themes/vscode-2026-dark.json` (VS Code's `#121314` terminals under `#191A1B` chrome,
+`#2A2B2C` borders, `#BFBFBF` text and `#3994BC` teal accent) and
+`themes/vscode-2026-light.json` (`#FFFFFF` terminals under `#FAFAFD` chrome,
+`#F0F1F2` borders, `#202020` text and `#0069CC` focus). The mods read every colour
+from `theme()`, so pointing the layout at another theme re-skins them; the editor
+syntax, diff and git inks also follow the theme's lightness, and space marks come
+from that theme's ANSI palette.
 
 The design system is `colors.js`, copied identically into all six mods. `UI` holds
 the neutral ladder — subtle 5.9%, hover 10.8%, active 18%, line 10.2%, field 7.1%,
 soft line 5.9% — and the semantic washes: tint 11.8% with a 22% edge, badge 12.2%,
-diff 15%, focused tile 15%, dots at 80% / 60%, and a 70% focus ring. `changeColor()`
-gives A / D / U / M VS Code's git decoration inks in both Files and Changes. `TYPE` sets labels to 10 px,
+diff 15%, focused tile 15%, dots at 80% / 60%, and a 70% focus ring. `changeColor(status, theme)`
+gives A / D / U / M the active theme's git decoration inks in both Files and Changes. `TYPE` sets labels to 10 px,
 metadata to 11 px, small text to 12 px and row / pane titles to 13 px. `SIZE` sets
 the shared dimensions:
 
@@ -68,7 +72,7 @@ The right divider continues through the brand, list and footer.
 
 **Spaces.** A 26 px rounded monogram sits before a 13 px project name and an 11 px
 branch line. The branch icon, ahead and behind counts stay quiet. A selected row
-uses the raised neutral selected fill with white text and a solid monogram; `markInk()` chooses dark or
+uses the raised neutral selected fill with contrasting text and a solid monogram; `markInk()` chooses dark or
 white lettering from the fill's luminance. Worktrees carry no tree line: a
 14 px branch glyph takes the column where a space's name starts, so the glyph
 and the checkout's title share a vertical line, and the worktree's own name and
@@ -82,7 +86,7 @@ rows are 26 px with 12 px names. Group captions retain a 5 px status / space dot
 The 30 px elapsed-time / pin slot stays fixed, as does the status area.
 
 **Tabs.** Tabs are 32 px high with a 7 px radius, 10 px horizontal padding, 12 px
-labels and 4 px gaps. Selection is 2026 Dark's raised neutral fill with white text and a semibold name.
+labels and 4 px gaps. Selection is the theme's raised neutral fill with contrasting ink and a semibold name.
 Close buttons rest at 40% opacity (70% active), with red hover feedback. The 28 px
 New tab button follows the tabs, then the agents this machine has, plus Lazygit and
 Neovim, in a group behind a short hairline. Files / Changes stay fixed at the right with 14 px icons. Below 680 px of
@@ -130,7 +134,8 @@ closing the layout ends its timers and directory watches.
   `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` every 80 ms. Blocked: a `NEEDS YOU` pill edged in its own
   colour (a bare `!` inside a group whose header already says it). Idle: a quiet 6 px
   ring. Done: a 5 px dot. A space's and a tab's status is their most urgent agent's.
-- **Spaces.** Click selects: the active row takes 2026 Dark's raised neutral fill, its text turns white and its monogram
+- **Spaces.** Click selects: the active row takes the theme's raised neutral fill, its text takes a contrasting
+  ink and its monogram
   fills solid, while a resting row lifts to 5.1 % under the pointer. Drag a row to
   reorder inside its machine; the accent line shows where it lands. Right-click opens
   Herdr's `menu` with the `space` context. Worktrees sort under their checkout and hang
@@ -190,7 +195,7 @@ closing the layout ends its timers and directory watches.
 "0.1.12"}`):
 
 ```
-root row (theme vscode-2026-dark, canvas, titlebar none, traffic_lights [12,16], terminal_padding [0,0], no divider)
+root row (theme light vscode-2026-light / dark vscode-2026-dark, canvas, titlebar none, traffic_lights [12,16], terminal_padding [0,0], no divider)
 ├─ sidebar column (268px, min 222, max 480, background chrome, resizable false)
 │  ├─ brand block (44px, my-brand, window_drag; empty drag surface)
 │  ├─ sidebar-list block (weight 1, min 90, mod my-sidebar)
@@ -211,19 +216,29 @@ Herdr 保留隐藏的子视图实例，并保存 stack 的选择。
 `props.workspace` 让两种工具跟随当前终端目录；旧版独立工具 Tab 不带此标志，仍保留原目录，
 入口会优先复用它们而不强行关闭。
 
-**Theme** (`themes/vscode-2026-dark.json`). An ordinary Herdr theme file: the
-terminal `background`, `foreground`, `selection`, `cursor` and 16-colour `ansi` table
-are VS Code's terminal palette; `colors` overrides the panel palette with `#191A1B`
-chrome and surface, `#121314` terminals and editor wells, `#2A2B2C` borders, `#242526`
-raised chips, `#2A2B2C` hover, `#37383A` selected, `#3994BC` accent and the working /
-blocked / done / idle states. The layout's root `"theme"` names it, and `install.sh` also selects it through
-`app.theme`, because a picker choice wins over the layout.
+**Themes** (`themes/vscode-2026-dark.json`, `themes/vscode-2026-light.json`). Ordinary
+Herdr theme files: each `background`, `foreground`, `selection`, `cursor` and 16-colour
+`ansi` table is VS Code's terminal palette; `colors` overrides the panel palette,
+including the working / blocked / done / idle states. Dark uses `#191A1B` chrome and
+surface, `#121314` terminals and editor wells, `#2A2B2C` borders, `#242526` raised
+chips, hover, selected, `#3994BC` accent and VS Code's dark terminal ANSI table. Light
+uses `#FAFAFD` chrome and surface, `#FFFFFF` terminals and editor wells, `#F0F1F2`
+borders, `#EAEAEA` raised chips, `#E6E6E9` hover, `#D6D6D8` selected, `#0069CC` accent
+and VS Code's light terminal ANSI table. The layout's root `"theme"` names the pair,
+`{"light": "vscode-2026-light", "dark": "vscode-2026-dark"}`, so Herdr's appearance
+(Settings' Light / Dark, or the system's when `settings.json` names no `appearance`)
+chooses one. A theme picked in Settings still wins over the layout, and `install.sh`
+never forces one; `herdr-app do app.theme '{"name":"vscode-2026-light"}'` records the
+light half, which shows once the appearance is Light.
+`colors.js` picks its editor token, diff and git inks from the theme's background, and
+`selectedInk()` gives a selected row white text on Dark's fill and near-black on
+Light's, so both themes are first-class rather than a tint over the dark one.
 
 **Mods.**
 
 | Mod | Role |
 |---|---|
-| `my-sidebar` | Retained Spaces and Agents views in one scroll. Uses the shared 44 px row and 26 px mark scale, count chips, 2026 Dark's raised neutral selection, worktree / sub-agent trees and a sort popup. Git and background polling behaviour is unchanged. |
+| `my-sidebar` | Retained Spaces and Agents views in one scroll. Uses the shared 44 px row and 26 px mark scale, count chips, the theme's raised neutral selection, worktree / sub-agent trees and a sort popup. Git and background polling behaviour is unchanged. |
 | `my-tabs` | 32 px tabs in a 44 px bar, a grouped quick-start toolbar that shows only installed programs, fixed Files / Changes entries and a 680 px compact breakpoint. Retains tab rename, drag, close, legacy tool-tab reuse and native braille status animation. |
 | `my-pane` | A 36 px header with 6% space tint on focus, shared typography, a fixed 68 px status slot and grouped 24 px split / zoom / close controls with tooltips. Each action targets its own pane. |
 
@@ -326,13 +341,18 @@ copies for Windows.
   `my-pane` uses its own `mods/my-pane/*.svg` copies instead.
 - The focused header is `mix(t.surface, fill, 0.06)` with a brighter title and a
   space-coloured icon, drawn by the mod on its own header surface. `colors.js` (the
-  shared `MARK`, `markColor`, `changeColor`, `markInk`, `mix`, `withAlpha`, `UI`,
-  `TYPE` and `SIZE`) is one file copied into all six mods; `check.sh` fails when
+  shared `MARK`, `markColor`, `changeColor`, `markInk`, `selectedInk`, `syntaxColors`,
+  `scmColors`, `isLight`, `mix`, `withAlpha`, `UI`, `TYPE` and `SIZE`) is one file copied into all six mods;
+  `check.sh` fails when
   they drift. The colour
   comes from `shared("space.colors")[space.id]`; `markColor` prefers the theme's own
   `ansiN` colour and falls back to `MARK`, so a light theme gets its own palette.
-  `changeColor` does the same for the A / D / U / M change kinds, so the file tree and
-  the Changes list never disagree about a state's hue. A
+  `changeColor` does the same for the A / D / U / M change kinds; it and
+  `syntaxColors` / `scmColors` choose the 2026 Dark or Light table from the theme's
+  background (a partial theme without one keeps Dark), so the file tree, the Changes
+  list and the editor never disagree with the active theme. `selectedInk` reads the
+  selected fill's luminance for row text, because `accent_foreground` must stay white
+  for accent buttons. A
   space with no colour falls back to the theme's `accent` for its icon and a 2.5% foreground tint for
   the header mix. It is a solid fill because Herdr's pane frame exposes only a solid
   `border`/`focus` colour and `pane.background` ignores `gradient` and `image`; a
@@ -403,7 +423,9 @@ copies for Windows.
   Update the virtual list row height along with its renderer when changing density.
 - The neutral steps are the foreground colour at low alpha (`UI.subtle` 3.9 %,
   `hover` 6.3 %, `active` 13.7 %, `line` 10.2 %, `field` 7.1 %, `lineSoft` 3.5 %), so they read
-  identically on `chrome`, `surface` and `background` and follow the theme. The
+  identically on `chrome`, `surface` and `background` and follow the theme. Over 2026
+  Light's `#FAFAFD` chrome they land on `#E2E2E5`, `#D3D3D5`, `#E4E4E7` and
+  `#EDEDF0`, the same steps the dark theme shows. The
   semantic washes — `tint` 11.8 % (with a 22 % `tintEdge`), `badge` 12.2 %, `diff` 15 %
   and `tile` 15 % — are declared once as well, so a status tile, a `NEEDS YOU` pill and
   an added or removed line all take their tint from the same table. A space colour only
@@ -439,17 +461,21 @@ copies for Windows.
 
 - `./check.sh` passes: all six mods load and all six `colors.js` copies match.
 - `node --test tests/*.test.mjs` passes, including compact toolbar behaviour,
-  mark contrast, workspace switching, legacy tabs, diff parsing, branch parsing
+  mark contrast, dark / light ink switching, workspace switching, legacy tabs, diff
+  parsing, branch parsing
   and saving, plus the omp installer's fresh, merge/mode, existing-key, invalid
   JSON (python and jq), non-object shapes, symlink, `LIKEME_OMP=0`, omp-absent and
   jq-fallback cases.
 - `bash -n install.sh` and `bash -n extras/omp/install.sh` report no syntax errors.
-- The running Likeme layout reports no errors in `herdr-app status`.
+- The running Likeme layout reports no errors in `herdr-app status`, in both
+  `vscode-2026-dark` and `vscode-2026-light`.
 - Brand and tab bar align at 44 px. Pane / Files / Changes headers align at 36 px.
 - Spaces and Agents use 44 px rows, 26 px marks, 3 px gaps and 8 px insets.
   Worktree and sub-agent rows use 40 px and 26 px respectively.
 - Hover, selection, count chips, muted metadata and tooltips remain readable on
-  the 2026 Dark palette. Solid monograms choose contrasting dark or white text.
+  both the 2026 Dark and 2026 Light palettes. Solid monograms choose contrasting
+  dark or white text, and selected rows take white or near-black row text from their
+  own fill.
 - Files and Changes stay fixed at the right of the tab bar, collapse to icons
   below 680 px of bar width and keep working without creating or closing tabs.
 - Working, blocked, done and idle marks remain visible in the relevant lists;

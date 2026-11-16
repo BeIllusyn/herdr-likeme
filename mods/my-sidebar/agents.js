@@ -4,7 +4,7 @@
 import { View, div, image, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay } from "herdr";
-import { markColor, withAlpha, UI, TYPE, SIZE } from "./colors.js";
+import { markColor, selectedInk, withAlpha, UI, TYPE, SIZE } from "./colors.js";
 import { backgroundTick } from "./util.js";
 
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
@@ -264,7 +264,7 @@ export default class Agents extends View {
         .when(Boolean(l), el => el.border_l(1).border_color(withAlpha(t.foreground, UI.line)))
         .when(l === "└" || l === "├", el => el.border_b(1).rounded_bl(5))))
       .when(Boolean(pic), el => el.child(div().mr(7).child(pic)))
-      .child(div().flex_1().truncate().text_color(on ? t.accent_foreground : t.muted).child(k.name || k.template || k.program?.name || k.address))
+      .child(div().flex_1().truncate().text_color(on ? selectedInk(t) : t.muted).child(k.name || k.template || k.program?.name || k.address))
       .child(this.status(t, { status: st }, compact));
   }
 
@@ -381,6 +381,7 @@ export default class Agents extends View {
 
     const row = (a, subs = []) => {
       const fill = fillOf(a);
+      const ink = selectedInk(t);
       const pic = icon(a.program, 18, a.focused ? (fill ?? t.foreground) : t.muted);
       // An agent on another machine (`vps/t7`) says which.
       const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
@@ -446,7 +447,7 @@ export default class Agents extends View {
             .min_w(0)
             .gap(1)
             .child(div().min_w(0).truncate().text_size(TYPE.body).line_height("15px").font_weight(a.focused ? 600 : 500)
-              .text_color(a.focused ? t.accent_foreground : idle ? t.muted : t.foreground).tooltip(top).child(top))
+              .text_color(a.focused ? ink : idle ? t.muted : t.foreground).tooltip(top).child(top))
             .when(Boolean(under) || Boolean(machine), el => el.child(
               h_flex()
                 .min_w(0)
@@ -454,7 +455,7 @@ export default class Agents extends View {
                 .gap(5)
                 .text_size(TYPE.meta)
                 .line_height("14px")
-                .text_color(a.focused ? withAlpha(t.accent_foreground, "cc") : t.muted)
+                .text_color(a.focused ? withAlpha(ink, "cc") : t.muted)
                 .when(Boolean(fill) && Boolean(under), el => el.child(div().size(4).rounded_full().flex_none().bg(withAlpha(fill, UI.dot))))
                 .when(Boolean(under), el => el.child(div().min_w(0).truncate().tooltip(under).child(under)))
                 .when(Boolean(under) && Boolean(machine), el => el.child(div().flex_none().child("·")))
@@ -465,7 +466,7 @@ export default class Agents extends View {
         // A fixed slot for the pin and the elapsed time: hovering must not move the row.
         .child(div().w(30).flex_none().h_full().flex().items_center().justify_end()
           .when(this.hovered === a.address, el => el.child(pin))
-          .when(this.hovered !== a.address && Boolean(when), el => el.child(div().text_size(TYPE.meta).text_color(a.focused ? withAlpha(t.accent_foreground, "b3") : t.dim).child(duration(now - when)))))
+          .when(this.hovered !== a.address && Boolean(when), el => el.child(div().text_size(TYPE.meta).text_color(a.focused ? withAlpha(ink, "b3") : t.dim).child(duration(now - when)))))
         .child(div().min_w(18).flex_none().h_full().flex().items_center().justify_end().child(this.status(t, { status: mark }, byPriority && !isPinned)));
     };
 

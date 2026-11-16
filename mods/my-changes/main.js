@@ -1,7 +1,7 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, h_resizable, resizable_panel, InputState, Input, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { spaces, panes, focused, props, exec, readTextFile, watchFolder, theme, settings, run, setShared, shared, layout } from "herdr";
-import { markColor, changeColor, withAlpha, UI, SCM, TYPE, SIZE } from "./colors.js";
+import { markColor, changeColor, withAlpha, selectedInk, scmColors, UI, TYPE, SIZE } from "./colors.js";
 
 const MOD = "my-changes";
 // The scan interval for a shown copy; hidden copies catch up from `render`.
@@ -509,15 +509,16 @@ export default class Changes extends View {
   branchList(t, accent) {
     const others = this.branches.filter((b) => !b.current);
     const local = others.filter((b) => b.local), remote = others.filter((b) => !b.local);
+    const ink = selectedInk(t);
     const row = (key, label, selected, icon, action) => h_flex().id(`changes-branch-${this.uid}-${key}`)
       .h(SIZE.listRow).flex_none().px(7).gap(7).items_center().rounded(5).cursor_pointer()
       .when(selected, (el) => el.bg(t.selected))
       .when(!selected, (el) => el.hover((s) => s.bg(t.hover)))
       // 用点击事件自带的 cx：refresh 要用它启动异步任务，旧的 render cx 不算数。
       .on_click((_e, cx) => { action(cx); this.pickerOpen = false; cx.notify(); })
-      .child(svg(icon).size(12).flex_none().text_color(selected ? t.accent_foreground : t.muted))
-      .child(div().flex_1().min_w(0).truncate().text_size(TYPE.small).text_color(selected ? t.accent_foreground : t.muted).child(label))
-      .when(selected, (el) => el.child(svg("mods/workspace-chrome/check.svg").size(12).flex_none().text_color(t.accent_foreground)));
+      .child(svg(icon).size(12).flex_none().text_color(selected ? ink : t.muted))
+      .child(div().flex_1().min_w(0).truncate().text_size(TYPE.small).text_color(selected ? ink : t.muted).child(label))
+      .when(selected, (el) => el.child(svg("mods/workspace-chrome/check.svg").size(12).flex_none().text_color(ink)));
     const caption = (label, right) => h_flex().h(26).flex_none().px(7).gap(6).items_center()
       .child(div().text_size(TYPE.label).font_weight(600).text_color(t.muted).child(label))
       .child(div().flex_1())
@@ -544,7 +545,9 @@ export default class Changes extends View {
   fileRow(f, t, accent) {
     const parts = f.path.split("/"), name = parts.pop();
     const dir = parts.length ? parts.join("/") + "/" : "";
-    const status = changeColor(f.status);
+    const status = changeColor(f.status, t);
+    const scm = scmColors(t);
+    const ink = selectedInk(t);
     const on = this.open === f.path;
     return h_flex().h(SIZE.listRow).flex_none().px(8).gap(7).items_center().rounded(SIZE.radius).cursor_pointer().tooltip(f.path)
       .when(on, (e) => e.bg(t.selected))
@@ -553,22 +556,23 @@ export default class Changes extends View {
         .bg(withAlpha(status, UI.tint)).border(1).border_color(withAlpha(status, UI.tintEdge))
         .text_size(TYPE.label).font_weight(600).text_color(status).child(f.status))
       .child(h_flex().flex_1().min_w(0).gap(6).items_center()
-        .child(div().flex_1().min_w(0).truncate().text_size(TYPE.small).font_weight(on ? 600 : 400).text_color(on ? t.accent_foreground : t.foreground).child(name))
-        .when(Boolean(dir), (e) => e.child(div().min_w(0).truncate().text_size(TYPE.label).text_color(on ? withAlpha(t.accent_foreground, "b3") : t.muted).child(dir))))
-      .when(f.add > 0, (e) => e.child(div().text_size(TYPE.label).text_color(SCM.added).child(`+${f.add}`)))
-      .when(f.del > 0, (e) => e.child(div().text_size(TYPE.label).text_color(SCM.deleted).child(`−${f.del}`)));
+        .child(div().flex_1().min_w(0).truncate().text_size(TYPE.small).font_weight(on ? 600 : 400).text_color(on ? ink : t.foreground).child(name))
+        .when(Boolean(dir), (e) => e.child(div().min_w(0).truncate().text_size(TYPE.label).text_color(on ? withAlpha(ink, "b3") : t.muted).child(dir))))
+      .when(f.add > 0, (e) => e.child(div().text_size(TYPE.label).text_color(scm.added).child(`+${f.add}`)))
+      .when(f.del > 0, (e) => e.child(div().text_size(TYPE.label).text_color(scm.deleted).child(`−${f.del}`)));
   }
 
   diffRow({ kind, number, text }, t) {
     if (kind === "@") return div().w_full().px(12).h(SIZE.diffRow).flex_none().truncate().bg(withAlpha(t.foreground, UI.subtle)).text_size(TYPE.meta).text_color(t.muted).child(text);
     const add = kind === "+", del = kind === "-";
+    const scm = scmColors(t);
     // The tint and the coloured sign keep changes readable without a gutter
     // line and without relying on hue alone.
     return h_flex().w_full().h(SIZE.diffRow).flex_none().gap(8)
-      .when(add, (e) => e.bg(withAlpha(SCM.diffAdd, UI.diff)))
-      .when(del, (e) => e.bg(withAlpha(SCM.diffDel, UI.diff)))
+      .when(add, (e) => e.bg(withAlpha(scm.diffAdd, UI.diff)))
+      .when(del, (e) => e.bg(withAlpha(scm.diffDel, UI.diff)))
       .child(div().w(40).flex_none().text_right().text_size(TYPE.meta).text_color(t.dim).child(number === undefined ? "" : String(number)))
-      .child(div().w(8).flex_none().text_size(TYPE.meta).text_color(add ? SCM.added : del ? SCM.deleted : t.dim).child(add ? "+" : del ? "−" : ""))
+      .child(div().w(8).flex_none().text_size(TYPE.meta).text_color(add ? scm.added : del ? scm.deleted : t.dim).child(add ? "+" : del ? "−" : ""))
       .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(text));
   }
 
@@ -601,6 +605,7 @@ export default class Changes extends View {
     }
     this.shownBefore = shown;
     const t = theme(), add = this.files.reduce((n, f) => n + f.add, 0), del = this.files.reduce((n, f) => n + f.del, 0);
+    const scm = scmColors(t);
     const enabled = Boolean(this.message.trim() && this.root && !this.busy && !this.loading);
     const filesId = `changes-files-${this.uid}`, diffId = `changes-diff-${this.uid}`;
     // The active space's colour is the focus ring on the commit field; the
@@ -628,8 +633,8 @@ export default class Changes extends View {
           .child(div().text_size(TYPE.label).font_weight(600).text_color(t.muted).child("CHANGES"))
           .child(h_flex().h(16).flex_none().px(5).rounded(4).bg(withAlpha(t.foreground, UI.subtle)).items_center().text_size(TYPE.label).text_color(t.muted).child(String(this.files.length)))
           .child(div().flex_1())
-          .when(add > 0, (el) => el.child(div().text_size(TYPE.meta).text_color(SCM.added).child(`+${add}`)))
-          .when(del > 0, (el) => el.child(div().text_size(TYPE.meta).text_color(SCM.deleted).child(`−${del}`))))
+          .when(add > 0, (el) => el.child(div().text_size(TYPE.meta).text_color(scm.added).child(`+${add}`)))
+          .when(del > 0, (el) => el.child(div().text_size(TYPE.meta).text_color(scm.deleted).child(`−${del}`))))
         .when(Boolean(this.root), (el) => el.child(
           h_flex().flex_none().px(SIZE.inset).pt(SIZE.inset).pb(2).child(this.sourceRow(t, accent))))
         .child(v_flex().id(`changes-list-${this.uid}`).flex_1().min_h(0).p(SIZE.inset)

@@ -123,7 +123,10 @@
     }
   ],
   "background": "canvas",
-  "theme": "vscode-2026-dark",
+  "theme": {
+    "light": "vscode-2026-light",
+    "dark": "vscode-2026-dark"
+  },
   "terminal_padding": [
     0,
     0

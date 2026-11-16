@@ -15,6 +15,7 @@ REF="${REF:-main}"
 DST="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
 LAYOUT="likeme"
 MODS=(my-sidebar my-tabs my-pane my-files my-changes my-brand)
+THEMES=(vscode-2026-dark vscode-2026-light)
 
 if ! command -v herdr-app >/dev/null 2>&1; then
   echo "herdr-app is not in PATH" >&2
@@ -56,7 +57,9 @@ fi
 mkdir -p "$DST/layouts" "$DST/mods" "$DST/themes"
 
 install -m 644 "$SRC/layouts/$LAYOUT.json" "$DST/layouts/$LAYOUT.json"
-install -m 644 "$SRC/themes/vscode-2026-dark.json" "$DST/themes/vscode-2026-dark.json"
+for theme in "${THEMES[@]}"; do
+  install -m 644 "$SRC/themes/$theme.json" "$DST/themes/$theme.json"
+done
 rm -f "$DST/themes/vscode-dark-modern.json"
 if [ -f "$SRC/layouts/$LAYOUT.png" ]; then
   install -m 644 "$SRC/layouts/$LAYOUT.png" "$DST/layouts/$LAYOUT.png"
@@ -88,10 +91,9 @@ if ! herdr-app do layout.switch "{\"name\":\"$LAYOUT\"}" >/dev/null; then
   exit 1
 fi
 
-# The layout names the theme too; the picker is what actually wins, so set it.
-if ! herdr-app do app.theme '{"name":"vscode-2026-dark"}' >/dev/null; then
-  echo "Layout installed, but Herdr could not select the vscode-2026-dark theme" >&2
-fi
+# The layout names a light and a dark theme, so the person's appearance (or the
+# system's) picks one. A theme picked in Settings still wins over the layout, so
+# never force one here.
 
 echo "Installed \"$LAYOUT\" into $DST."
 echo "Switch anytime with: herdr-app do layout.switch '{\"name\":\"$LAYOUT\"}'"
