@@ -4,14 +4,14 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-for m in my-sidebar my-tabs my-pane my-files my-changes my-brand; do
+for m in my-sidebar my-tabs my-pane my-files my-changes my-brand my-float; do
   herdr-app check "mods/$m"
 done
 
-for m in my-tabs my-pane my-files my-changes my-brand; do
+for m in my-tabs my-pane my-files my-changes my-brand my-float; do
   if ! diff -q mods/my-sidebar/colors.js "mods/$m/colors.js" >/dev/null; then
     echo "mods/$m/colors.js differs from mods/my-sidebar/colors.js" >&2
-    echo "Copy the sidebar copy over it; all six must stay identical." >&2
+    echo "Copy the sidebar copy over it; every mod must stay identical." >&2
     exit 1
   fi
 done

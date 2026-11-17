@@ -40,7 +40,7 @@ from `theme()`, so pointing the layout at another theme re-skins them; the edito
 syntax, diff and git inks also follow the theme's lightness, and space marks come
 from that theme's ANSI palette.
 
-The design system is `colors.js`, copied identically into all six mods. `UI` holds
+The design system is `colors.js`, copied identically into all seven mods. `UI` holds
 the neutral ladder — subtle 5.9%, hover 10.8%, active 18%, line 10.2%, field 7.1%,
 soft line 5.9% — and the semantic washes: tint 11.8% with a 22% edge, badge 12.2%,
 diff 15%, focused tile 15%, dots at 80% / 60%, and a 70% focus ring. `changeColor(status, theme)`
@@ -128,6 +128,19 @@ Changes shows All caught up only after a successful refresh finds a clean tree.
 The lists remain virtualized. Switching views keeps folders and split widths;
 closing the layout ends its timers and directory watches.
 
+**Floating files.** The Files preview header's rightmost button (`float.svg`) opens the
+current file in a borderless overlay window (`openOverlay` with `kind: "window"` and
+`frame: "none"`). The panel has a 34 px tab row (its collapse button sits at the right),
+a 32 px file header and the editor; it opens at 380–760 × 240–520 px near the window's
+bottom-right (clamped to the viewport), and its window key remembers where it was
+dragged. The row shows one tab per file, a space-coloured dot, the file name and a close
+button; the full path and space name are in the tooltip. Local files keep the same
+optimistic auto-save as Files; a tab from another machine is read-only because
+`writeTextFile` is local-only. Collapsing closes the window and leaves the coordinator's
+40 px square mini window with a tab count, at the window's bottom-right;
+pressing it reopens the panel window with the same tabs. Both windows are frameless and
+draw their own surface, so neither has the 5 px padding a floating block adds.
+
 ## How it behaves
 
 - **Agent status.** Working: a gold braille character cycling through
@@ -208,6 +221,10 @@ root row (theme light vscode-2026-light / dark vscode-2026-dark, canvas, titleba
       │             lone true, header {mod my-pane, height 36, reveal always}}}
       ├─ files block (my-files, props {workspace: true})
       └─ changes block (my-changes, props {workspace: true})
+
+work column floating block (over the work area, edge bottom, align end)
+└─ floating-files-mini {my-float, props {role: "mini"}} the hidden coordinator
+   (it opens the borderless panel window and the 40 px mini window)
 ```
 
 Files／Changes 直接属于布局，不调用 `tab.new`。固定入口通过
@@ -241,6 +258,7 @@ Light's, so both themes are first-class rather than a tint over the dark one.
 | `my-sidebar` | Retained Spaces and Agents views in one scroll. Uses the shared 44 px row and 26 px mark scale, count chips, the theme's raised neutral selection, worktree / sub-agent trees and a sort popup. Git and background polling behaviour is unchanged. |
 | `my-tabs` | 32 px tabs in a 44 px bar, a grouped quick-start toolbar that shows only installed programs, fixed Files / Changes entries and a 680 px compact breakpoint. Retains tab rename, drag, close, legacy tool-tab reuse and native braille status animation. |
 | `my-pane` | A 36 px header with 6% space tint on focus, shared typography, a fixed 68 px status slot and grouped 24 px split / zoom / close controls with tooltips. Each action targets its own pane. |
+| `my-float` | A hidden coordinator floating block plus two frameless overlay windows: the tabbed panel and the 40 px mini button. `shared("float.state")` holds the tab list and active file across window closes; `shared("float.request")` hands a file over; `shared("float.open")` / `shared("float.panel")` / `shared("float.mini")` tell the coordinator which window should be up. |
 
 **omp extras** (`extras/omp/`). `install.sh` calls the standalone
 `extras/omp/install.sh "$DST"` after the mod checks. It registers Herdr's omp
@@ -293,7 +311,8 @@ chevron-down/right, pin, pin-off, server, monitor, check, layers, settings),
 `zoom.svg` (used by `my-tabs`), `mods/files/file.svg`, `mods/changes/changes.svg`;
 `my-sidebar` carries its own `sort.svg`; `my-pane` carries its own
 `close/split/zoom` SVGs; `my-tabs` carries its own `win-min/max/restore/close.svg`
-copies for Windows.
+copies for Windows. `my-files` carries its own `float.svg` for the panel button;
+`my-float` carries a copy for the collapsed corner button.
 
 ## Watch out
 
@@ -342,7 +361,7 @@ copies for Windows.
 - The focused header is `mix(t.surface, fill, 0.06)` with a brighter title and a
   space-coloured icon, drawn by the mod on its own header surface. `colors.js` (the
   shared `MARK`, `markColor`, `changeColor`, `markInk`, `selectedInk`, `syntaxColors`,
-  `scmColors`, `isLight`, `mix`, `withAlpha`, `UI`, `TYPE` and `SIZE`) is one file copied into all six mods;
+  `scmColors`, `isLight`, `mix`, `withAlpha`, `UI`, `TYPE` and `SIZE`) is one file copied into all seven mods;
   `check.sh` fails when
   they drift. The colour
   comes from `shared("space.colors")[space.id]`; `markColor` prefers the theme's own
@@ -435,7 +454,8 @@ copies for Windows.
 - The spinner is `frames([...], 80)`, not `spin()`: a native SVG rotation runs at
   about 30 fps and reads as steppy at 12–16 px. `frames` swaps text natively on one
   shared clock.
-- Mod names (`my-sidebar`, `my-tabs`, `my-pane`, `my-files`, `my-changes`, `my-brand`)
+- **The floating panel is a hidden coordinator plus two frameless windows.** A visible floating block always carries Herdr's frame with 5 px above and below, which made the mini look padded; a negative margin pushed the content outside the frame, and an absolute fill could not change the block's measured height. Instead the layout's `my-float` block is only a coordinator: it draws nothing, measures the main window with the shell's `window.viewport_size()` (the `herdr` module's `window()` only carries platform facts, not a size), and opens the tabbed panel and the 40 px mini with `openOverlay({kind: "window", frame: "none"})`. Both mod copies draw their own rounded border, background and content edge to edge. The tab list and active file live in `shared("float.state")` since closing an overlay destroys its view; the mini's count comes from the same list. Files writes `shared("float.request")`; a request older than 30 s is ignored so one left in `shared.json` cannot reopen the panel. The coordinator owns `float.open` / `float.panel` / `float.mini`: the mini sets `float.open` and closes itself, the coordinator then opens the panel with the main window's size. The mini window is not anchored by the host, so the coordinator checks `window.viewport_size()` every 500 ms, closes the mini by the id it stored in `shared("float.miniId")` when the size changes, and reopens it at the new bottom-right; the mini stops mouse-down so it cannot be dragged away. Local files keep the same optimistic whole-file auto-save as Files; a tab from another machine is read-only because `writeTextFile` is local-only.
+- Mod names (`my-sidebar`, `my-tabs`, `my-pane`, `my-files`, `my-changes`, `my-brand`, `my-float`)
   are deliberately generic. Rename them on install if they clash, and update the
   `"mod"` fields in `likeme.json`.
 - Files／Changes 是 `work-body` stack 的子节点，选择由 Herdr 保存，不需要额外的
@@ -459,7 +479,7 @@ copies for Windows.
 
 ## Done when
 
-- `./check.sh` passes: all six mods load and all six `colors.js` copies match.
+- `./check.sh` passes: all seven mods load and all seven `colors.js` copies match.
 - `node --test tests/*.test.mjs` passes, including compact toolbar behaviour,
   mark contrast, dark / light ink switching, workspace switching, legacy tabs, diff
   parsing, branch parsing
@@ -493,5 +513,5 @@ copies for Windows.
   branch, unborn HEAD or unrelated history reports a reason instead of stale rows.
 - Empty states are consistent; a clean worktree shows All caught up, an unchanged
   branch comparison shows No differences.
-- Removing `layouts/likeme.json` and the six installed `mods/my-*` folders leaves
+- Removing `layouts/likeme.json` and the seven installed `mods/my-*` folders leaves
   the shipped layouts available.

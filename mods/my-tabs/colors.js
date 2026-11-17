@@ -1,4 +1,4 @@
-// Shared by all six mods: neutral surfaces, readable type and common dimensions.
+// Shared by every mod: neutral surfaces, readable type and common dimensions.
 // Each mod carries the same file; `check.sh` checks that the copies stay in sync.
 // The values follow VS Code's 2026 themes, Dark and Light, which likeme ships.
 

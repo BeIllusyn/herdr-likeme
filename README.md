@@ -28,6 +28,7 @@ the active tool view and its editor are the real UI._
 | **Tabs** | A 44 px bar with 32 px tabs, 12 px labels and 4 px gaps. The active tab takes the theme's raised neutral fill with contrasting ink, a semibold name and its program icon in the space's colour. Quick starts are grouped behind a short hairline after `+`: every installed agent Herdr can start, with Claude Code (`--dangerously-skip-permissions`) and Pi leading, plus Lazygit and Neovim. Files / Changes stay fixed at the right, switch the workspace without creating tabs, and collapse to icons with tooltips below 680 px of bar width. Existing standalone tool tabs are reused. Tabs keep drag, rename, zoom and close actions; close buttons brighten on hover. |
 | **Panes** | Edge-to-edge terminals and 1 px split gaps. The 36 px header matches Files / Changes; focus adds a 6% space tint, a 13 px semibold title and a coloured program icon. Folder text is 11 px, the fixed status slot is 68 px, and split / zoom / close controls are grouped 24 px buttons with tooltips. Close actions use a red hover state. |
 | **Files / Changes** | Matching 260 px initial list widths, 36 px headers and 28 px file rows. Filenames lead in Changes, with quieter directory context, one colour per A / D / U / M status across both views, tinted and edged status tiles, and full-path tooltips. File previews keep the editor and optimistic auto-save, with a fixed-width save indicator and a larger Edit / Diff switch. Full-file diffs and before/after comparisons use 12 px type, 22 px rows, VS Code's green and red diff inks over a 15% wash, syntax colours from 2026 Dark or Light, and coloured `+` / `−` signs. The before/after divider drags to set each half's width, and each half scrolls horizontally on its own with line numbers and signs pinned, so a long line is read in full instead of being ellipsized. Change navigation is grouped in the header. Lists remain virtualized, and switching views preserves folders and split widths. Both views share the same empty-state styling; a clean worktree shows All caught up. A source row above the changed files switches between the working tree and another local or remote branch: the chosen branch is compared from its merge base to HEAD (committed changes only), drives the same list and whole-file diff, and replaces the commit box with a quiet note. |
+| **Floating files** | A button at the right of the Files preview header opens the current file in a borderless panel floating over the layout. The panel keeps its own tab row, so files opened from different spaces sit side by side; each tab remembers its own root and machine. Local files edit and auto-save exactly as they do in Files, files on another machine stay read-only, and the panel follows the theme. Its tab row's right-hand collapse button hides the panel and leaves a 40 px square button anchored to the window's bottom-right; pressing that brings the panel back. |
 | **Brand bar** | A 44 px empty window-drag surface, aligned with the tab bar, and a 76 px footer with 28 px Settings / Add machine rows. The footer, sidebar and brand share a continuous, faint right-hand divider. |
 
 Everything else — menus — is Herdr's `main` layout unchanged.
@@ -66,7 +67,7 @@ cd herdr-likeme
 ./install.sh
 ```
 
-`install.sh` copies `layouts/likeme.json`, the six mods and both themes
+`install.sh` copies `layouts/likeme.json`, the seven mods and both themes
 (`themes/vscode-2026-dark.json` and `themes/vscode-2026-light.json`) into
 `${HERDR_APP_HOME:-~/.config/herdr-app}`, runs `herdr-app check` on every mod, adds
 Herdr's omp and fx program entries, and switches to the layout. Herdr reloads the files
@@ -123,7 +124,7 @@ DST=~/.config/herdr-app
 
 cp layouts/likeme.json "$DST/layouts/"
 cp themes/vscode-2026-dark.json themes/vscode-2026-light.json "$DST/themes/"
-cp -R mods/my-sidebar mods/my-tabs mods/my-pane mods/my-files mods/my-changes mods/my-brand "$DST/mods/"
+cp -R mods/my-sidebar mods/my-tabs mods/my-pane mods/my-files mods/my-changes mods/my-brand mods/my-float "$DST/mods/"
 
 herdr-app check "$DST/mods/my-sidebar"
 herdr-app check "$DST/mods/my-tabs"
@@ -131,6 +132,7 @@ herdr-app check "$DST/mods/my-pane"
 herdr-app check "$DST/mods/my-files"
 herdr-app check "$DST/mods/my-changes"
 herdr-app check "$DST/mods/my-brand"
+herdr-app check "$DST/mods/my-float"
 herdr-app do layout.switch '{"name":"likeme"}'
 # The layout follows Herdr's appearance; choose Light or Dark in Settings.
 ```
@@ -139,7 +141,7 @@ For the optional program registrations, also run `bash extras/omp/install.sh "$D
 and `bash extras/fx/install.sh "$DST"`; they use the same merge rules as the main
 installer.
 
-After editing a mod, run `./check.sh`: it loads all six mods and fails if their six
+After editing a mod, run `./check.sh`: it loads all seven mods and fails if their seven
 `colors.js` copies drift. Shared `UI`, `TYPE` and `SIZE` tokens keep colours, text and
 component dimensions consistent.
 
@@ -156,7 +158,7 @@ matching `"mod"` references in `likeme.json`.
 - Uninstall: delete `layouts/likeme.json`, `layouts/likeme.png` (if present),
   `themes/vscode-2026-dark.json`, `themes/vscode-2026-light.json` and the
   `mods/my-sidebar`, `mods/my-tabs`, `mods/my-pane`, `mods/my-files`, `mods/my-changes`,
-  `mods/my-brand` folders. Remove the `programs.omp` and `programs.fx` entries from
+  `mods/my-brand`, `mods/my-float` folders. Remove the `programs.omp` and `programs.fx` entries from
   `programs.json` and `my-icons/likeme-omp.svg` / `my-icons/likeme-fx.svg`; delete
   `programs.json` if it held only those entries. If you
   upgraded from a version before the merged sidebar, also delete the old
@@ -166,7 +168,7 @@ matching `"mod"` references in `likeme.json`.
 ## What the mods do
 
 Herdr mods are trusted code: they can run programs, use the network and read files.
-These six are meant to be read:
+These seven are meant to be read:
 
 - **`my-sidebar`** is one mod with two retained child views (`spaces.js` and
   `agents.js`, sharing `util.js`'s background-tick throttle)
@@ -192,9 +194,19 @@ These six are meant to be read:
   `readTextFile` / `writeTextFile` (a write only lands while the file still matches
   the text it read), and watches folders with `watchFolder`. The workspace copy also
   answers Changes' `shared("files.open")` request, opening the file and expanding its
-  folders; a file outside its tree is read from the repository root. The workspace
+  folders; a file outside its tree is read from the repository root. Its preview
+  header's floating button hands the open file to `my-float`. The workspace
   copy lists and scans only while its stack view is in front, lists expanded folders
   a few at a time, and catches up on the first frame after it comes back. No network.
+- **`my-float`** is the floating file panel. A hidden layout floating block is the
+  coordinator: it opens two borderless overlay windows (`openOverlay` with `frame: "none"`),
+  the tabbed panel and the 40 px mini button at the window's bottom-right. Drawing both
+  ourselves avoids the 5 px above and below that a visible floating block's frame adds.
+  The tab list and active file live in `shared("float.state")`, so closing a window does
+  not lose them; Files adds a file with `shared("float.request")`. Local files edit and
+  auto-save with the same optimistic whole-file writes as Files; a file on another machine
+  is read-only because `writeTextFile` is local-only. It reads only the files it is asked
+  to show and uses no network.
 - **`my-changes`** is a clone of the shipped changes panel. It runs read-only git
   commands (`status`, `diff`, `rev-parse`, `merge-base`, `for-each-ref`) via `exec`,
   asks for full-file context, and watches the worktree. Its header jumps between

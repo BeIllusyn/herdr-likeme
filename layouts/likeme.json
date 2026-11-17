@@ -119,6 +119,19 @@
           "padding": 0
         }
       ],
+      "floating": [
+        {
+          "id": "floating-files-mini",
+          "content": {
+            "mod": "my-float",
+            "props": {
+              "role": "mini"
+            }
+          },
+          "edge": "bottom",
+          "align": "end"
+        }
+      ],
       "resizable": false
     }
   ],

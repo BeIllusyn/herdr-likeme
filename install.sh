@@ -14,7 +14,7 @@ REPO="${REPO:-BeIllusyn/herdr-likeme}"
 REF="${REF:-main}"
 DST="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
 LAYOUT="likeme"
-MODS=(my-sidebar my-tabs my-pane my-files my-changes my-brand)
+MODS=(my-sidebar my-tabs my-pane my-files my-changes my-brand my-float)
 THEMES=(vscode-2026-dark vscode-2026-light)
 
 if ! command -v herdr-app >/dev/null 2>&1; then

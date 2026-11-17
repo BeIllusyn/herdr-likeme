@@ -1,7 +1,7 @@
 // A lazy file browser for the focused folder, with an editor and a comparison view.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, h_resizable, resizable_panel, Editor, EditorState, Scrollbar, v_virtual_list } from "gpui-base";
-import { spaces, panes, focused, props, exec, readTextFile, writeTextFile, watchFolder, theme, settings, window, shared, layout } from "herdr";
+import { spaces, panes, focused, props, exec, readTextFile, writeTextFile, watchFolder, theme, settings, window, shared, setShared, layout } from "herdr";
 import { markColor, changeColor, withAlpha, selectedInk, syntaxColors, scmColors, UI, TYPE, SIZE } from "./colors.js";
 
 const MOD = "my-files";
@@ -436,6 +436,23 @@ export default class Files extends View {
     return relativePath(this.gitTop, `${this.fileRoot ?? this.root}/${this.file}`);
   }
 
+  // Hand the open file to the floating panel. The request carries its own root
+  // and machine, so a file opened from another space still loads in its panel
+  // tab without the panel following this view's directory.
+  floatFile() {
+    const path = this.file;
+    if (!path) return;
+    const root = this.fileRoot ?? this.root;
+    if (!root) return;
+    const all = spaces();
+    const space = all.find(s => s.id === this.lastLoc?.space) ?? all.find(s => s.active);
+    setShared("float.request", {
+      root, path, on: this.on ?? null,
+      space: space?.id ?? null, spaceName: space?.name ?? null,
+      at: Date.now(),
+    });
+  }
+
   toggleDiff(cx) {
     this.diffMode = !this.diffMode;
     this.diffFor = null; this.diffPairs = []; this.diffError = null; this.diffLoading = false;
@@ -768,7 +785,13 @@ export default class Files extends View {
         .when(Boolean(this.saveError), (e) => e.tooltip(this.saveError))
         .on_click((_e, cx) => this.save(cx))
         .child(div().size(4).flex_none().rounded_full().bg(this.saveError ? t.blocked : this.dirty || this.saving ? t.working : withAlpha(scmColors(t).added, UI.dotSoft)))
-        .child(this.saveError ? "Save failed" : this.saving ? "Saving…" : this.dirty ? "Save" : "Saved")));
+        .child(this.saveError ? "Save failed" : this.saving ? "Saving…" : this.dirty ? "Save" : "Saved")))
+      // 右上角的入口把当前文件交给浮动面板；每个 tab 自己记住 root 和机器。
+      .child(div().id(`files-float-${this.uid}`).size(SIZE.control).flex_none().flex().items_center().justify_center().rounded(5)
+        .cursor_pointer().text_color(t.muted).tooltip("Open in the floating panel")
+        .hover((s) => s.bg(t.hover).text_color(t.foreground))
+        .on_click((_e, cx) => { this.save(cx); this.floatFile(); })
+        .child(svg("mods/my-files/float.svg").size(14)));
 
     // 表头也按中缝分成两段，拖动后仍与左右两栏对齐。
     const compareHeader = h_flex().h(28).flex_none().text_size(TYPE.label).font_weight(600).text_color(t.muted)
