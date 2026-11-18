@@ -102,8 +102,11 @@ A 68 px status slot precedes four grouped 24 px buttons, each with a tooltip.
 The close control uses red hover feedback. A soft hairline ends the header.
 
 **Files / Changes.** Both start with a 260 px list panel (minimum 200 px), a 36 px
-header and 28 px rows. Files keeps its tree indentation and colours the selected
-file's icon. Changes leads with filenames, followed by muted directory context,
+header and 28 px rows. Files keeps its tree indentation and draws each file's icon
+from Material Icon Theme's own full-colour artwork for that type; the icon keeps
+its palette rather than taking the row's ink, and a name the theme's tables do not
+cover keeps the plain page. Changes leads with filenames,
+followed by muted directory context,
 and uses 18 px tinted status tiles edged in the same hue. Full paths are available
 in tooltips. The commit field and button are 32 px with a 7 px radius. Changes also
 carries a 28 px source row between its header and the list: a branch icon, the mode
@@ -306,8 +309,9 @@ chevron-down/right, pin, pin-off, server, monitor, check, layers, settings),
 `zoom.svg` (used by `my-tabs`), `mods/files/file.svg`, `mods/changes/changes.svg`;
 `my-sidebar` carries its own `sort.svg`; `my-pane` carries its own
 `close/split/zoom` SVGs; `my-tabs` carries its own `win-min/max/restore/close.svg`
-copies for Windows. `my-files` carries its own `float.svg` for the panel button;
-`my-float` carries a copy for the collapsed corner button.
+copies for Windows. `my-files` carries its own `float.svg` for the panel button,
+and `material/` holds Material Icon Theme 5.40.0's file-type artwork with its
+tables and MIT license; `my-float` carries a copy for the collapsed corner button.
 
 ## Watch out
 
@@ -441,8 +445,10 @@ copies for Windows. `my-files` carries its own `float.svg` for the panel button;
   and `tile` 15 % — are declared once as well, so a status tile, a `NEEDS YOU` pill and
   an added or removed line all take their tint from the same table. A space colour only
   ever appears as a solid monogram, a tinted icon tile, a coloured glyph, a resting tint
-  or a dot — never as a full row fill and never as a rail or underline. The tab status
-  slot is always 16 px, so a state turn never changes a tab's width.
+  or a dot — never as a full row fill and never as a rail or underline. The one other
+  palette on screen is Material Icon Theme's file artwork in Files and Changes, which
+  carries fixed hues so a language or archive kind is recognised before its name is
+  read. The tab status slot is always 16 px, so a state turn never changes a tab's width.
 - The spinner is `frames([...], 80)`, not `spin()`: a native SVG rotation runs at
   about 30 fps and reads as steppy at 12–16 px. `frames` swaps text natively on one
   shared clock.

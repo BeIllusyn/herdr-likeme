@@ -1,8 +1,9 @@
 // A lazy file browser with an editor and a comparison view.
-import { View, div, svg } from "gpui-kit";
+import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, h_resizable, resizable_panel, Editor, EditorState, Scrollbar, v_virtual_list } from "gpui-base";
 import { spaces, panes, focused, props, exec, readTextFile, writeTextFile, watchFolder, theme, settings, window, shared, setShared } from "herdr";
 import { markColor, changeColor, withAlpha, selectedInk, syntaxColors, scmColors, UI, TYPE, SIZE } from "./colors.js";
+import { FILE_NAMES, FILE_EXTENSIONS } from "./material/icons.js";
 
 const MOD = "my-files";
 const POLL_MS = 10000;
@@ -62,6 +63,31 @@ function diffPairs(rows) {
   return pairs;
 }
 const LANG = { ts: "js", tsx: "js", mts: "js", cts: "js", jsx: "js", mjs: "js", toml: "yaml", jsonc: "json", svelte: "html", vue: "html" };
+// Material Icon Theme's own tables (see ./material/icons.js): a full name wins
+// over an extension, so package.json keeps Node's mark instead of JSON's. The
+// longest matching extension wins too, so x.d.ts is TypeScript's, not .ts's.
+const ICON_PATH = "mods/my-files/material";
+function iconFor(path) {
+  const name = String(path ?? "").slice(String(path ?? "").lastIndexOf("/") + 1).toLowerCase();
+  if (FILE_NAMES[name]) return FILE_NAMES[name];
+  // Every dot starts a shorter suffix, so `x.d.ts` is tried as `d.ts` then `ts`.
+  for (let i = name.indexOf("."); i !== -1; i = name.indexOf(".", i + 1)) {
+    const found = FILE_EXTENSIONS[name.slice(i + 1)];
+    if (found) return found;
+  }
+  return "file";
+}
+// The icon itself: Material's artwork is full-colour, so it is drawn as an
+// image and does not take a text colour the way the mask icons do. Material
+// draws small details (a language's monogram, an archive's teeth), so the row
+// icon sits near the 13 px type it names rather than under it.
+const ICON_SIZE = 16;
+function iconImage(name, size = ICON_SIZE) {
+  return image(`${ICON_PATH}/${name}.svg`).size(size).flex_none();
+}
+function fileIcon(path, size = ICON_SIZE) {
+  return iconImage(iconFor(path), size);
+}
 const PER_FOLDER = 500, TOTAL = 5000;
 
 async function directory(path, on) {
@@ -400,6 +426,8 @@ export default class Files extends View {
     setShared("float.request", {
       root, path, on: this.on ?? null,
       space: space?.id ?? null, spaceName: space?.name ?? null,
+      // 面板是另一个 mod，读不到这里的映射表，只带走算好的图标名。
+      icon: iconFor(path),
       at: Date.now(),
     });
   }
@@ -626,7 +654,7 @@ export default class Files extends View {
 
   // A row inside the virtual renderer: no handlers here (the list owns the
   // click), and it is rebuilt only while its row is on screen.
-  fileRow(r, t, accent) {
+  fileRow(r, t) {
     const selected = this.file === r.path && !r.dir;
     const markTint = changeColor(r.mark, t);
     const ink = selectedInk(t);
@@ -636,7 +664,7 @@ export default class Files extends View {
       .when(selected, el => el.bg(t.selected))
       .when(!selected, el => el.hover(s => s.bg(t.hover)))
       .child(r.dir ? svg(`mods/my-files/chevron-${r.open ? "down" : "right"}.svg`).size(10).flex_none().text_color(t.dim) : div().w(10).flex_none())
-      .child(svg(`mods/my-files/${r.dir ? "folder" : "file"}.svg`).size(13).flex_none().text_color(selected ? ink : t.muted))
+      .child(r.dir ? iconImage(r.open ? "folder-open" : "folder") : fileIcon(r.path))
       .child(div().flex_1().min_w(0).truncate().text_size(TYPE.small).font_weight(selected ? 600 : 400)
         .text_color(selected ? ink : t.foreground).child(r.name))
       .when(Boolean(r.mark), el => el.child(div().w(10).flex_none().text_size(TYPE.label).font_weight(600).text_color(markTint).child(r.mark)));
@@ -661,11 +689,9 @@ export default class Files extends View {
     const message = this.error || (this.loading ? "Loading files…" : this.root ? "No files" : "No folder");
     const listId = `files-tree-${this.uid}`, compareId = `files-compare-${this.uid}-${this.diffSeq}`;
     const repo = this.repoPath();
-    // The active space's colour runs through the selected file's icon, the
-    // same "selection by mark" language as the sidebar rows and tabs (the
-    // location already knows the space, so no second spaces() copy is needed).
-    const accentRaw = markColor((shared("space.colors") ?? {})[loc?.space], t);
-    const accent = accentRaw ? accentRaw.slice(0, 7) : (t.accent ?? t.muted);
+    // Material's file icons carry their own colours, so the selected row can no
+    // longer recolour them; the selection still reads through the row fill and
+    // the contrasting ink its name takes.
     // The file's path as a quiet directory and a strong file name.
     const parts = this.file ? this.file.split("/") : [];
     const leaf = parts.pop() ?? "";
@@ -682,13 +708,13 @@ export default class Files extends View {
       v_flex().size_full().min_w(0).min_h(0)
         .child(h_flex().h(SIZE.header).flex_none().px(14).gap(8).items_center()
           .border_b(1).border_color(withAlpha(t.foreground, UI.lineSoft))
-          .child(svg("mods/my-files/folder.svg").size(14).flex_none().text_color(t.muted))
+          .child(iconImage("folder", 15))
           .child(div().flex_1().min_w(0).truncate().text_size(TYPE.small).font_weight(600).text_color(t.foreground).tooltip(this.root ?? "")
             .child(this.root?.split(/[\\/]/).pop() ?? "")))
         .child(v_flex().id(`files-tree-${this.uid}`).p(SIZE.inset).gap(2).flex_1().min_w(0).min_h(0)
           .when(rows.length > 0, (tree) => tree.child(v_flex().relative().flex_1().min_h(0)
             .child(v_virtual_list(listId, rows.length, SIZE.listRow, (i) => rows[i].path,
-              (range) => rows.slice(range.start, range.end).map((r) => this.fileRow(r, t, accent)))
+              (range) => rows.slice(range.start, range.end).map((r) => this.fileRow(r, t)))
               .on_item_click((path, cx) => {
                 const row = rows.find((r) => r.path === path);
                 if (!row) return;
@@ -707,7 +733,7 @@ export default class Files extends View {
 
     const previewHeader = h_flex().h(SIZE.header).flex_none().px(12).gap(10).items_center()
       .border_b(1).border_color(withAlpha(t.foreground, UI.lineSoft))
-      .child(svg("mods/my-files/file.svg").size(13).flex_none().text_color(accent))
+      .child(fileIcon(this.file))
       .child(h_flex().flex_1().min_w(0).items_center()
         .when(Boolean(dir), (el) => el.child(div().min_w(0).truncate().text_size(TYPE.meta).text_color(t.muted).child(dir)))
         .child(div().min_w(0).max_w(260).truncate().text_size(TYPE.small).font_weight(600).text_color(t.foreground).tooltip(this.file ?? "").child(leaf)))
@@ -783,7 +809,7 @@ export default class Files extends View {
 
     const emptyPreview = v_flex().flex_1().min_w(0).p(24).items_center().justify_center().gap(8)
       .child(h_flex().size(40).mb(4).flex_none().items_center().justify_center().rounded(12).bg(withAlpha(t.foreground, UI.subtle))
-        .child(svg("mods/my-files/file.svg").size(18).text_color(t.muted)))
+        .child(iconImage("file", 20)))
       .child(div().text_size(TYPE.body).font_weight(500).text_color(t.foreground).child("Select a file"))
       .child(div().text_size(TYPE.meta).text_center().text_color(t.muted).child("Choose a file to preview, edit or compare."));
 

@@ -2,7 +2,7 @@
 // window with no host frame, so its tab row and editor run edge to edge; a
 // layout floating block draws the collapsed button and stays alive, which is
 // what lets Files hand it a file while the panel is closed.
-import { View, div, svg } from "gpui-kit";
+import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState } from "gpui-base";
 import { theme, settings, props, shared, setShared, readTextFile, writeTextFile, openOverlay, closeOverlay } from "herdr";
 import { markColor, selectedInk, withAlpha, syntaxColors, scmColors, UI, TYPE, SIZE } from "./colors.js";
@@ -173,7 +173,7 @@ export default class FloatingFiles extends View {
     } else {
       const { leaf, dir } = splitPath(abs);
       await this.flush(cx);
-      this.tabs.push({ abs, on, path: String(req.path), leaf, dir, space: req.space ?? null, spaceName: req.spaceName ?? null });
+      this.tabs.push({ abs, on, path: String(req.path), leaf, dir, space: req.space ?? null, spaceName: req.spaceName ?? null, icon: req.icon ?? null });
       this.release();
       this.active = this.tabs.length - 1;
       this.load(cx);
@@ -411,7 +411,9 @@ export default class FloatingFiles extends View {
 
     const header = h_flex().h(32).flex_none().px(10).gap(8).items_center().bg(t.surface)
       .border_b(1).border_color(withAlpha(t.foreground, UI.lineSoft))
-      .child(svg("mods/my-files/file.svg").size(13).flex_none().text_color(tint))
+      .child(tab?.icon
+        ? image(`mods/my-files/material/${tab.icon}.svg`).size(16).flex_none()
+        : svg("mods/my-files/file.svg").size(16).flex_none().text_color(tint))
       .child(h_flex().flex_1().min_w(0).items_center()
         .when(Boolean(tab?.dir), el => el.child(div().min_w(0).truncate().text_size(TYPE.meta).text_color(t.muted).child(tab.dir)))
         .child(div().min_w(0).max_w(280).truncate().text_size(TYPE.small).font_weight(600).text_color(t.foreground)
