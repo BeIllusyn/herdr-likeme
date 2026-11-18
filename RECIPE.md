@@ -31,7 +31,7 @@ tool view and its editor are the real UI._
 
 The window uses the theme's `canvas` behind the layout, `chrome` for the sidebar
 and tab bar, `surface` for headers and file lists, and `background` for terminals
-and previews. Regions meet on faint 1 px hairlines. Two themes ship:
+and previews. Regions meet on faint 1 px hairlines. The default pair is:
 `themes/vscode-2026-dark.json` (VS Code's `#121314` terminals under `#191A1B` chrome,
 `#2A2B2C` borders, `#BFBFBF` text and `#3994BC` teal accent) and
 `themes/vscode-2026-light.json` (`#FFFFFF` terminals under `#FAFAFD` chrome,
@@ -238,7 +238,10 @@ and VS Code's light terminal ANSI table. The layout's root `"theme"` names the p
 (Settings' Light / Dark, or the system's when `settings.json` names no `appearance`)
 chooses one. A theme picked in Settings still wins over the layout, and `install.sh`
 never forces one; `herdr-app do app.theme '{"name":"vscode-2026-light"}'` records the
-light half, which shows once the appearance is Light.
+light half, which shows once the appearance is Light. The installer also ships
+`themes/merino.json` (`#0D1117` near-black) and `themes/buttercream-diner.json`
+(`#FBF3DD` warm paper) as optional themes. Their terminal base colors and ANSI tables
+come from Rex; their panel palettes adapt those colors to Herdr.
 `colors.js` picks its editor token, diff and git inks from the theme's background, and
 `selectedInk()` gives a selected row white text on Dark's fill and near-black on
 Light's, so both themes are first-class rather than a tint over the dark one.

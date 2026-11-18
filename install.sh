@@ -15,7 +15,7 @@ REF="${REF:-main}"
 DST="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
 LAYOUT="likeme"
 MODS=(my-sidebar my-tabs my-pane my-files my-changes my-brand my-float)
-THEMES=(vscode-2026-dark vscode-2026-light)
+THEMES=(vscode-2026-dark vscode-2026-light merino buttercream-diner)
 
 if ! command -v herdr-app >/dev/null 2>&1; then
   echo "herdr-app is not in PATH" >&2

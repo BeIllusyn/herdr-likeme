@@ -67,28 +67,39 @@ cd herdr-likeme
 ./install.sh
 ```
 
-`install.sh` copies `layouts/likeme.json`, the seven mods and both themes
-(`themes/vscode-2026-dark.json` and `themes/vscode-2026-light.json`) into
+`install.sh` copies `layouts/likeme.json`, the seven mods and all four themes into
 `${HERDR_APP_HOME:-~/.config/herdr-app}`, runs `herdr-app check` on every mod, adds
 Herdr's omp and fx program entries, and switches to the layout. Herdr reloads the files
 within a second.
 
-The layout names both themes — `{"light": "vscode-2026-light", "dark":
-"vscode-2026-dark"}` — so Herdr's appearance chooses one: set Light or Dark in Settings,
-or set `appearance` in `settings.json` (remove it to follow the system). A theme picked
-in Settings still wins over the layout; `install.sh` never forces one. Both are ordinary
+The layout defaults to `{"light": "vscode-2026-light", "dark": "vscode-2026-dark"}`.
+Herdr's appearance chooses one: set Light or Dark in Settings, or set `appearance` in
+`settings.json` (remove it to follow the system). A theme picked in Settings still wins
+over the layout; `install.sh` never forces one. These are ordinary
 Herdr theme files: each names the terminal background, foreground, selection, cursor and
 16 ANSI colours, and overrides the panel palette (`surface`, `chrome`, `hover`,
 `selected`, `border`, `input`, `accent`, the agent states). 2026 Dark keeps `#121314`
 terminals under `#191A1B` chrome with `#BFBFBF` text and a `#3994BC` teal accent; 2026
 Light uses `#FFFFFF` terminals under `#FAFAFD` chrome with `#202020` text, `#0069CC`
 focus and VS Code's darker git and diff inks. The mods read `theme()` for every colour,
-and their editor syntax, diff and selected-row inks follow the active theme. Edit
-`themes/vscode-2026-*.json` to taste, or point the layout's root `theme` at another
-theme; `install.sh` replaces both files on the next run.
+and their editor syntax, diff and selected-row inks follow the active theme.
 
-`herdr-app do app.theme '{"name":"vscode-2026-light"}'` records the light half of the
-layout's pair; the window shows it once the appearance is Light too.
+Two optional themes use Rex's terminal colours and adapt the sidebars and tabs to match:
+
+| Theme | Appearance | Terminal background |
+| --- | --- | --- |
+| `merino` | Dark | `#0D1117` |
+| `buttercream-diner` | Light | `#FBF3DD` |
+
+After installing, pick them in Settings or set each appearance's theme with:
+
+```sh
+herdr-app do app.theme '{"name":"merino"}'
+herdr-app do app.theme '{"name":"buttercream-diner"}'
+```
+
+The window shows the theme for its current appearance. To change the layout's default
+pair instead, edit `theme` at the root of `layouts/likeme.json`.
 
 omp registration installs the icon as `my-icons/likeme-omp.svg` and ensures a
 `programs.omp` entry in `programs.json`: a fresh file is copied from
@@ -111,10 +122,10 @@ curl -fsSL https://raw.githubusercontent.com/BeIllusyn/herdr-likeme/main/install
 # or: export LIKEME_FX=0 && ./install.sh
 ```
 
-It **overwrites** `layouts/likeme.json`, both `themes/vscode-2026-*.json` files and the
+It **overwrites** `layouts/likeme.json`, the four bundled theme files and the
 `mods/my-*` folders on every run (`rsync --delete`), so edits made directly in
-`~/.config/herdr-app` are replaced — copy them back to the repo first. It never touches
-your other layouts, themes, mods, spaces or terminals. The one-line form always fetches
+`~/.config/herdr-app` are replaced — copy them back to the repo first. It leaves
+your other layouts, mods, spaces and terminals alone. The one-line form always fetches
 the current `REF` (default `main`); the checkout form uses the files in that checkout.
 
 Manual install:
@@ -123,7 +134,7 @@ Manual install:
 DST=~/.config/herdr-app
 
 cp layouts/likeme.json "$DST/layouts/"
-cp themes/vscode-2026-dark.json themes/vscode-2026-light.json "$DST/themes/"
+cp themes/*.json "$DST/themes/"
 cp -R mods/my-sidebar mods/my-tabs mods/my-pane mods/my-files mods/my-changes mods/my-brand mods/my-float "$DST/mods/"
 
 herdr-app check "$DST/mods/my-sidebar"
@@ -156,7 +167,8 @@ matching `"mod"` references in `likeme.json`.
 
 - Update: run the one-liner again, or `git pull && ./install.sh`
 - Uninstall: delete `layouts/likeme.json`, `layouts/likeme.png` (if present),
-  `themes/vscode-2026-dark.json`, `themes/vscode-2026-light.json` and the
+  `themes/vscode-2026-dark.json`, `themes/vscode-2026-light.json`,
+  `themes/merino.json`, `themes/buttercream-diner.json` and the
   `mods/my-sidebar`, `mods/my-tabs`, `mods/my-pane`, `mods/my-files`, `mods/my-changes`,
   `mods/my-brand`, `mods/my-float` folders. Remove the `programs.omp` and `programs.fx` entries from
   `programs.json` and `my-icons/likeme-omp.svg` / `my-icons/likeme-fx.svg`; delete
