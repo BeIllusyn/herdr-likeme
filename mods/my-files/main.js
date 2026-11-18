@@ -122,7 +122,8 @@ export default class Files extends View {
     this.watchPending = false;
     const args = props() ?? {};
     const space = spaces().find(s => args.space ? s.id === args.space : s.active);
-    this.loc = { cwd: args.cwd || space?.folder, on: args.on === undefined ? space?.machine ?? null : args.on, space: args.space ?? space?.id };
+    const base = shared("likeme.spaceFolders")?.[space?.id] ?? space?.folder;
+    this.loc = { cwd: args.cwd || base, on: args.on === undefined ? space?.machine ?? null : args.on, space: args.space ?? space?.id };
     this.pane = args.pane;
     this.tab = null;
     this.initialOpen = args.open;

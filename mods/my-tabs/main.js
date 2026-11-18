@@ -1,6 +1,6 @@
 import { View, div, svg, image } from "gpui-kit";
-import { h_flex } from "gpui-base";
-import { spaces, panes, focused, run, openOverlay, theme, window, shared, layout, settings, exec, knownAgents } from "herdr";
+import { h_flex, v_flex } from "gpui-base";
+import { spaces, panes, props, run, openOverlay, closeOverlay, theme, window, shared, setShared, layout, settings, exec, knownAgents } from "herdr";
 import { markColor, selectedInk, withAlpha, UI, TYPE, SIZE } from "./colors.js";
 
 // Agents that keep the first slots, and the one start that wants its own
@@ -70,11 +70,19 @@ function findMany(root, ids) {
   return found;
 }
 
+function folderPanes(tab) {
+  return panes().filter(p => p.tab === tab && p.pane && p.terminal && p.cwd);
+}
+
+function openTabMenu(target) {
+  openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target } });
+}
+
 export default class Tabs extends View {
   init(_props, cx) {
+    if (props()?.folderMenu) return;
     this.pressed = null;
     this.over = null;
-    this.lastTerminal = new Map();
     // The agents this machine has (`knownAgents`, null until it answers) and
     // the tool commands PATH is missing. Both start empty, so the bar never
     // drops a button the first check has not covered yet.
@@ -115,43 +123,55 @@ export default class Tabs extends View {
     }
   }
 
-  terminalLocation(space, all, focus) {
-    if (!space) return {};
-    const tabs = new Set(space.tabs.map(tab => tab.id));
-    const terminals = all.filter(p => p.terminal && tabs.has(p.tab));
-    const on = space.machine ?? null;
-    if (focus?.space === space.id && focus.pane === null && focus.terminal && focus.cwd) {
-      const slash = focus.terminal.indexOf("/");
-      const remote = { cwd: focus.cwd, on: slash < 0 ? null : focus.terminal.slice(0, slash) };
-      this.lastTerminal.set(space.id, { remote });
-      return remote;
-    }
-    const at = terminals.find(p => p.pane === focus?.pane);
-    if (at) {
-      this.lastTerminal.set(space.id, { pane: at.pane });
-      return { cwd: focus.cwd || at.cwd || space.folder, on };
-    }
-    const last = this.lastTerminal.get(space.id);
-    const current = terminals.find(p => p.tab === focus?.tab && p.cwd);
-    if (!current && last?.remote) return last.remote;
-    const terminal = current ?? terminals.find(p => p.pane === last?.pane && p.cwd) ?? terminals.find(p => p.cwd);
-    return { cwd: terminal?.cwd || space.folder, on };
+  openFolderMenu(target) {
+    if (!folderPanes(target.id).length) return openTabMenu(target);
+    openOverlay({ mod: "my-tabs", kind: "popup", width: 310, height: 248, props: { folderMenu: target } });
+  }
+
+  folderMenu(target, overlay, t) {
+    const picks = folderPanes(target.id);
+    const close = () => closeOverlay(overlay);
+    const choose = (pane) => {
+      const space = spaces().find(s => s.id === target.space && s.tabs.some(tab => tab.id === target.id));
+      const current = folderPanes(target.id).find(p => p.pane === pane);
+      if (space && current) {
+        const folders = shared("likeme.spaceFolders") ?? {};
+        setShared("likeme.spaceFolders", { ...folders, [space.id]: current.cwd });
+      }
+      close();
+    };
+    const item = (id, action) => h_flex().id(id).h(29).px(8).gap(8).flex_none().min_w(0).rounded(5).items_center()
+      .text_color(t.foreground).cursor_pointer().hover(s => s.bg(t.hover)).on_click(action);
+    return v_flex().w_full().p(5).bg(t.popover).text_size(TYPE.small)
+      .child(div().px(8).pt(4).pb(6).text_size(TYPE.meta).font_semibold().text_color(t.muted).child("Set space folder from pane"))
+      .child(v_flex().min_w(0).when(picks.length > 6, el => el.h(174).overflow_y_scrollbar().mode("hover"))
+        .children(picks.map((p, i) => item(`space-folder-${p.pane}`, () => choose(p.pane)).tooltip(p.cwd)
+          .when(picks.length > 1, el => el.child(div().flex_none().text_color(t.muted).child(`Pane ${i + 1}`)))
+          .child(div().flex_1().min_w(0).truncate().child(p.cwd)))))
+      .when(!picks.length, el => el.child(div().px(8).py(4).text_color(t.muted).child("No terminal folder available")))
+      .child(div().h(1).my(4).bg(withAlpha(t.foreground, UI.line)))
+      .child(item("more-tab-actions", () => { close(); openTabMenu(target); }).child("More tab actions…"));
   }
 
   openTool(mod) {
-    const space = spaces().find(s => s.active), all = panes();
+    const space = spaces().find(s => s.active);
     if (!space) return;
+    const all = panes();
     const tab = space.tabs.find(tab => all.some(p => p.tab === tab.id && p.mod === mod));
     if (tab) {
       if (!tab.active) run("tab.select", { id: tab.id });
       return;
     }
-    const { cwd, on } = this.terminalLocation(space, all, focused());
-    run("tab.new", { space: space.id, mod, name: TOOL_TABS[mod].name, props: { cwd, on, space: space.id } });
+    run("tab.new", {
+      space: space.id, mod, name: TOOL_TABS[mod].name,
+      props: { cwd: shared("likeme.spaceFolders")?.[space.id] ?? space.folder, on: space.machine ?? null, space: space.id },
+    });
   }
 
   render() {
     const t = theme();
+    const args = props();
+    if (args?.folderMenu) return this.folderMenu(args.folderMenu, args.overlay, t);
     const space = spaces().find(p => p.active);
     const tabs = space?.tabs ?? [];
     const root = layout(), w = window();
@@ -159,9 +179,8 @@ export default class Tabs extends View {
     const stop = (_e, cx) => cx.stop_propagation();
     const button = (id, label, action) => div().id(id).size(24).rounded(6).flex_none().flex().items_center().justify_center().text_color(t.muted)
       .hover(s => s.bg(t.hover).text_color(t.foreground)).on_mouse_down("left", stop).on_click(action).child(label);
-    const all = panes(), panesByTab = new Map();
-    this.terminalLocation(space, all, focused());
-    for (const p of all) {
+    const panesByTab = new Map();
+    for (const p of panes()) {
       let mine = panesByTab.get(p.tab);
       if (!mine) panesByTab.set(p.tab, mine = []);
       mine.push(p);
@@ -222,7 +241,7 @@ export default class Tabs extends View {
           else if (from === i) run("tab.select", { id: c.id });
           cx.notify();
         })
-        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }); })
+        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.openFolderMenu({ id: c.id, space: space.id }); })
         // The drop line sits on the edge the tab would move past.
         .when(this.pressed !== null && this.pressed !== i && this.over === i, el => el.child(
           div().absolute().top(5).bottom(5).w(2).rounded(1).bg(t.accent)
@@ -259,7 +278,12 @@ export default class Tabs extends View {
     const newTab = ghostAction("tab-new", "New tab", div().text_size(17).line_height("18px").child("+"), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }));
     // One-click starts beside the +, using the program table's own icons: the
     // shipped tinted glyphs inherit the button's colour, Claude's stays orange.
-    const launch = (key, label, icon, tint, argv) => ghostAction(`start-${key}`, label, tint ? svg(icon).size(14).flex_none() : image(icon).size(14), () => run("tab.new", { space: space?.id, argv }));
+    const launch = (key, label, icon, tint, argv) => ghostAction(`start-${key}`, label, tint ? svg(icon).size(14).flex_none() : image(icon).size(14), () => {
+      // Without an explicit folder, Herdr inherits the focused terminal's cwd.
+      const target = spaces().find(s => s.active);
+      const folder = shared("likeme.spaceFolders")?.[target?.id] ?? target?.folder;
+      run("tab.new", { space: target?.id, folder, argv });
+    });
     const launches = [];
     if (this.agents) {
       // Every agent Herdr can start, installed only. The leading two keep

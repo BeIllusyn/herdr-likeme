@@ -1,7 +1,6 @@
-// Workspace spaces: stable colored avatars, worktrees under their checkout,
-// grouped by machine when more than one is known. After a space's name, the repo
-// its first terminal is in now, only where unusual: branch, ahead/behind. Agent state lives in the agents list, not here. Click to
-// switch, right-click for its menu, drag to reorder.
+// Workspace spaces: stable colored avatars, working directories and worktrees
+// under their checkout, grouped by machine. Click to switch, right-click for
+// its menu, drag to reorder.
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
@@ -20,25 +19,7 @@ const sameGit = (a, b) => a === b || Boolean(a && b &&
   a.name === b.name && a.branch === b.branch && a.ahead === b.ahead &&
   a.behind === b.behind && a.repo === b.repo && a.linked === b.linked);
 
-// Where every space is now: its first terminal's live folder, else where it was
-// made. `ps` is the caller's single panes() snapshot. The old per-space
-// `ps.find` built a tab-id Set and scanned the pane list again for every space
-// on every 250 ms tick (and again for every render).
-function placesOf(sp, ps) {
-  const first = new Map(); // tab -> { at, cwd }: the first pane in snapshot order
-  ps.forEach((p, at) => { if (p.cwd && !first.has(p.tab)) first.set(p.tab, { at, cwd: p.cwd }); });
-  const out = new Map();
-  for (const s of sp) {
-    let pick = null;
-    for (const t of s.tabs ?? []) {
-      const p = first.get(t.id);
-      if (p && (!pick || p.at < pick.at)) pick = p;
-    }
-    out.set(s.id, keyOf(s.machine ?? null, pick?.cwd || s.folder));
-  }
-  return out;
-}
-const rowHeight = ({ tree }) => (tree ? SIZE.worktreeRow : SIZE.row);
+const folderOf = (s, folders) => folders[s.id] ?? s.folder ?? "";
 const base = (path) => path.replace(/\/+$/, "").split("/").pop();
 // Changes made outside Herdr (an editor's save, a commit in another app): looked
 // for this often, in repos the list shows, while the window is in front.
@@ -118,12 +99,13 @@ export default class Spaces extends View {
   checkNew(cx) {
     const now = Date.now();
     const sp = spaces();
+    const folders = shared("likeme.spaceFolders") ?? {};
     // Everything the list draws changes under this view without the host telling
     // it: a closed space disappears, one is renamed, the active one moves. Redraw
     // on that change alone, not every tick. Colours only change with id/name,
     // which this signature already contains.
     let sig = "";
-    for (const s of sp) sig += `${s.id}:${s.name}:${s.active ? 1 : 0}:${s.machine ?? ""}:${s.folder ?? ""}|`;
+    for (const s of sp) sig += `${s.id}:${s.name}:${s.active ? 1 : 0}:${s.machine ?? ""}:${folderOf(s, folders)}|`;
     if (sig !== this.seen) {
       this.seen = sig;
       // New or renamed spaces need a colour before the first frame that shows them.
@@ -137,17 +119,15 @@ export default class Spaces extends View {
     }
     for (const s of sp) if (!this.shown.has(s.id)) this.born[s.id] ??= now;
     if (!sp.length) return;
-    const due = this.due(now, sp, panes());
+    const due = this.due(now, sp, panes(), folders);
     if (due.size) this.refreshGit(due, cx);
   }
 
-  // Places whose git could have changed: new ones (a new space, a cd), where a
-  // command or an agent's turn just ended (a checkout, a commit, edits), those on
-  // a machine that is back, and repos in view whose fallback is due.
-  due(now, sp, ps) {
-    // Moved there: what it knew of that place may be old.
-    const places = placesOf(sp, ps), at = {};
-    for (const s of sp) at[s.id] = places.get(s.id);
+  // Refresh new working folders, repos where work just ended, and those on a
+  // machine that came back or whose fallback is due.
+  due(now, sp, ps, folders) {
+    const at = {};
+    for (const s of sp) at[s.id] = keyOf(s.machine, folderOf(s, folders));
     const keys = new Set();
     for (const k of Object.values(at)) if (cwdOf(k)) keys.add(k);
     const due = new Set();
@@ -345,12 +325,16 @@ export default class Spaces extends View {
   }
 
   // Spaces in order, each worktree space moved under its main checkout's.
-  // `sp` and `ps` are the render's snapshots: every host read copies the list.
-  ordered(sp, ps) {
-    const places = placesOf(sp, ps);
-    const ready = (w) => this.shown.has(w.id) || places.get(w.id) in this.git || Date.now() - (this.born[w.id] ??= Date.now()) > 1500;
-    for (const w of sp) if (!this.shown.has(w.id) && ready(w)) this.shown.add(w.id);
-    const list = sp.map((w, i) => ({ w, i, g: this.git[places.get(w.id)] ?? null })).filter((r) => this.shown.has(r.w.id));
+  ordered(sp, folders) {
+    const list = [];
+    for (const [i, w] of sp.entries()) {
+      const cwd = folderOf(w, folders), place = keyOf(w.machine, cwd);
+      if (!this.shown.has(w.id)) {
+        if (cwd && !(place in this.git) && Date.now() - (this.born[w.id] ??= Date.now()) <= 1500) continue;
+        this.shown.add(w.id);
+      }
+      list.push({ w, i, cwd, g: this.git[place] ?? null });
+    }
     const mains = new Set(list.filter((r) => r.g && !r.g.linked).map((r) => r.g.repo));
     const nested = (r) => r.g?.linked && mains.has(r.g.repo);
     const out = [];
@@ -367,8 +351,8 @@ export default class Spaces extends View {
   }
 
   // The rows, under a header per machine once one isn't this computer.
-  grouped(t, sp, ps, ms, fillOf) {
-    const rows = this.ordered(sp, ps);
+  grouped(t, sp, folders, ms, fillOf) {
+    const rows = this.ordered(sp, folders);
     const draw = (r) => this.row(r, t, fillOf);
     const remote = [...new Set([...rows.map(r => r.w.machine).filter(Boolean), ...this.machines.map(m => m.name), ...Object.keys(this.reconnecting)])].sort();
     const stateByName = new Map(ms.map(k => [k.name, k]));
@@ -420,7 +404,7 @@ export default class Spaces extends View {
     });
   }
 
-  row({ w, i, g, tree }, t, fillOf) {
+  row({ w, i, g, tree, cwd }, t, fillOf) {
     const on = w.active;
     const fill = fillOf(w.id);
     const ink = selectedInk(t);
@@ -433,8 +417,8 @@ export default class Spaces extends View {
       .relative()
       .id(`space-${w.id}`)
       .px(8)
-      .h(rowHeight({ tree }))
-      .cursor_pointer().tooltip(w.name)
+      .h(tree ? SIZE.worktreeRow : SIZE.row)
+      .cursor_pointer().tooltip(cwd ? `${w.name}\n${cwd}` : w.name)
       .flex_none()
       .justify_center()
       .rounded(SIZE.radius)
@@ -486,14 +470,16 @@ export default class Spaces extends View {
             .items_center().justify_center().text_size(11).font_semibold()
             .text_color(on ? markInk(fill) : fill)
             .child([...w.name][0]?.toUpperCase() ?? "?")))
-          // Left: the mark. Right: the project name over its branch.
           .child(
             v_flex()
               .flex_1()
               .min_w(0)
               .gap(1)
-              .child(div().min_w(0).truncate().text_size(TYPE.body).line_height("15px")
-                .font_weight(on ? 600 : 500).text_color(on ? ink : t.foreground).child(w.name))
+              .child(h_flex().min_w(0).gap(6).items_center()
+                .child(div().min_w(0).truncate().text_size(TYPE.body).line_height("15px")
+                  .font_weight(on ? 600 : 500).text_color(on ? ink : t.foreground).child(w.name))
+                .when(Boolean(cwd), el => el.child(div().id(`space-folder-${w.id}`).min_w(0).truncate().tooltip(cwd)
+                  .text_size(TYPE.meta).line_height("13px").text_color(on ? withAlpha(ink, "cc") : t.muted).child(base(cwd.replace(/\\/g, "/")) || cwd))))
               .when(Boolean(g), el => el.child(
                 h_flex()
                   .min_w(0)
@@ -527,7 +513,7 @@ export default class Spaces extends View {
     // One read of each host list per render: every read copies the whole list
     // into JS, and the row helpers used to read them again per space.
     const sp = spaces();
-    const ps = sp.length ? panes() : [];
+    const folders = shared("likeme.spaceFolders") ?? {};
     const ms = machines();
     const colors = shared("space.colors") ?? {};
     // One colour lookup per hue, not one regex per row.
@@ -557,6 +543,6 @@ export default class Spaces extends View {
       .child(v_flex().px(SIZE.inset).pb(embedded ? 8 : 16).gap(3)
         .when(!embedded, el => el.flex_1().min_h(0).overflow_y_scrollbar().mode("hover"))
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
-        .children([...this.grouped(t, sp, ps, ms, fillOf), this.ghost(t)]));
+        .children([...this.grouped(t, sp, folders, ms, fillOf), this.ghost(t)]));
   }
 }

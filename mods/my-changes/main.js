@@ -132,7 +132,8 @@ export default class Changes extends View {
     this.input.on("blur", (_e, cx) => { this.typing = false; cx.notify(); });
     const args = props() ?? {};
     const space = spaces().find(s => args.space ? s.id === args.space : s.active);
-    this.loc = { cwd: args.cwd || space?.folder, on: args.on === undefined ? space?.machine ?? null : args.on, space: args.space ?? space?.id };
+    const base = shared("likeme.spaceFolders")?.[space?.id] ?? space?.folder;
+    this.loc = { cwd: args.cwd || base, on: args.on === undefined ? space?.machine ?? null : args.on, space: args.space ?? space?.id };
     this.pane = args.pane;
     this.tab = null;
     // What the panel diffs: the working tree (null) or one branch's merge base
@@ -426,7 +427,10 @@ export default class Changes extends View {
       setShared("files.open", { ...open, tab: tab.id, on: this.loc.on });
       run("tab.select", { id: tab.id });
     } else {
-      run("tab.new", { space: space.id, name: "Files", mod: "my-files", props: { ...this.loc, open } });
+      // A legacy Changes tab may point to another machine, where the base folder is not valid.
+      const base = shared("likeme.spaceFolders")?.[space.id] ?? space.folder;
+      const cwd = (space.machine ?? null) === this.loc.on ? base : this.loc.cwd;
+      run("tab.new", { space: space.id, name: "Files", mod: "my-files", props: { ...this.loc, cwd, open } });
     }
   }
 

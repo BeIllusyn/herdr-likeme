@@ -57,7 +57,7 @@ function fixture({ legacy = false, available = ["claude", "pi", "lazygit", "nvim
   const cx = { stop_propagation() {}, notify() {}, timer: { after: (_ms, fn) => timers.push(fn), every: (_ms, fn) => timers.push(fn) } };
   const host = {
     div: element, svg: element, image: element, h_flex: element,
-    spaces: () => [space], panes: () => panes, layout: () => layout,
+    spaces: () => [space], panes: () => panes, layout: () => layout, props: () => undefined,
     focused: () => {
       const tab = tabs.find(t => t.active);
       const pane = panes.find(p => p.tab === tab?.id);
@@ -157,7 +157,7 @@ test("加号保留菜单行为，快捷启动创建普通 Tab", () => {
   f.click("tab-new");
   assert.equal(f.commands.at(-1).args.mod, "new-menu");
   f.click("start-nvim");
-  assert.deepEqual(f.commands.at(-1), { name: "tab.new", args: { space: "space", argv: ["nvim"] } });
+  assert.deepEqual(f.commands.at(-1), { name: "tab.new", args: { space: "space", folder: "/project", argv: ["nvim"] } });
 });
 
 test("快捷启动只显示这台机器装了的命令", async () => {
@@ -183,11 +183,11 @@ test("knownAgents 里已安装的其他 agent 自动出现，未安装的不出�
   ]);
   // 启动参数取程序表的 run；Claude 的入口仍带自己的参数。
   f.click("start-codex");
-  assert.deepEqual(f.commands.at(-1), { name: "tab.new", args: { space: "space", argv: ["codex", "--no-daemon"] } });
+  assert.deepEqual(f.commands.at(-1), { name: "tab.new", args: { space: "space", folder: "/project", argv: ["codex", "--no-daemon"] } });
   f.click("start-claude");
   assert.deepEqual(f.commands.at(-1), {
     name: "tab.new",
-    args: { space: "space", argv: ["claude", "--dangerously-skip-permissions"] },
+    args: { space: "space", folder: "/project", argv: ["claude", "--dangerously-skip-permissions"] },
   });
 });
 

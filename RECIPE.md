@@ -165,8 +165,10 @@ draw their own surface, so neither has the 5 px padding a floating block adds.
   section headers stay visible even when only one section has agents.
 - **Tabs.** Click selects; the active tab takes the theme's raised neutral fill with contrasting ink, a 600 name and its
   tinted program icon in the space's colour. Drag reorders (`tab.move`) with an accent line on the edge it
-  will land on, double-click renames, right-click opens the tab menu, every close
-  button closes its own tab. A tab still named by its number is shown by what it runs,
+  will land on, double-click renames, and every close button closes its own tab.
+  Right-click a terminal tab to set the space folder from one of its panes. The popup
+  keeps the original tab menu under More tab actions; tabs without a terminal folder
+  open the original menu directly. A tab still named by its number is shown by what it runs,
   so "1" becomes the folder or program name; renaming a tab always wins. The `+` opens
   Herdr's `new-menu` popup, and the one-click starts this machine has follow it.
   The agents come from `knownAgents()` — Herdr's own list of what the program table
@@ -184,7 +186,7 @@ draw their own surface, so neither has the 5 px padding a floating block adds.
   (`props().pane`), not the focused one. Working shows the same braille character as the
   tabs and agents.
 - **Files / Changes.** 两个快捷按钮和 LazyGit、Neovim 等入口同组。点击后切到当前 Space
-  已打开的工具 Tab，没有才创建。每个 Tab 使用打开时的终端目录，之后不跟随终端变化。
+  已打开的工具 Tab，没有才在当前 Space 的基础目录创建，之后不跟随终端变化。
   Diff 覆盖整个文件（`git diff -U1000000`，未改动的行也作为上下文，最多 20,000 行）；
   右侧标题行显示文件路径，`↑`／`↓` 在连续的新增/删除块之间跳转，`Files` 把同一个文件
   交给 Files Tab（传仓库根和相对路径；文件不在 Files 树内时按仓库根预览，
@@ -300,7 +302,12 @@ Programs run: `git` (via `exec`), `hc machine ls` (via `hc`), and `sh -c "comman
 (via `exec`; `where` on Windows) to decide whether Lazygit and Neovim are there.
 `knownAgents()` supplies every other agent's installed flag. The quick starts ask
 Herdr to run the agents' `run` (Claude with `--dangerously-skip-permissions`) and
-`lazygit` / `nvim` (`tab.new`'s `argv`); the mod never spawns them itself.
+`lazygit` / `nvim` (`tab.new`'s `argv`); they pass the selected space's `folder`
+explicitly so the focused pane's working directory does not affect the launch.
+`shared("likeme.spaceFolders")` stores overrides by space ID; otherwise Likeme uses
+Herdr's original `space.folder`. The sidebar shows that same effective path and
+looks up Git status there. An override does not move existing tabs or change
+Herdr's native `+` menu and splits.
 
 Art: Herdr's shipped `mods/workspace-chrome/*.svg` (branch, git-compare, plus,
 chevron-down/right, pin, pin-off, server, monitor, check, layers, settings),
