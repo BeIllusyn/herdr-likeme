@@ -5,6 +5,7 @@
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
+import * as host from "herdr";
 import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window } from "herdr";
 import { markColor, markInk, selectedInk, withAlpha, UI, TYPE, SIZE } from "./colors.js";
 import { backgroundTick } from "./util.js";
@@ -77,6 +78,10 @@ export default class Spaces extends View {
     // Colours are assigned here, not in `render`: `setShared` re-renders every
     // mod, and doing that from inside a render pass cascades into the window.
     this.syncColors(spaces());
+    // `check` loads this mod for real; starting the timers there would run `hc`
+    // and `exec` against a window that never shows. `checking` arrived in 0.1.16,
+    // so an older host simply takes the live path it always took.
+    if (host.checking?.()) return;
     this.refreshMachines(cx);
     cx.timer.every(15000, cx => this.refreshMachines(cx));
     // `git status` walks the whole tree, on another machine a process there:
