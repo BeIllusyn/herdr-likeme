@@ -54,7 +54,7 @@ function fixture({ legacy = false, available = ["claude", "pi", "lazygit", "nvim
   }
   const space = { id: "space", active: true, folder: "/project", machine: null, tabs };
   const commands = [], timers = [];
-  const cx = { stop_propagation() {}, notify() {}, timer: { after: (_ms, fn) => timers.push(fn), every: (_ms, fn) => timers.push(fn) } };
+  const cx = { stop_propagation() {}, notify() {}, spawn() {}, timer: { after: (_ms, fn) => timers.push(fn), every: (_ms, fn) => timers.push(fn) } };
   const host = {
     div: element, svg: element, image: element, h_flex: element,
     spaces: () => [space], panes: () => panes, layout: () => layout, props: () => undefined,
@@ -155,7 +155,7 @@ test("拖动使用包含工具 Tab 的宿主列表位置", () => {
 test("加号保留菜单行为，快捷启动创建普通 Tab", () => {
   const f = fixture();
   f.click("tab-new");
-  assert.equal(f.commands.at(-1).args.mod, "new-menu");
+  assert.equal(f.commands.at(-1).args.mod, "my-new-menu");
   f.click("start-nvim");
   assert.deepEqual(f.commands.at(-1), { name: "tab.new", args: { space: "space", folder: "/project", argv: ["nvim"] } });
 });

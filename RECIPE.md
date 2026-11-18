@@ -40,7 +40,7 @@ from `theme()`, so pointing the layout at another theme re-skins them; the edito
 syntax, diff and git inks also follow the theme's lightness, and space marks come
 from that theme's ANSI palette.
 
-The design system is `colors.js`, copied identically into all seven mods. `UI` holds
+The design system is `colors.js`, copied identically into all seven colour-bearing mods. `UI` holds
 the neutral ladder — subtle 5.9%, hover 10.8%, active 18%, line 10.2%, field 7.1%,
 soft line 5.9% — and the semantic washes: tint 11.8% with a 22% edge, badge 12.2%,
 diff 15%, focused tile 15%, dots at 80% / 60%, and a 70% focus ring. `changeColor(status, theme)`
@@ -170,8 +170,10 @@ draw their own surface, so neither has the 5 px padding a floating block adds.
   keeps the original tab menu under More tab actions; tabs without a terminal folder
   open the original menu directly. A tab still named by its number is shown by what it runs,
   so "1" becomes the folder or program name; renaming a tab always wins. The `+` opens
-  Herdr's `new-menu` popup, and the one-click starts this machine has follow it.
-  The agents come from `knownAgents()` — Herdr's own list of what the program table
+  `my-new-menu`, Likeme's clone of Herdr's `new-menu`; its Terminal row starts in
+  the shown space's effective folder, and the one-click starts this machine has follow it.
+  While the likeme layout is shown, `⌘T` is bound to `my-tabs.newTab` for the same
+  folder. The agents come from `knownAgents()` — Herdr's own list of what the program table
   can start, installed only — so Codex, Gemini or a custom `programs.json` entry
   shows up on its own, with the table's `run` and icon. Claude and Pi keep the first
   slots; Claude still starts with `--dangerously-skip-permissions`. Lazygit and
@@ -290,13 +292,14 @@ overwritten.
 
 Herdr functions used: `spaces`, `agents`, `terminals`, `panes`, `focused`, `layout`,
 `theme`, `window`, `settings`, `keys`, `home`, `shared` / `setShared`, `setAgentOrder`,
-`run`, `openOverlay` / `closeOverlay`, `props`, `exec`, `knownAgents`, `readTextFile`,
-`writeTextFile`, `hc`, `watchFolder`, `localStorage`.
+`nextCommand`, `run`, `openOverlay` / `closeOverlay`, `props`, `exec`, `knownAgents`,
+`readTextFile`, `writeTextFile`, `hc`, `watchFolder`, `localStorage`.
 
 Commands used: `space.select`, `space.move`, `space.new`, `tab.new`, `tab.select`,
 `tab.move`, `tab.close`, `tab.rename`, `pane.focus`, `pane.split`,
 `pane.zoom`, `pane.close`, `terminal.pin`, `terminal.peek`, `window.minimize`,
-`window.maximize`, `window.close`, `app.palette`.
+`window.maximize`, `window.close`, `app.palette`; `my-tabs.newTab` is the mod
+command `cmd-t` reaches in this layout.
 
 Programs run: `git` (via `exec`), `hc machine ls` (via `hc`), and `sh -c "command -v …"`
 (via `exec`; `where` on Windows) to decide whether Lazygit and Neovim are there.
@@ -306,12 +309,14 @@ Herdr to run the agents' `run` (Claude with `--dangerously-skip-permissions`) an
 explicitly so the focused pane's working directory does not affect the launch.
 `shared("likeme.spaceFolders")` stores overrides by space ID; otherwise Likeme uses
 Herdr's original `space.folder`. The sidebar shows that same effective path and
-looks up Git status there. An override does not move existing tabs or change
-Herdr's native `+` menu and splits.
+looks up Git status there. `my-new-menu` passes that folder on its Terminal row.
+`layout:likeme` in `keys.json` binds `cmd-t` to `my-tabs.newTab`, which passes the
+same folder; Herdr's native `tab.new`, splits and other layouts keep their behavior.
+An override does not move existing tabs.
 
 Art: Herdr's shipped `mods/workspace-chrome/*.svg` (branch, git-compare, plus,
 chevron-down/right, pin, pin-off, server, monitor, check, layers, settings),
-`icons/claude.svg`, `icons/pi.svg`,
+`icons/claude.svg`, `icons/pi.svg`, `icons/shell.svg` (the new-tab Terminal row),
 `icons/lazygit.svg` and `icons/nvim.svg` (the quick starts), `mods/pane/close.svg` and
 `zoom.svg` (used by `my-tabs`), `mods/files/file.svg`, `mods/changes/changes.svg`;
 `my-sidebar` carries its own `sort.svg`; `my-pane` carries its own
@@ -340,10 +345,17 @@ tables and MIT license; `my-float` carries a copy for the collapsed corner butto
   and the `curl | bash` tarball modes must stay exit-0 on expected skips so the
   layout install never aborts.
 - **Clones never update.** Herdr replaces its shipped
-  `spaces`/`agents`/`tabs`/`pane` on every start; these four sources
+  `spaces`/`agents`/`tabs`/`pane`/`new-menu` on every start; these five sources
   are frozen at 0.1.12. After a Herdr upgrade, diff each shipped `main.js` against its
   copy and port whatever changed (`spaces`→`my-sidebar/spaces.js`,
-  `agents`→`my-sidebar/agents.js`, `tabs`→`my-tabs`, `pane`→`my-pane`).
+  `agents`→`my-sidebar/agents.js`, `tabs`→`my-tabs`, `pane`→`my-pane`,
+  `new-menu`→`my-new-menu`).
+- **The Cmd+T binding is layout-scoped.** `extras/keys/install.sh` writes only
+  `layout:likeme.cmd-t`, so another layout keeps Herdr's native new tab and the
+  person's `global` binding is untouched. A `cmd-t` already set in
+  `layout:likeme` to something other than `tab.new` wins; invalid JSON, a
+  symlinked `keys.json` or a missing file leaves the file absent or
+  byte-identical. Herdr reloads `keys.json` live.
 - `my-sidebar` is a composition, not a clone: `main.js` mounts two retained child
   views with `cx.new(..., { embedded: true })`. The child reads `embedded` from its
   `init(props)` argument, **not** from the global `props()` (which is the host mod's
@@ -367,7 +379,7 @@ tables and MIT license; `my-float` carries a copy for the collapsed corner butto
 - The focused header is `mix(t.surface, fill, 0.06)` with a brighter title and a
   space-coloured icon, drawn by the mod on its own header surface. `colors.js` (the
   shared `MARK`, `markColor`, `changeColor`, `markInk`, `selectedInk`, `syntaxColors`,
-  `scmColors`, `isLight`, `mix`, `withAlpha`, `UI`, `TYPE` and `SIZE`) is one file copied into all seven mods;
+  `scmColors`, `isLight`, `mix`, `withAlpha`, `UI`, `TYPE` and `SIZE`) is one file copied into all seven colour-bearing mods;
   `check.sh` fails when
   they drift. The colour
   comes from `shared("space.colors")[space.id]`; `markColor` prefers the theme's own
@@ -460,7 +472,7 @@ tables and MIT license; `my-float` carries a copy for the collapsed corner butto
   about 30 fps and reads as steppy at 12–16 px. `frames` swaps text natively on one
   shared clock.
 - **The floating panel is a hidden coordinator plus two frameless windows.** A visible floating block always carries Herdr's frame with 5 px above and below, which made the mini look padded; a negative margin pushed the content outside the frame, and an absolute fill could not change the block's measured height. Instead the layout's `my-float` block is only a coordinator: it draws nothing, measures the main window with the shell's `window.viewport_size()` (the `herdr` module's `window()` only carries platform facts, not a size), and opens the tabbed panel and the 40 px mini with `openOverlay({kind: "window", frame: "none"})`. Both mod copies draw their own rounded border, background and content edge to edge. The tab list and active file live in `shared("float.state")` since closing an overlay destroys its view; the mini's count comes from the same list. Files writes `shared("float.request")`; a request older than 30 s is ignored so one left in `shared.json` cannot reopen the panel. The coordinator owns `float.open` / `float.panel` / `float.mini`: the mini sets `float.open` and closes itself, the coordinator then opens the panel with the main window's size. The mini window is not anchored by the host, so the coordinator checks `window.viewport_size()` every 500 ms, closes the mini by the id it stored in `shared("float.miniId")` when the size changes, and reopens it at the new bottom-right; the mini stops mouse-down so it cannot be dragged away. Local files keep the same optimistic whole-file auto-save as Files; a tab from another machine is read-only because `writeTextFile` is local-only.
-- Mod names (`my-sidebar`, `my-tabs`, `my-pane`, `my-files`, `my-changes`, `my-brand`, `my-float`)
+- Mod names (`my-sidebar`, `my-tabs`, `my-pane`, `my-files`, `my-changes`, `my-brand`, `my-float`, `my-new-menu`)
   are deliberately generic. Rename them on install if they clash, and update the
   `"mod"` fields in `likeme.json`.
 - Space colours are shared through `"space.colors"`; every layout sees the stored
@@ -481,14 +493,18 @@ tables and MIT license; `my-float` carries a copy for the collapsed corner butto
 
 ## Done when
 
-- `./check.sh` passes: all seven mods load and all seven `colors.js` copies match.
+- `./check.sh` passes: all eight mods load and all seven `colors.js` copies match.
+- `bash -n install.sh`, `bash -n extras/keys/install.sh` and
+  `bash -n extras/omp/install.sh` report no syntax errors.
+- `extras/keys/install.sh` adds `layout:likeme.cmd-t` when the key is absent or
+  still `tab.new`, and leaves a custom `cmd-t`, invalid JSON, a missing file or a
+  symlinked `keys.json` untouched.
 - `node --test tests/*.test.mjs` passes, including compact toolbar behaviour,
   mark contrast, dark / light ink switching, workspace switching, legacy tabs, diff
   parsing, branch parsing
   and saving, plus the omp installer's fresh, merge/mode, existing-key, invalid
   JSON (python and jq), non-object shapes, symlink, `LIKEME_OMP=0`, omp-absent and
   jq-fallback cases.
-- `bash -n install.sh` and `bash -n extras/omp/install.sh` report no syntax errors.
 - The running Likeme layout reports no errors in `herdr-app status`, in both
   `vscode-2026-dark` and `vscode-2026-light`.
 - Brand and tab bar align at 44 px. Pane / Files / Changes headers align at 36 px.
@@ -515,5 +531,5 @@ tables and MIT license; `my-float` carries a copy for the collapsed corner butto
   branch, unborn HEAD or unrelated history reports a reason instead of stale rows.
 - Empty states are consistent; a clean worktree shows All caught up, an unchanged
   branch comparison shows No differences.
-- Removing `layouts/likeme.json` and the seven installed `mods/my-*` folders leaves
+- Removing `layouts/likeme.json` and the eight installed `mods/my-*` folders leaves
   the shipped layouts available.

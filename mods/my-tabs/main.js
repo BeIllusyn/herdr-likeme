@@ -1,6 +1,6 @@
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { spaces, panes, props, run, openOverlay, closeOverlay, theme, window, shared, setShared, layout, settings, exec, knownAgents } from "herdr";
+import { spaces, panes, props, run, openOverlay, closeOverlay, theme, window, shared, setShared, layout, settings, exec, knownAgents, nextCommand } from "herdr";
 import { markColor, selectedInk, withAlpha, UI, TYPE, SIZE } from "./colors.js";
 
 // Agents that keep the first slots, and the one start that wants its own
@@ -92,6 +92,20 @@ export default class Tabs extends View {
     this.ready = this.check(cx);
     // Installing one while Herdr runs brings it in without a restart.
     cx.timer.every(60000, cx => this.check(cx));
+    // Cmd+T is bound to this by keys.json's layout:likeme section: Herdr's own
+    // tab.new has no folder, so it follows the focused terminal instead of the
+    // folder the sidebar shows for the space.
+    cx.spawn(async () => {
+      for (;;) {
+        if ((await nextCommand()) === "newTab") this.newTerminal();
+      }
+    });
+  }
+
+  newTerminal() {
+    const space = spaces().find(s => s.active);
+    if (!space) return;
+    run("tab.new", { space: space.id, folder: shared("likeme.spaceFolders")?.[space.id] ?? space.folder });
   }
 
   async check(cx) {
@@ -275,7 +289,7 @@ export default class Tabs extends View {
       .hover(s => s.bg(t.hover).text_color(t.foreground)).on_mouse_down("left", stop)
       .on_click(action)
       .child(child);
-    const newTab = ghostAction("tab-new", "New tab", div().text_size(17).line_height("18px").child("+"), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }));
+    const newTab = ghostAction("tab-new", "New tab", div().text_size(17).line_height("18px").child("+"), () => openOverlay({ mod: "my-new-menu", kind: "popup", width: 250, height: 512 }));
     // One-click starts beside the +, using the program table's own icons: the
     // shipped tinted glyphs inherit the button's colour, Claude's stays orange.
     const launch = (key, label, icon, tint, argv) => ghostAction(`start-${key}`, label, tint ? svg(icon).size(14).flex_none() : image(icon).size(14), () => {

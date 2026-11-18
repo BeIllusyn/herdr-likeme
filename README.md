@@ -25,13 +25,13 @@ the active tool view and its editor are the real UI._
 | **Sidebar** | One scrolling column for Spaces and Agents, with a scrollbar visible on hover. The 32 px section captions use 10 px labels and small neutral count chips; 44 px rows, 26 px marks and 3 px gaps give both lists the same rhythm. Both retained views check live data every 250 ms (1 s in the background) and redraw only when it changes. |
 | **Spaces** | A tinted monogram and a 13 px project name followed inline by the 11 px working directory name, with a full-path tooltip. The branch and ahead/behind counts reflect that directory. Selection uses the theme's raised neutral list fill while its text and icons take a contrasting ink, and the space mark stays solid; its ink automatically chooses dark or white for contrast. Worktrees sit under their checkout with a branch glyph that shares the checkout title's column, their own names stepping one glyph further in. A 32 px New space action ends the list. |
 | **Agents** | The agent's title leads, with its space underneath and a small space-coloured dot. The focused row uses the same selection as Spaces and a tinted icon tile. Sub-agent rows are 26 px. Working, Needs you, Done and Idle remain visible; elapsed time and pin share a fixed slot. Priority keeps its section headers; Grouped hides a redundant single-space header. |
-| **Tabs** | A 44 px bar with 32 px tabs, 12 px labels and 4 px gaps. The active tab takes the theme's raised neutral fill with contrasting ink, a semibold name and its program icon in the space's colour. Quick starts are grouped behind a short hairline after `+`: every installed agent Herdr can start, with Claude Code (`--dangerously-skip-permissions`) and Pi leading, plus Lazygit and Neovim. Quick starts open in the selected space's working directory, regardless of the current tab or a terminal's `cd`. Files / Changes reuse the matching tool tab in the selected space or create one rooted at that same folder. Tabs keep drag, rename, zoom and close actions; close buttons brighten on hover. |
+| **Tabs** | A 44 px bar with 32 px tabs, 12 px labels and 4 px gaps. The active tab takes the theme's raised neutral fill with contrasting ink, a semibold name and its program icon in the space's colour. Quick starts are grouped behind a short hairline after `+`: every installed agent Herdr can start, with Claude Code (`--dangerously-skip-permissions`) and Pi leading, plus Lazygit and Neovim. Quick starts open in the selected space's working directory, regardless of the current tab or a terminal's `cd`; the `+` menu's Terminal row and `⌘T` use that same folder. Files / Changes reuse the matching tool tab in the selected space or create one rooted at that same folder. Tabs keep drag, rename, zoom and close actions; close buttons brighten on hover. |
 | **Panes** | Edge-to-edge terminals and 1 px split gaps. The 36 px header matches Files / Changes; focus adds a 6% space tint, a 13 px semibold title and a coloured program icon. Folder text is 11 px, the fixed status slot is 68 px, and split / zoom / close controls are grouped 24 px buttons with tooltips. Close actions use a red hover state. |
 | **Files / Changes** | Matching 260 px initial list widths, 36 px headers and 28 px file rows. Files draws Material Icon Theme's own artwork for a file's type, so a language, config file, image or archive each read at a glance; the theme's full-colour SVGs keep their palette instead of taking the theme ink, and a name the tables do not know keeps the plain page. Filenames lead in Changes, with quieter directory context, one colour per A / D / U / M status across both views, tinted and edged status tiles, and full-path tooltips. File previews keep the editor and optimistic auto-save, with a fixed-width save indicator and a larger Edit / Diff switch. Full-file diffs and before/after comparisons use 12 px type, 22 px rows, VS Code's green and red diff inks over a 15% wash, syntax colours from 2026 Dark or Light, and coloured `+` / `−` signs. The before/after divider drags to set each half's width, and each half scrolls horizontally on its own with line numbers and signs pinned, so a long line is read in full instead of being ellipsized. Change navigation is grouped in the header. Lists remain virtualized, and switching views preserves folders and split widths. Both views share the same empty-state styling; a clean worktree shows All caught up. A source row above the changed files switches between the working tree and another local or remote branch: the chosen branch is compared from its merge base to HEAD (committed changes only), drives the same list and whole-file diff, and replaces the commit box with a quiet note. |
 | **Floating files** | A button at the right of the Files preview header opens the current file in a borderless panel floating over the layout. The panel keeps its own tab row, so files opened from different spaces sit side by side; each tab remembers its own root and machine. Local files edit and auto-save exactly as they do in Files, files on another machine stay read-only, and the panel follows the theme. Its tab row's right-hand collapse button hides the panel and leaves a 40 px square button anchored to the window's bottom-right; pressing that brings the panel back. |
 | **Brand bar** | A 44 px empty window-drag surface, aligned with the tab bar, and a 76 px footer with 28 px Settings / Add machine rows. The footer, sidebar and brand share a continuous, faint right-hand divider. |
 
-Everything else — menus — is Herdr's `main` layout unchanged.
+Everything else — Herdr's other menus — is unchanged from the `main` layout.
 
 ## Requirements
 
@@ -47,7 +47,7 @@ Everything else — menus — is Herdr's `main` layout unchanged.
     likeme never runs either installer.
 - Herdr's shipped mods and assets that this layout references:
   `workspace-chrome`, `pane` (the tab bar borrows its close/zoom icons),
-  `menu`, `new-menu`, the program icons under `icons/` (the quick starts),
+  `menu`, the program icons under `icons/` (the quick starts and the new-tab menu),
   and the usual dialog/overlay mods.
 - Nothing else is downloaded: the file-type icons in `mods/my-files/material/`
   ship with this repo (Material Icon Theme 5.40.0, MIT; its license sits beside
@@ -70,8 +70,9 @@ cd herdr-likeme
 ./install.sh
 ```
 
-`install.sh` copies `layouts/likeme.json`, the seven mods and all four themes into
-`${HERDR_APP_HOME:-~/.config/herdr-app}`, runs `herdr-app check` on every mod, adds
+`install.sh` copies `layouts/likeme.json`, the eight mods and all four themes into
+`${HERDR_APP_HOME:-~/.config/herdr-app}`, runs `herdr-app check` on every mod, binds
+`⌘T` to the space-folder new tab while the layout is shown, adds
 Herdr's omp and fx program entries, and switches to the layout. Herdr reloads the files
 within a second.
 
@@ -138,7 +139,7 @@ DST=~/.config/herdr-app
 
 cp layouts/likeme.json "$DST/layouts/"
 cp themes/*.json "$DST/themes/"
-cp -R mods/my-sidebar mods/my-tabs mods/my-pane mods/my-files mods/my-changes mods/my-brand mods/my-float "$DST/mods/"
+cp -R mods/my-sidebar mods/my-tabs mods/my-pane mods/my-files mods/my-changes mods/my-brand mods/my-float mods/my-new-menu "$DST/mods/"
 
 herdr-app check "$DST/mods/my-sidebar"
 herdr-app check "$DST/mods/my-tabs"
@@ -147,15 +148,18 @@ herdr-app check "$DST/mods/my-files"
 herdr-app check "$DST/mods/my-changes"
 herdr-app check "$DST/mods/my-brand"
 herdr-app check "$DST/mods/my-float"
+herdr-app check "$DST/mods/my-new-menu"
+bash extras/keys/install.sh "$DST"
 herdr-app do layout.switch '{"name":"likeme"}'
 # The layout follows Herdr's appearance; choose Light or Dark in Settings.
 ```
 
 For the optional program registrations, also run `bash extras/omp/install.sh "$DST"`
 and `bash extras/fx/install.sh "$DST"`; they use the same merge rules as the main
-installer.
+installer. The `⌘T` binding comes from `bash extras/keys/install.sh "$DST"`: it
+adds `layout:likeme` and leaves a `cmd-t` you already chose alone.
 
-After editing a mod, run `./check.sh`: it loads all seven mods and fails if their seven
+After editing a mod, run `./check.sh`: it loads all eight mods and fails if their seven
 `colors.js` copies drift. Shared `UI`, `TYPE` and `SIZE` tokens keep colours, text and
 component dimensions consistent.
 
@@ -173,9 +177,10 @@ matching `"mod"` references in `likeme.json`.
   `themes/vscode-2026-dark.json`, `themes/vscode-2026-light.json`,
   `themes/merino.json`, `themes/buttercream-diner.json` and the
   `mods/my-sidebar`, `mods/my-tabs`, `mods/my-pane`, `mods/my-files`, `mods/my-changes`,
-  `mods/my-brand`, `mods/my-float` folders. Remove the `programs.omp` and `programs.fx` entries from
+  `mods/my-brand`, `mods/my-float` and `mods/my-new-menu` folders. Remove the `programs.omp` and `programs.fx` entries from
   `programs.json` and `my-icons/likeme-omp.svg` / `my-icons/likeme-fx.svg`; delete
-  `programs.json` if it held only those entries. If you
+  `programs.json` if it held only those entries. Remove the `cmd-t` line from
+  `keys.json`'s `layout:likeme` section (delete the section if it is now empty). If you
   upgraded from a version before the merged sidebar, also delete the old
   `mods/my-spaces` and `mods/my-agents` folders; their code now lives inside
   `mods/my-sidebar`.
@@ -183,7 +188,7 @@ matching `"mod"` references in `likeme.json`.
 ## What the mods do
 
 Herdr mods are trusted code: they can run programs, use the network and read files.
-These seven are meant to be read:
+These eight are meant to be read:
 
 - **`my-sidebar`** is one mod with two retained child views (`spaces.js` and
   `agents.js`, sharing `util.js`'s background-tick throttle)
@@ -200,7 +205,13 @@ These seven are meant to be read:
   command is checked on PATH once a minute. Claude starts with
   `--dangerously-skip-permissions`. Files／Changes 也在快捷按钮区：按 Space 复用已打开的
   原生 Tab，没有才新建。目录取自打开时的终端，之后不再跟随终端变化。
+  `⌘T` 在 likeme 布局生效时绑定到 `my-tabs.newTab`，与 `+` 菜单的 Terminal
+  一样按当前 Space 的目录新建终端。
   Mod 只为安装检查运行 `exec`，不使用网络。
+- **`my-new-menu`** is Herdr's new-tab popup, cloned so its Terminal row opens in
+  the shown space's effective folder—the same folder the quick starts use—rather
+  than the focused terminal's directory. Everything else matches the 0.1.12 menu.
+  It reads Herdr's live space and agent data. No `exec`, no network.
 - **`my-pane`** is a clone of the shipped pane header; it reads the same live pane
   data, mixes 6 % of the space's colour into the focused header and colours its icon,
   and carries its own split/zoom/close SVGs. No `exec`, no network.

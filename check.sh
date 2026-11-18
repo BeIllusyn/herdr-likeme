@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-for m in my-sidebar my-tabs my-pane my-files my-changes my-brand my-float; do
+for m in my-sidebar my-tabs my-pane my-files my-changes my-brand my-float my-new-menu; do
   herdr-app check "mods/$m"
 done
 

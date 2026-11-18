@@ -14,7 +14,7 @@ REPO="${REPO:-BeIllusyn/herdr-likeme}"
 REF="${REF:-main}"
 DST="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
 LAYOUT="likeme"
-MODS=(my-sidebar my-tabs my-pane my-files my-changes my-brand my-float)
+MODS=(my-sidebar my-tabs my-pane my-files my-changes my-brand my-float my-new-menu)
 THEMES=(vscode-2026-dark vscode-2026-light merino buttercream-diner)
 
 if ! command -v herdr-app >/dev/null 2>&1; then
@@ -72,6 +72,13 @@ for m in "${MODS[@]}"; do
     "$SRC/mods/$m/" "$DST/mods/$m/"
   herdr-app check "$DST/mods/$m"
 done
+
+# Bind Cmd+T to the mod's space-folder new tab while likeme is shown. The
+# helper leaves a binding the person already made alone and exits 0 on
+# expected skips, so the layout install continues.
+if ! bash "$SRC/extras/keys/install.sh" "$DST"; then
+  echo "key binding failed; continuing with the layout install" >&2
+fi
 
 # Register Herdr's omp recognition by default; LIKEME_OMP=0 opts out. It never
 # touches other program entries. The helper exits 0 for expected skips; the guard
