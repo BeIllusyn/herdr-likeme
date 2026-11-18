@@ -180,12 +180,12 @@ draw their own surface, so neither has the 5 px padding a floating block adds.
   `NEEDS YOU`, done dot); an idle agent shows nothing. Each button acts on its own pane
   (`props().pane`), not the focused one. Working shows the same braille character as the
   tabs and agents.
-- **Files / Changes.** 两个固定入口位于标签栏最右侧，不随标签滚动。点击切换整个工作区，
-  不新建 Tab；选中的入口使用选中态底色，再次点击或选择普通 Tab 就返回终端。
+- **Files / Changes.** 两个快捷按钮和 LazyGit、Neovim 等入口同组。点击后切到当前 Space
+  已打开的工具 Tab，没有才创建。每个 Tab 使用打开时的终端目录，之后不跟随终端变化。
   Diff 覆盖整个文件（`git diff -U1000000`，未改动的行也作为上下文，最多 20,000 行）；
   右侧标题行显示文件路径，`↑`／`↓` 在连续的新增/删除块之间跳转，`Files` 把同一个文件
-  交给 Files 视图（`shared("files.open")` 传仓库根和相对路径；终端停在子目录时 Files
-  仍按仓库根预览，不改变自己的树根）。Diff 的新增/删除行用 15% 的 VS Code diff 色（#2EA043／#F85149）铺底，
+  交给 Files Tab（传仓库根和相对路径；文件不在 Files 树内时按仓库根预览，
+  不改变 Files 的树根）。Diff 的新增/删除行用 15% 的 VS Code diff 色（#2EA043／#F85149）铺底，
   行号右侧再放一个同色的 `+`／`−` 标记，不靠颜色也能分辨。
   Header 下的来源行在 Working tree 与另一个分支之间切换：分支列表来自
   `git for-each-ref`（本地在前、远端在后，隐藏当前分支和 `origin/HEAD` 这类符号引用），
@@ -194,8 +194,6 @@ draw their own surface, so neither has the 5 px padding a floating block adds.
   `Files` 入口隐藏（被比较的文件可能在工作区已不存在）；两边没有共同祖先时退回比较两个
   分支尖端并在注释里说明。切换目录会回到 Working tree；分支消失或无 HEAD 时在列表里
   显示原因，而不是留着上一份文件。
-  快捷键、侧栏或新建 Tab 改变当前终端时，也会退出工具视图。
-  旧版已存在的单独工具 Tab 从普通列表中隐藏，由固定入口复用，避免丢失编辑和分栏状态。
   Files 预览标题行的 `Edit｜Diff` 分段开关把编辑器切成“变更前／变更后”两栏：左侧旧文件、
   右侧工作区文件，删除/新增各占半边并带底色，未跟踪文件整份算新增；点 `Edit` 回到编辑器。
   两栏各自水平滚动（行号和 +/- 固定在原处），中间的分割线可以拖动来调整左右宽度，
@@ -216,22 +214,16 @@ root row (theme light vscode-2026-light / dark vscode-2026-dark, canvas, titleba
 │  └─ sidebar-footer block (76px, my-brand, props {footer: true})
 └─ work column (resizable false)
    ├─ tabs block (44px, mod my-tabs, window_drag)
-   └─ work-body stack (padding 0, active main)
-      ├─ main block {tab: active, pane: {gap 1, radius 0, background surface,
-      │             lone true, header {mod my-pane, height 36, reveal always}}}
-      ├─ files block (my-files, props {workspace: true})
-      └─ changes block (my-changes, props {workspace: true})
+   └─ main block {tab: active, pane: {gap 1, radius 0, background surface,
+                  lone true, header {mod my-pane, height 36, reveal always}}}
 
 work column floating block (over the work area, edge bottom, align end)
 └─ floating-files-mini {my-float, props {role: "mini"}} the hidden coordinator
    (it opens the borderless panel window and the 40 px mini window)
 ```
 
-Files／Changes 直接属于布局，不调用 `tab.new`。固定入口通过
-`layout.select {stack: "work-body", child: "files" | "changes" | "main"}` 切换内容，
-Herdr 保留隐藏的子视图实例，并保存 stack 的选择。
-`props.workspace` 让两种工具跟随当前终端目录；旧版独立工具 Tab 不带此标志，仍保留原目录，
-入口会优先复用它们而不强行关闭。
+Files／Changes 通过 `tab.new {mod, props}` 创建，目录和机器保存在各自的 Tab props。
+快捷按钮通过 Mod pane 识别现有工具 Tab 并调用 `tab.select`，不会替现有 Tab 换目录。
 
 **Themes** (`themes/vscode-2026-dark.json`, `themes/vscode-2026-light.json`). Ordinary
 Herdr theme files: each `background`, `foreground`, `selection`, `cursor` and 16-colour
@@ -392,11 +384,8 @@ copies for Windows. `my-files` carries its own `float.svg` for the panel button;
   A git look that finds nothing new no longer redraws the list. Changes skips the
   worktree scan entirely in branch-compare mode: HEAD, the ref list and the two
   tree diffs are all it needs there.
-- **A hidden stack child does no work.** A `stack` draws only its active child, and
-  Herdr gives a block no visibility flag, so `my-files` and `my-changes` walk the
-  current layout and return from their timer, watch reaction and render-time host
-  reads while another child is in front; `render` sees the first frame where they are
-  shown again and scans at once. A watch burst is debounced 150 ms, an event that
+- **An inactive tool tab skips scans.** `my-files` and `my-changes` check which tab
+  is active before refreshing and catch up when shown again. A watch burst is debounced 150 ms, an event that
   lands mid-scan queues exactly one trailing scan, and Files lists expanded folders
   four at a time. Files keeps a running row total instead of re-summing every folder
   per load (each load was O(tree)), and measures a diff's width by walking code points
@@ -421,10 +410,10 @@ copies for Windows. `my-files` carries its own `float.svg` for the panel button;
   `VirtualListScrollHandle` created in `init`. Changes measures its longest line in
   display cells (tab 4, full-width 2) for the horizontal scroll range, so a CJK or
   emoji line is not cut short; that width is a floor, and a wider panel stretches
-  every row to its own edge. The Files button writes
-  `shared("files.open") = { root, path, at }` and selects the `files` stack view;
-  `my-files` accepts the request only in the workspace copy and ignores anything older
-  than 30 s, because `shared.json` survives a restart. Files' own `Diff` toggle runs
+  every row to its own edge. The Files button sends `{root, path, at}` through
+  the new tab's props or writes a tab-scoped `shared("files.open")` request for
+  an existing tab. Files ignores requests older than 30 s so they do not replay
+  after a restart. Files' own `Diff` toggle runs
   the same full-context diff against HEAD and pairs the unified rows into a left/right
   table (`diffPairs`: a run of deletions paired with the following run of additions,
   context rows on both sides); untracked files are read as all additions. The
@@ -458,9 +447,6 @@ copies for Windows. `my-files` carries its own `float.svg` for the panel button;
 - Mod names (`my-sidebar`, `my-tabs`, `my-pane`, `my-files`, `my-changes`, `my-brand`, `my-float`)
   are deliberately generic. Rename them on install if they clash, and update the
   `"mod"` fields in `likeme.json`.
-- Files／Changes 是 `work-body` stack 的子节点，选择由 Herdr 保存，不需要额外的
-  `localStorage`。隐藏视图仍保留实例。`my-tabs` 不创建工具 Tab；只为兼容升级，
-  按唯一 Mod pane 识别旧工具 Tab，将其从普通列表隐藏，并复用原实例。
 - Space colours are shared through `"space.colors"`; every layout sees the stored
   names. `markColor` resolves a name against the current theme's ANSI palette first,
   so this layout follows the terminal theme while the shipped spaces keep their own

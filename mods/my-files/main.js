@@ -1,60 +1,14 @@
-// A lazy file browser for the focused folder, with an editor and a comparison view.
+// A lazy file browser with an editor and a comparison view.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, h_resizable, resizable_panel, Editor, EditorState, Scrollbar, v_virtual_list } from "gpui-base";
-import { spaces, panes, focused, props, exec, readTextFile, writeTextFile, watchFolder, theme, settings, window, shared, setShared, layout } from "herdr";
+import { spaces, panes, focused, props, exec, readTextFile, writeTextFile, watchFolder, theme, settings, window, shared, setShared } from "herdr";
 import { markColor, changeColor, withAlpha, selectedInk, syntaxColors, scmColors, UI, TYPE, SIZE } from "./colors.js";
 
 const MOD = "my-files";
-// How often a shown copy refreshes; a hidden one does nothing and catches up
-// from `render` when the stack shows it again.
 const POLL_MS = 10000;
-// A save is several watch events; scan once after the burst instead of once per
-// event (each scan starts shell and git processes).
+// A save emits several watch events; refresh once after the burst.
 const WATCH_DEBOUNCE_MS = 150;
 
-// A stack draws one child. Herdr gives a block no "is this shown" flag, so walk
-// the current layout: only the active child of every stack is visible. Without
-// this check a Files or Changes copy behind the terminal scanned the worktree
-// every 10 s for a view nobody was looking at.
-function shownInLayout(mod) {
-  const pending = [layout()];
-  while (pending.length) {
-    const node = pending.pop();
-    if (!node || node.hidden) continue;
-    if (node.content?.mod === mod) return true;
-    if (node.type === "stack") {
-      const child = node.children?.find((c) => c.id === node.active);
-      if (child) pending.push(child);
-    } else {
-      for (const child of node.children ?? []) pending.push(child);
-    }
-  }
-  return false;
-}
-
-
-// 工作区固定视图跟随当前终端目录；旧版独立工具 Tab 保留自己的根目录和展开状态。
-function location(tab, openedAt, workspace = false) {
-  const space = spaces().find(s => s.active), f = focused();
-  if (workspace) {
-    const all = panes(), ids = new Set((space?.tabs ?? []).map(t => t.id));
-    const at = all.find(p => p.pane === f?.pane && p.terminal);
-    const terminal = at ?? all.find(p => p.tab === f?.tab && p.terminal) ?? all.find(p => ids.has(p.tab) && p.terminal);
-    const on = f?.pane === null ? (f.terminal?.includes("/") ? f.terminal.split("/")[0] : null) : space?.machine ?? null;
-    return { cwd: (f?.pane === null ? f.cwd : terminal?.cwd) || space?.folder, on, space: space?.id };
-  }
-  if (tab && f?.tab !== tab) return null;
-  const at = f?.pane ? panes().find(p => p.pane === f.pane) : null;
-  // Clicking the Files pane gives it the keyboard, and a mod pane has no folder:
-  // stay on the folder the tab was opened in.
-  if (at && !at.terminal) return { cwd: openedAt || space?.folder, on: space?.machine ?? null, space: space?.id };
-  // Before this copy has seen its own tab, start on the folder the tab was opened
-  // on rather than on whichever terminal happens to be focused elsewhere: when
-  // the first click then focuses this pane, the root does not change under it.
-  if (!tab && openedAt) return { cwd: openedAt, on: space?.machine ?? null, space: space?.id };
-  const on = f?.pane === null ? (f.terminal?.includes("/") ? f.terminal.split("/")[0] : null) : space?.machine ?? null;
-  return { cwd: at?.cwd || f?.cwd || space?.folder, on, space: space?.id };
-}
 const keyOf = (loc) => JSON.stringify(loc);
 // Changes 传来的仓库根和本视图的根目录可能不同（终端停在仓库子目录）：
 // 把绝对路径换算成相对本视图根目录的路径；Windows 的反斜杠一并归一。
@@ -140,10 +94,12 @@ export default class Files extends View {
     this.shownBefore = false;
     this.reload = false;
     this.watchPending = false;
-    // 布局中的固定视图跟随终端；旧版工具 Tab 仍使用打开时的目录。
-    this.openedAt = props()?.cwd ?? null;
-    this.workspace = Boolean(props()?.workspace);
-    this.tab = null; this.lastLoc = null;
+    const args = props() ?? {};
+    const space = spaces().find(s => args.space ? s.id === args.space : s.active);
+    this.loc = { cwd: args.cwd || space?.folder, on: args.on === undefined ? space?.machine ?? null : args.on, space: args.space ?? space?.id };
+    this.pane = args.pane;
+    this.tab = null;
+    this.initialOpen = args.open;
     // The editor writes back through writeTextFile with the text it read, so a
     // file changed elsewhere rejects instead of being overwritten.
     this.original = null; this.dirty = false; this.saving = false; this.saveError = null;
@@ -157,8 +113,6 @@ export default class Files extends View {
     // 所以最长的行也能滚到末尾。compareW 是内容区宽度，拖动时用来换算比例。
     this.splitFrac = 0.5; this.splitDrag = null; this.compareW = 0;
     this.diffX = { left: 0, right: 0 }; this.diffText = { left: 0, right: 0 };
-    const f = focused(), at = f?.pane ? panes().find(p => p.pane === f.pane) : null;
-    if (!this.workspace && at && !at.terminal && at.mod === "my-files") this.tab = f.tab;
     // Several copies can be open, one per tab: keep their element ids apart so a
     // click or scrollbar in one never lands on another's list.
     this.uid = Math.random().toString(36).slice(2, 7);
@@ -166,10 +120,11 @@ export default class Files extends View {
     cx.timer.every(POLL_MS, cx => this.refresh(cx));
   }
 
-  // A workspace copy is drawn only while its stack shows it; the legacy tool tab
-  // is a pane, and `location` already reports null while another tab is in front.
   visible() {
-    return !this.workspace || shownInLayout(MOD);
+    const f = focused();
+    if (!f?.tab || (this.loc.space && this.loc.space !== f.space)) return false;
+    if (!this.tab && panes().some(p => p.tab === f.tab && p.mod === MOD && (!this.pane || p.pane === this.pane))) this.tab = f.tab;
+    return this.tab === f.tab;
   }
 
   watch(root, cx) {
@@ -233,16 +188,12 @@ export default class Files extends View {
   }
 
   refresh(cx, loc) {
-    // Behind another stack child nothing it loads is on screen. `render` checks
-    // `lastRefresh` when the view comes forward, so the catch-up is immediate.
-    if (!this.visible()) {
+    if (!loc && !this.visible()) {
       this.shownBefore = false;
       return;
     }
-    // While another tab is in front, keep the folder this copy already shows.
-    loc ??= location(this.tab, this.openedAt, this.workspace) ?? this.lastLoc;
+    loc ??= this.loc;
     if (!loc) return;
-    this.lastLoc = loc;
     const { cwd, on } = loc, next = keyOf(loc);
     this.want = next;
     this.lastRefresh = Date.now();
@@ -445,7 +396,7 @@ export default class Files extends View {
     const root = this.fileRoot ?? this.root;
     if (!root) return;
     const all = spaces();
-    const space = all.find(s => s.id === this.lastLoc?.space) ?? all.find(s => s.active);
+    const space = all.find(s => s.id === this.loc?.space) ?? all.find(s => s.active);
     setShared("float.request", {
       root, path, on: this.on ?? null,
       space: space?.id ?? null, spaceName: space?.name ?? null,
@@ -612,14 +563,13 @@ export default class Files extends View {
     cx.notify();
   }
 
-  // Changes 把要打开的文件放进 shared：只有工作区固定视图响应，旧版工具 Tab
-  // 继续使用自己的目录和选中文件。
   takeOpenRequest(cx) {
-    if (!this.workspace) return;
-    const req = shared("files.open");
+    const pending = shared("files.open");
+    const req = pending?.tab === this.tab && pending?.on === this.loc.on ? pending : this.initialOpen;
     if (!req || typeof req.at !== "number" || req.at === this.lastOpenAt) return;
+    this.initialOpen = null;
     this.lastOpenAt = req.at;
-    // 应用重启后旧请求还留在 shared 里：过期的请求不再打开文件。
+    // 共享数据和 Tab props 会持久化，避免重启后再次打开旧请求。
     if (Date.now() - req.at > 30000) return;
     cx.timer.after(0, (cx) => this.openFrom(req, cx));
   }
@@ -693,31 +643,19 @@ export default class Files extends View {
   }
 
   render(cx) {
-    // The first render may be the one where this copy becomes the focused pane;
-    // remember its tab then, so later tab switches leave its state alone.
-    const f = focused();
-    if (this.tab === null && f?.pane) {
-      const at = panes().find(p => p.pane === f.pane);
-      if (!this.workspace && at && !at.terminal && at.mod === "my-files") this.tab = f.tab;
-    }
-    // Nothing read from the host is drawn while another stack child is in
-    // front; reading it there only copied lists and started no useful work.
-    const shown = this.visible();
-    const now = shown ? location(this.tab, this.openedAt, this.workspace) : null;
-    if (now) this.lastLoc = now;
-    const loc = now ?? this.lastLoc;
-    if (loc) {
+    const shown = this.visible(), loc = this.loc;
+    if (shown && loc) {
       const next = keyOf(loc);
       this.want = next;
       const stale = Date.now() - this.lastRefresh >= (this.shownBefore ? POLL_MS : 1000);
       if (next !== this.context?.key) this.refresh(cx, loc);
       // Hidden while its timer ran (or just came forward): catch up at once,
       // then let the 10 s timer keep it fresh.
-      else if (shown && stale) this.refresh(cx, loc);
+      else if (stale) this.refresh(cx, loc);
     }
     this.shownBefore = shown;
     // 先只登记请求，等这一帧画完再打开文件，避免在 render 里改宿主状态。
-    this.takeOpenRequest(cx);
+    if (shown) this.takeOpenRequest(cx);
     const t = theme();
     const rows = this.flat ??= this.flatten();
     const message = this.error || (this.loading ? "Loading files…" : this.root ? "No files" : "No folder");

@@ -1,55 +1,13 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, h_resizable, resizable_panel, InputState, Input, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
-import { spaces, panes, focused, props, exec, readTextFile, watchFolder, theme, settings, run, setShared, shared, layout } from "herdr";
+import { spaces, panes, focused, props, exec, readTextFile, watchFolder, theme, settings, run, setShared, shared } from "herdr";
 import { markColor, changeColor, withAlpha, selectedInk, scmColors, UI, TYPE, SIZE } from "./colors.js";
 
 const MOD = "my-changes";
-// The scan interval for a shown copy; hidden copies catch up from `render`.
 const POLL_MS = 10000;
-// A save is several watch events; scan once after the burst.
+// A save emits several watch events; refresh once after the burst.
 const WATCH_DEBOUNCE_MS = 150;
 
-// A stack draws one child. Herdr gives a block no "is this shown" flag, so walk
-// the current layout: only the active child of every stack is visible. A hidden
-// Changes copy used to run git status/diff/for-each-ref every 10 s.
-function shownInLayout(mod) {
-  const pending = [layout()];
-  while (pending.length) {
-    const node = pending.pop();
-    if (!node || node.hidden) continue;
-    if (node.content?.mod === mod) return true;
-    if (node.type === "stack") {
-      const child = node.children?.find((c) => c.id === node.active);
-      if (child) pending.push(child);
-    } else {
-      for (const child of node.children ?? []) pending.push(child);
-    }
-  }
-  return false;
-}
-
-
-// 工作区固定视图跟随当前终端目录；旧版独立工具 Tab 保留自己的根目录和选中文件。
-function location(tab, openedAt, workspace = false) {
-  const space = spaces().find((s) => s.active), f = focused();
-  if (workspace) {
-    const all = panes(), ids = new Set((space?.tabs ?? []).map(t => t.id));
-    const at = all.find(p => p.pane === f?.pane && p.terminal);
-    const terminal = at ?? all.find(p => p.tab === f?.tab && p.terminal) ?? all.find(p => ids.has(p.tab) && p.terminal);
-    const on = f?.pane === null ? (f.terminal?.includes("/") ? f.terminal.split("/")[0] : null) : space?.machine ?? null;
-    return { cwd: (f?.pane === null ? f.cwd : terminal?.cwd) || space?.folder, on, space: space?.id };
-  }
-  if (tab && f?.tab !== tab) return null;
-  const at = f?.pane ? panes().find(p => p.pane === f.pane) : null;
-  // Clicking the Changes pane gives it the keyboard, and a mod pane has no
-  // folder: stay on the folder the tab was opened in.
-  if (at && !at.terminal) return { cwd: openedAt || space?.folder, on: space?.machine ?? null, space: space?.id };
-  // Before this copy has seen its own tab, start on the folder the tab was opened
-  // on rather than on whichever terminal happens to be focused elsewhere.
-  if (!tab && openedAt) return { cwd: openedAt, on: space?.machine ?? null, space: space?.id };
-  const on = f?.pane === null ? (f.terminal?.includes("/") ? f.terminal.split("/")[0] : null) : space?.machine ?? null;
-  return { cwd: at?.cwd || f?.cwd || space?.folder, on, space: space?.id };
-}
 const keyOf = (loc) => JSON.stringify(loc);
 // Reads write nothing under .git (no index refresh or lock, no fsmonitor cookie):
 // the folder watch would see it, and every refresh would start the next one.
@@ -172,17 +130,16 @@ export default class Changes extends View {
     this.input.on("submit", (_e, cx) => this.commit(cx));
     this.input.on("focus", (_e, cx) => { this.typing = true; cx.notify(); });
     this.input.on("blur", (_e, cx) => { this.typing = false; cx.notify(); });
-    // 布局中的固定视图跟随终端；旧版工具 Tab 仍使用打开时的目录。
-    this.openedAt = props()?.cwd ?? null;
-    this.workspace = Boolean(props()?.workspace);
-    this.tab = null; this.lastLoc = null;
+    const args = props() ?? {};
+    const space = spaces().find(s => args.space ? s.id === args.space : s.active);
+    this.loc = { cwd: args.cwd || space?.folder, on: args.on === undefined ? space?.machine ?? null : args.on, space: args.space ?? space?.id };
+    this.pane = args.pane;
+    this.tab = null;
     // What the panel diffs: the working tree (null) or one branch's merge base
     // against HEAD. `branches` feeds the picker; `folder` is the repo identity
     // the comparison belongs to.
     this.folder = null; this.compare = null; this.compareRef = null; this.baseSha = null; this.baseFallback = false;
     this.branches = []; this.current = null; this.pickerOpen = false; this.headSha = null;
-    const f = focused(), at = f?.pane ? panes().find(p => p.pane === f.pane) : null;
-    if (!this.workspace && at && !at.terminal && at.mod === "my-changes") this.tab = f.tab;
     // Several copies can be open, one per tab: keep their element ids apart so a
     // click or scrollbar in one never lands on another's list.
     this.uid = Math.random().toString(36).slice(2, 7);
@@ -194,10 +151,11 @@ export default class Changes extends View {
     cx.timer.every(POLL_MS, (cx) => this.refresh(cx));
   }
 
-  // A workspace copy is drawn only while its stack shows it; the legacy tool tab
-  // is a pane, and `location` already reports null while another tab is in front.
   visible() {
-    return !this.workspace || shownInLayout(MOD);
+    const f = focused();
+    if (!f?.tab || (this.loc.space && this.loc.space !== f.space)) return false;
+    if (!this.tab && panes().some(p => p.tab === f.tab && p.mod === MOD && (!this.pane || p.pane === this.pane))) this.tab = f.tab;
+    return this.tab === f.tab;
   }
 
   watch(root, cx) {
@@ -238,16 +196,12 @@ export default class Changes extends View {
   }
 
   refresh(cx, loc, context) {
-    // Behind another stack child nothing here is on screen. `render` checks
-    // `refreshedAt` when the view comes forward, so the catch-up is immediate.
-    if (!this.visible()) {
+    if (!loc && !this.visible()) {
       this.shownBefore = false;
       return;
     }
-    // While another tab is in front, keep the folder this copy already shows.
-    loc ??= location(this.tab, this.openedAt, this.workspace) ?? this.lastLoc;
+    loc ??= this.loc;
     if (!loc) return;
-    this.lastLoc = loc;
     const folder = this.place(loc);
     // The mode is part of the identity: switching to a branch (or back to the
     // working tree) empties the list and scans again.
@@ -460,17 +414,24 @@ export default class Changes extends View {
     cx.notify();
   }
 
-  // 在 Files 中打开当前文件。shared 里放仓库根和文件相对路径，Files 自己
-  // 换算到它的树根；终端停在仓库子目录时也能预览。
-  openInFiles(_cx) {
+  openInFiles() {
     // A branch comparison may name a file the working tree no longer has.
     if (!this.open || !this.root || this.compare) return;
-    setShared("files.open", { root: this.root, path: this.open, at: Date.now() });
-    run("layout.select", { stack: "work-body", child: "files" });
+    const space = spaces().find(s => s.id === this.loc.space);
+    if (!space) return;
+    const all = panes();
+    const tab = space.tabs.find(tab => all.some(p => p.tab === tab.id && p.mod === "my-files"));
+    const open = { root: this.root, path: this.open, at: Date.now() };
+    if (tab) {
+      setShared("files.open", { ...open, tab: tab.id, on: this.loc.on });
+      run("tab.select", { id: tab.id });
+    } else {
+      run("tab.new", { space: space.id, name: "Files", mod: "my-files", props: { ...this.loc, open } });
+    }
   }
 
   commit(cx) {
-    const loc = location(this.tab, this.openedAt, this.workspace) ?? this.lastLoc;
+    const loc = this.loc;
     if (!this.message.trim() || !this.root || this.compare || this.busy || this.loading || !loc) return;
     if (this.context !== `${keyOf(loc)}|`) return;
     const root = this.root, on = this.on, context = this.context, message = this.message.trim();
@@ -577,19 +538,7 @@ export default class Changes extends View {
   }
 
   render(cx) {
-    // The first render may be the one where this copy becomes the focused pane;
-    // remember its tab then, so later tab switches leave its state alone.
-    const f = focused();
-    if (this.tab === null && f?.pane) {
-      const at = panes().find(p => p.pane === f.pane);
-      if (!this.workspace && at && !at.terminal && at.mod === "my-changes") this.tab = f.tab;
-    }
-    // Nothing read from the host is drawn while another stack child is in
-    // front, and the hidden copy must not start a scan from a render either.
-    const shown = this.visible();
-    const now = shown ? location(this.tab, this.openedAt, this.workspace) : null;
-    if (now) this.lastLoc = now;
-    const loc = now ?? this.lastLoc;
+    const shown = this.visible(), loc = this.loc;
     if (shown && loc) {
       // A different folder also clears any branch comparison (place does that),
       // so the mode is read after it.
@@ -687,7 +636,7 @@ export default class Changes extends View {
         .child(diffButton("next", "↓", "Next change", this.changes.length > 0, () => this.step(1, cx))))
       // A compared file may be gone from the working tree, so this shortcut
       // belongs to the working-tree mode only.
-      .when(!this.compare, (el) => el.child(diffButton("files", "Files", "Open this file in Files", Boolean(this.root), () => this.openInFiles(cx))));
+      .when(!this.compare, (el) => el.child(diffButton("files", "Files", "Open this file in Files", Boolean(this.root), () => this.openInFiles())));
 
     const emptyHint = v_flex().absolute().inset_0().p(24).items_center().justify_center().gap(8)
       .child(h_flex().size(40).mb(4).flex_none().items_center().justify_center().rounded(12).bg(withAlpha(t.foreground, UI.subtle))

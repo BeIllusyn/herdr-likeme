@@ -70,53 +70,25 @@
           "window_drag": true
         },
         {
-          "id": "work-body",
-          "type": "stack",
-          "active": "main",
-          "children": [
-            {
-              "id": "main",
-              "type": "block",
-              "content": {
-                "tab": "active",
-                "pane": {
-                  "header": {
-                    "content": {
-                      "mod": "my-pane"
-                    },
-                    "reveal": "always",
-                    "height": 36,
-                    "position": "top"
-                  },
-                  "background": "surface",
-                  "radius": 0,
-                  "gap": 1,
-                  "lone": true
-                }
-              }
-            },
-            {
-              "id": "files",
-              "type": "block",
-              "content": {
-                "mod": "my-files",
-                "props": {
-                  "workspace": true
-                }
-              }
-            },
-            {
-              "id": "changes",
-              "type": "block",
-              "content": {
-                "mod": "my-changes",
-                "props": {
-                  "workspace": true
-                }
-              }
+          "id": "main",
+          "type": "block",
+          "content": {
+            "tab": "active",
+            "pane": {
+              "header": {
+                "content": {
+                  "mod": "my-pane"
+                },
+                "reveal": "always",
+                "height": 36,
+                "position": "top"
+              },
+              "background": "surface",
+              "radius": 0,
+              "gap": 1,
+              "lone": true
             }
-          ],
-          "padding": 0
+          }
         }
       ],
       "floating": [

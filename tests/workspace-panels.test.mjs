@@ -6,7 +6,7 @@ import { changeColor, markColor, markInk, selectedInk, scmColors, syntaxColors, 
 
 const read = file => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 
-// 只替换宿主导入；事件处理、布局切换和目录选择仍执行实际 Mod 源码。
+// 只替换宿主导入；事件处理和目录选择仍执行实际 Mod 源码。
 function load(file, exports, host) {
   const source = read(file).replace(/^import .*;\n/gm, "").replace("export default class ", "class ");
   return runInNewContext(`${source}\n;({ ${exports} });`, { View: class {}, ...host }, { filename: file });
@@ -46,7 +46,6 @@ const AGENTS = [
 
 function fixture({ legacy = false, available = ["claude", "pi", "lazygit", "nvim"], agents = AGENTS, agentsFail = false, fail = false, platform = "macos" } = {}) {
   const layout = JSON.parse(read("layouts/likeme.json"));
-  const body = layout.children.find(n => n.id === "work").children.find(n => n.id === "work-body");
   const tabs = [{ id: "one", name: "1", active: true }, { id: "two", name: "2", active: false }];
   const panes = tabs.map(tab => ({ tab: tab.id, pane: `pane-${tab.id}`, terminal: `terminal-${tab.id}`, cwd: `/project/${tab.id}` }));
   if (legacy) for (const id of ["files", "changes"]) {
@@ -84,7 +83,6 @@ function fixture({ legacy = false, available = ["claude", "pi", "lazygit", "nvim
     openOverlay: spec => commands.push({ name: "overlay", args: spec }),
     run(name, args) {
       commands.push({ name, args: JSON.parse(JSON.stringify(args)) });
-      if (name === "layout.select") body.active = args.child;
       if (name === "tab.select") for (const tab of tabs) tab.active = tab.id === args.id;
     },
   };
@@ -93,26 +91,8 @@ function fixture({ legacy = false, available = ["claude", "pi", "lazygit", "nvim
   view.init({}, cx);
   const render = () => view.render(cx);
   const click = (id, root = render()) => find(root, id).handlers.on_click({}, cx);
-  return { body, tabs, panes, space, host, commands, timers, cx, view, render, click };
+  return { commands, cx, view, render, click };
 }
-
-test("窄窗口收起工具文字，入口仍可点击，跨过宽度阈值时才重绘", () => {
-  const f = fixture();
-  let redraws = 0;
-  const cx = { ...f.cx, notify: () => redraws++ };
-  const resize = f.render().handlers.on_size_change;
-  resize({ width: 600 }, cx);
-  const compact = f.render();
-  assert.ok(!find(compact, "panel-files").nodes.includes("Files"));
-  assert.equal(find(compact, "panel-files").styles.tooltip, "Files");
-  f.click("panel-files", compact);
-  assert.equal(f.body.active, "files");
-  resize({ width: 620 }, cx);
-  assert.equal(redraws, 1);
-  resize({ width: 900 }, cx);
-  assert.ok(find(f.render(), "panel-files").nodes.includes("Files"));
-  assert.equal(redraws, 2);
-});
 
 test("空间标记在明暗底色上自动选择可读的文字颜色", () => {
   assert.equal(markInk("#ffffff"), "#121314");
@@ -163,91 +143,7 @@ test("中性刻度逐级增强，线条分为三档", () => {
   assert.ok(a(UI.field) < a(UI.line));
 });
 
-test("Files 和 Changes 固定在标签栏右侧，只显示一次，布局不含额外工具 Tab", () => {
-  const f = fixture(), root = f.render();
-  assert.equal(f.body.type, "stack");
-  assert.deepEqual(f.body.children.map(n => n.id), ["main", "files", "changes"]);
-  assert.ok(f.body.children.filter(n => n.id !== "main").every(n => n.content.props.workspace));
-  assert.deepEqual(find(root, "tab-scroll").nodes.map(n => n.key), [
-    "tab-one", "tab-two", "tab-new", "tab-launches",
-  ]);
-  assert.deepEqual(find(root, "tab-launches").nodes.map(n => n.key), [
-    "start-claude", "start-pi", "start-lazygit", "start-nvim",
-  ]);
-  // 两个入口不在滚动区内，而是作为标签栏的最后一段固定在最右侧。
-  assert.deepEqual(find(root, "tab-panels").nodes.map(n => n.key), ["panel-files", "panel-changes"]);
-  assert.deepEqual(root.nodes.map(n => n.key), ["tab-scroll", "tab-panels"]);
-  assert.equal(root.nodes.length, 2);
-});
-
-test("连续点击和切换工具只选择工作区视图，不增加或关闭 Tab", () => {
-  const f = fixture(), root = f.render();
-  f.click("panel-files", root);
-  assert.equal(f.body.active, "files");
-  f.click("panel-files", root);
-  assert.equal(f.body.active, "main");
-  f.click("panel-files");
-  f.click("panel-changes");
-  assert.equal(f.body.active, "changes");
-  assert.equal(f.tabs.length, 2);
-  assert.ok(f.commands.every(c => c.name === "layout.select"));
-  // The panel and the active tab share the neutral selection step; the panel
-  // button is readable on its own fill, and neither borrows the space colour.
-  const panelEl = find(f.render(), "panel-changes");
-  const tabEl = find(f.render(), "tab-one");
-  const panelBg = panelEl?.styles?.bg ?? "";
-  const tabBg = tabEl?.styles?.bg ?? "";
-  assert.equal(panelBg, f.host.theme().selected);
-  // While a tool view is open no tab carries the selection.
-  assert.equal(tabBg, "");
-});
-
-test("点击当前普通 Tab 也会退出工具视图", () => {
-  const f = fixture();
-  f.click("panel-files");
-  const tab = find(f.render(), "tab-one");
-  tab.handlers["on_mouse_down:left"]({ click_count: 1 }, f.cx);
-  tab.handlers["on_mouse_up:left"]({}, f.cx);
-  assert.equal(f.body.active, "main");
-  assert.deepEqual(f.commands.at(-1), { name: "tab.select", args: { id: "one" } });
-});
-
-test("快捷键或侧栏切换终端后退出工具视图，渲染中不直接执行命令", () => {
-  const f = fixture();
-  f.click("panel-files");
-  f.tabs[0].active = false;
-  f.tabs[1].active = true;
-  const count = f.commands.length;
-  f.render();
-  assert.equal(f.commands.length, count);
-  for (const timer of f.timers) timer(f.cx);
-  assert.equal(f.body.active, "main");
-});
-
-test("同一 Tab 内切换到另一个 pane 后也返回终端", () => {
-  const f = fixture();
-  f.click("panel-files");
-  f.panes[0].pane = "another-pane";
-  f.render();
-  for (const timer of f.timers) timer(f.cx);
-  assert.equal(f.body.active, "main");
-});
-
-test("旧版工具 Tab 不再重复显示，固定入口复用其状态而不关闭它", () => {
-  const f = fixture({ legacy: true });
-  assert.equal(find(f.render(), "tab-files"), undefined);
-  assert.equal(find(f.render(), "tab-changes"), undefined);
-  f.click("panel-files");
-  assert.equal(f.tabs.find(t => t.active).id, "files");
-  f.click("panel-changes");
-  assert.equal(f.tabs.find(t => t.active).id, "changes");
-  f.click("panel-changes");
-  assert.equal(f.tabs.find(t => t.active).id, "one");
-  assert.equal(f.tabs.length, 4);
-  assert.ok(f.commands.every(c => !["tab.new", "tab.close"].includes(c.name)));
-});
-
-test("过滤旧工具 Tab 后，拖动仍使用宿主列表中的正确位置", () => {
+test("拖动使用包含工具 Tab 的宿主列表位置", () => {
   const f = fixture({ legacy: true }), root = f.render();
   const first = find(root, "tab-one"), second = find(root, "tab-two");
   first.handlers["on_mouse_down:left"]({ click_count: 1 }, f.cx);
@@ -256,13 +152,11 @@ test("过滤旧工具 Tab 后，拖动仍使用宿主列表中的正确位置", 
   assert.deepEqual(f.commands.at(-1), { name: "tab.move", args: { id: "one", index: 4 } });
 });
 
-test("加号保留菜单行为，快捷启动先返回终端再创建普通 Tab", () => {
+test("加号保留菜单行为，快捷启动创建普通 Tab", () => {
   const f = fixture();
-  f.click("panel-files");
   f.click("tab-new");
   assert.equal(f.commands.at(-1).args.mod, "new-menu");
   f.click("start-nvim");
-  assert.equal(f.body.active, "main");
   assert.deepEqual(f.commands.at(-1), { name: "tab.new", args: { space: "space", argv: ["nvim"] } });
 });
 
@@ -272,7 +166,7 @@ test("快捷启动只显示这台机器装了的命令", async () => {
     available: ["nvim"],
   });
   await f.view.ready;
-  assert.deepEqual(find(f.render(), "tab-launches").nodes.map(n => n.key), ["start-claude", "start-nvim"]);
+  assert.deepEqual(find(f.render(), "tab-launches").nodes.map(n => n.key), ["start-claude", "start-nvim", "start-files", "start-changes"]);
 });
 
 test("knownAgents 里已安装的其他 agent 自动出现，未安装的不出现", async () => {
@@ -285,7 +179,7 @@ test("knownAgents 里已安装的其他 agent 自动出现，未安装的不出�
   });
   await f.view.ready;
   assert.deepEqual(find(f.render(), "tab-launches").nodes.map(n => n.key), [
-    "start-claude", "start-pi", "start-codex", "start-lazygit", "start-nvim",
+    "start-claude", "start-pi", "start-codex", "start-lazygit", "start-nvim", "start-files", "start-changes",
   ]);
   // 启动参数取程序表的 run；Claude 的入口仍带自己的参数。
   f.click("start-codex");
@@ -301,53 +195,15 @@ test("安装检测失败时回退到 PATH 并保留全部快捷启动", async ()
   const f = fixture({ agentsFail: true, fail: true });
   await f.view.ready;
   assert.deepEqual(find(f.render(), "tab-launches").nodes.map(n => n.key), [
-    "start-claude", "start-pi", "start-lazygit", "start-nvim",
+    "start-claude", "start-pi", "start-lazygit", "start-nvim", "start-files", "start-changes",
   ]);
 });
 
 test("Windows 用 where 判断安装", async () => {
   const f = fixture({ platform: "windows", agentsFail: true, available: ["pi"] });
   await f.view.ready;
-  assert.deepEqual(find(f.render(), "tab-launches").nodes.map(n => n.key), ["start-pi"]);
+  assert.deepEqual(find(f.render(), "tab-launches").nodes.map(n => n.key), ["start-pi", "start-files", "start-changes"]);
 });
-
-for (const [mod, name] of [["my-files", "Files"], ["my-changes", "Changes"]]) {
-  test(`${name} 工作区视图跟随当前终端目录，旧独立实例仍保留自己的目录`, () => {
-    const f = fixture();
-    const { location } = load(`mods/${mod}/main.js`, `location, ${name}`, f.host);
-    assert.equal(location("old-tab", "/old", true).cwd, "/project/one");
-    assert.equal(location("old-tab", "/old"), null);
-    f.space.machine = "remote";
-    f.tabs[0].active = false;
-    f.tabs[1].active = true;
-    const next = location(null, null, true);
-    assert.equal(next.cwd, "/project/two");
-    assert.equal(next.on, "remote");
-  });
-}
-
-for (const mod of ["my-files", "my-changes"]) {
-  test(`${mod} 只在 stack 显示自己时刷新`, () => {
-    const stack = {
-      type: "stack", id: "work-body", active: "main",
-      children: [
-        { id: "main", type: "block", content: { tab: "active" } },
-        { id: "files", type: "block", content: { mod: "my-files" } },
-        { id: "changes", type: "block", content: { mod: "my-changes" } },
-      ],
-    };
-    const doc = { type: "row", children: [{ type: "column", children: [stack] }] };
-    const { shownInLayout } = load(`mods/${mod}/main.js`, "shownInLayout", { layout: () => doc });
-    // Another stack child is in front, or the whole column is hidden: no scan.
-    assert.equal(shownInLayout(mod), false);
-    stack.active = mod === "my-files" ? "files" : "changes";
-    assert.equal(shownInLayout(mod), true);
-    // A sibling view is shown, not this one.
-    assert.equal(shownInLayout(mod === "my-files" ? "my-changes" : "my-files"), false);
-    doc.children[0].hidden = true;
-    assert.equal(shownInLayout(mod), false);
-  });
-}
 
 test("Changes 把连续的新增/删除行归为一个变动块", () => {
   const { changeStarts } = load("mods/my-changes/main.js", "changeStarts", {});
@@ -606,7 +462,7 @@ test("Files 收到 Changes 的打开请求时展开父目录；跨目录时按�
   const cx = { timer: { after: (_ms, fn) => fn(cx) }, notify() {} };
   const files = new Files();
   Object.assign(files, {
-    workspace: true, root: "/repo", folders: new Set(), flat: null,
+    root: "/repo", folders: new Set(), flat: null,
     toggle: path => calls.push(["toggle", path]),
     show: (path, _cx, from) => calls.push(["show", path, from ?? null]),
   });

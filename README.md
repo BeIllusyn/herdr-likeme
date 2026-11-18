@@ -183,20 +183,20 @@ These seven are meant to be read:
   the same list its menus use, so an installed Codex, Gemini or a custom
   programs.json entry appears on its own), plus Lazygit and Neovim, whose
   command is checked on PATH once a minute. Claude starts with
-  `--dangerously-skip-permissions`. Files／Changes 固定入口使用 `layout.select`
-  切换工作区内容，不创建或关闭 Tab；升级前已存在的工具 Tab 会保留并由固定入口复用。
+  `--dangerously-skip-permissions`. Files／Changes 也在快捷按钮区：按 Space 复用已打开的
+  原生 Tab，没有才新建。目录取自打开时的终端，之后不再跟随终端变化。
   Mod 只为安装检查运行 `exec`，不使用网络。
 - **`my-pane`** is a clone of the shipped pane header; it reads the same live pane
   data, mixes 6 % of the space's colour into the focused header and colours its icon,
   and carries its own split/zoom/close SVGs. No `exec`, no network.
-- **`my-files`** is a lazy file browser for the tab's terminal folder. It lists
+- **`my-files`** is a lazy file browser for the folder set when its tab opens. It lists
   directories with `sh` (or PowerShell on Windows), previews and edits files with
   `readTextFile` / `writeTextFile` (a write only lands while the file still matches
-  the text it read), and watches folders with `watchFolder`. The workspace copy also
+  the text it read), and watches folders with `watchFolder`. The active Files tab also
   answers Changes' `shared("files.open")` request, opening the file and expanding its
   folders; a file outside its tree is read from the repository root. Its preview
-  header's floating button hands the open file to `my-float`. The workspace
-  copy lists and scans only while its stack view is in front, lists expanded folders
+  header's floating button hands the open file to `my-float`. Files
+  scans only while its tab is in front, lists expanded folders
   a few at a time, and catches up on the first frame after it comes back. No network.
 - **`my-float`** is the floating file panel. A hidden layout floating block is the
   coordinator: it opens two borderless overlay windows (`openOverlay` with `frame: "none"`),
@@ -210,11 +210,11 @@ These seven are meant to be read:
 - **`my-changes`** is a clone of the shipped changes panel. It runs read-only git
   commands (`status`, `diff`, `rev-parse`, `merge-base`, `for-each-ref`) via `exec`,
   asks for full-file context, and watches the worktree. Its header jumps between
-  change blocks and hands the selected file to Files (`setShared` + `layout.select`).
+  change blocks and hands the selected file to Files (selecting an existing tab or opening a new one).
   A source row can compare the current branch with another local or remote branch;
   that list comes from `for-each-ref` and the diff runs from their merge base to HEAD,
-  so uncommitted edits never enter a branch comparison. The 10 s scan and the worktree
-  watch run only while its stack view is in front; showing it again scans at once.
+  so uncommitted edits never enter a branch comparison. Inactive tabs skip refreshes
+  and catch up when shown again.
   No network.
 - **`my-brand`** is a clone of the shipped brand bar and sidebar footer with the
   sidebar toggle, logo and search button removed; the footer is 28 px quiet rows over a
